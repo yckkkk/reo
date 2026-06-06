@@ -2,7 +2,7 @@ export function buildWorkspaceReviewAgentPrompt(needsReviewCount: number): strin
   const count = Math.max(0, Math.trunc(needsReviewCount));
   return [
     `Reo 检测到这个记忆空间有 ${count} 个文件需要检查。`,
-    '请先阅读 AGENTS.md；如果需要诊断，运行：',
+    '请先阅读 `.reo/REO.md`；如果需要诊断，运行：',
     'node skills/reo-doctor/scripts/reo-doctor.mjs',
     '',
     '只按 reo-doctor 和 .reo/review/needs-review.md 的 workspace-relative 信息处理，并按每条 recovery hint 处理。',

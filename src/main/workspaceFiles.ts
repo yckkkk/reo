@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { lstatSync, realpathSync, renameSync } from 'node:fs';
-import { lstat, mkdir, opendir, readFile, rm } from 'node:fs/promises';
+import { constants, lstatSync, realpathSync, renameSync } from 'node:fs';
+import { lstat, mkdir, opendir, open, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import {
@@ -67,10 +67,8 @@ import {
   DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
   DEFAULT_REO_WORKS_REFERENCE_FILES,
   DEFAULT_REO_WORKS_SKILL_MD,
-  DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK,
   DEFAULT_WORKSPACE_AGENTS_MD,
-  WORKSPACE_AGENTS_MANAGED_BLOCK_END,
-  WORKSPACE_AGENTS_MANAGED_BLOCK_START,
+  DEFAULT_WORKSPACE_REO_MD,
 } from './workspaceManagedAgentTemplates.js';
 export {
   DEFAULT_REO_COVER_AESTHETIC_SKILL_MD,
@@ -90,6 +88,7 @@ export {
   DEFAULT_REO_WORKS_REFERENCE_FILES,
   DEFAULT_REO_WORKS_SKILL_MD,
   DEFAULT_WORKSPACE_AGENTS_MD,
+  DEFAULT_WORKSPACE_REO_MD,
 } from './workspaceManagedAgentTemplates.js';
 import {
   readWorkspaceWidgetsFromFileTruth,
@@ -264,18 +263,6 @@ let beforeWorkspaceRootRenameFinalizeForTest: (() => void) | null = null;
 
 export function setBeforeWorkspaceRootRenameFinalizeForTest(hook: (() => void) | null): void {
   beforeWorkspaceRootRenameFinalizeForTest = hook;
-}
-
-async function exists(filePath: string): Promise<boolean> {
-  try {
-    await lstat(filePath);
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
-    throw error;
-  }
 }
 
 function workspaceAlreadyExists(): WorkspaceErrorEnvelope {
@@ -626,59 +613,52 @@ function sameMemorySummaries(
   });
 }
 
-function upsertWorkspaceAgentsManagedBlock(current: string | null): string {
-  if (current === null || current.trim().length === 0) {
-    return DEFAULT_WORKSPACE_AGENTS_MD;
-  }
+type ManagedTextFileState =
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'file'; readonly text: string }
+  | { readonly kind: 'replace-existing' };
 
-  const firstManagedBlockIndex = current.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_START);
-  const legacyPrefix =
-    firstManagedBlockIndex >= 0 ? current.slice(0, firstManagedBlockIndex) : current;
-  if (
-    legacyPrefix.trimStart().startsWith('# Reo 记忆空间 Agent 入口') &&
-    legacyPrefix.includes('## 读写边界') &&
-    legacyPrefix.includes('如果要精确表达 Tiptap JSON') &&
-    legacyPrefix.includes('source.hash') &&
-    legacyPrefix.includes('## 验证建议')
-  ) {
-    return DEFAULT_WORKSPACE_AGENTS_MD;
-  }
-
-  const startIndex = current.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_START);
-  const endIndex = current.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_END);
-  if (startIndex >= 0 && endIndex >= startIndex) {
-    return `${current.slice(0, startIndex)}${DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK}${current.slice(endIndex + WORKSPACE_AGENTS_MANAGED_BLOCK_END.length)}`.replace(
-      /\n*$/,
-      '\n'
-    );
-  }
-
-  return `${current.trimEnd()}\n\n${DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK}\n`;
-}
-
-async function readOptionalRegularTextFile(filePath: string): Promise<string | null> {
+async function readManagedTextFileState(filePath: string): Promise<ManagedTextFileState> {
+  let file: Awaited<ReturnType<typeof open>> | null = null;
   try {
-    const stats = await lstat(filePath);
+    file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const stats = await file.stat();
     if (!stats.isFile()) {
-      throw new Error('Managed Reo config path is not a regular file');
+      return { kind: 'replace-existing' };
     }
-    return await readFile(filePath, 'utf8');
+    return { kind: 'file', text: await file.readFile('utf8') };
   } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
-      return null;
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String(error.code)
+        : undefined;
+    if (code === 'ENOENT') {
+      return { kind: 'missing' };
+    }
+    if (code === 'ELOOP' || code === 'EISDIR') {
+      return { kind: 'replace-existing' };
     }
     throw error;
+  } finally {
+    await file?.close();
   }
 }
 
 async function ensureManagedDirectory(
   directoryPath: string,
-  assertUsable: AssertWorkspaceUsable | undefined
+  assertUsable: AssertWorkspaceUsable | undefined,
+  options: { readonly replaceExisting?: boolean } = {}
 ): Promise<void> {
   try {
     const stats = await lstat(directoryPath);
     if (!stats.isDirectory()) {
-      throw new Error('Managed Reo config path is not a directory');
+      if (!options.replaceExisting) {
+        throw new Error('Managed Reo config path is not a directory');
+      }
+      assertWorkspaceUsable(assertUsable);
+      await rm(directoryPath, { force: true, recursive: true });
+      await mkdir(directoryPath);
+      assertWorkspaceUsable(assertUsable);
     }
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
@@ -698,21 +678,46 @@ async function writeManagedFileIfChanged({
   assertUsable,
 }: {
   readonly filePath: string;
-  readonly current: string | null;
+  readonly current: ManagedTextFileState;
   readonly next: string;
   readonly assertUsable: AssertWorkspaceUsable | undefined;
 }): Promise<void> {
-  if (current === next) {
+  if (current.kind === 'file' && current.text === next) {
     return;
   }
   assertWorkspaceUsable(assertUsable);
-  if (current === null) {
+  if (current.kind === 'replace-existing') {
+    await rm(filePath, { force: true, recursive: true });
+  }
+  if (current.kind === 'missing' || current.kind === 'replace-existing') {
     await writeWorkspaceFileNoReplaceAtomic(filePath, next, () =>
       assertWorkspaceUsable(assertUsable)
     );
   } else {
     await writeWorkspaceFileAtomic(filePath, next, () => assertWorkspaceUsable(assertUsable));
   }
+  assertWorkspaceUsable(assertUsable);
+}
+
+async function createRootAgentsEntryIfMissing(
+  canonicalRoot: string,
+  assertUsable: AssertWorkspaceUsable | undefined
+): Promise<void> {
+  const agentsPath = path.join(canonicalRoot, 'AGENTS.md');
+  try {
+    await lstat(agentsPath);
+    return;
+  } catch (error) {
+    if (
+      !(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+    ) {
+      throw error;
+    }
+  }
+  assertWorkspaceUsable(assertUsable);
+  await writeWorkspaceFileNoReplaceAtomic(agentsPath, DEFAULT_WORKSPACE_AGENTS_MD, () =>
+    assertWorkspaceUsable(assertUsable)
+  );
   assertWorkspaceUsable(assertUsable);
 }
 
@@ -723,18 +728,18 @@ async function writeManagedReferenceFiles(
 ): Promise<void> {
   for (const [filename, next] of Object.entries(files)) {
     const filePath = path.join(directoryPath, filename);
-    const current = await readOptionalRegularTextFile(filePath);
+    const current = await readManagedTextFileState(filePath);
     await writeManagedFileIfChanged({ filePath, current, next, assertUsable });
   }
 }
 
-async function removeManagedRegularFileIfPresent(
+async function removeManagedLeafFileIfPresent(
   filePath: string,
   assertUsable: AssertWorkspaceUsable | undefined
 ): Promise<void> {
   try {
     const stats = await lstat(filePath);
-    if (!stats.isFile()) {
+    if (stats.isDirectory()) {
       return;
     }
     assertWorkspaceUsable(assertUsable);
@@ -750,10 +755,14 @@ async function removeManagedRegularFileIfPresent(
 
 async function ensureWorkspaceManagedAgentConfig(
   canonicalRoot: string,
-  assertUsable: AssertWorkspaceUsable | undefined
+  assertUsable: AssertWorkspaceUsable | undefined,
+  options: { readonly createRootAgentsEntry?: boolean } = {}
 ): Promise<void> {
-  const agentsPath = path.join(canonicalRoot, 'AGENTS.md');
-  const currentAgents = await readOptionalRegularTextFile(agentsPath);
+  if (options.createRootAgentsEntry) {
+    await createRootAgentsEntryIfMissing(canonicalRoot, assertUsable);
+  }
+  const reoEntryPath = path.join(canonicalRoot, '.reo', 'REO.md');
+  const currentReoEntry = await readManagedTextFileState(reoEntryPath);
   const skillsDirectory = path.join(canonicalRoot, 'skills');
   const editDirectory = path.join(skillsDirectory, 'reo-edit');
   const doctorDirectory = path.join(skillsDirectory, 'reo-doctor');
@@ -769,41 +778,45 @@ async function ensureWorkspaceManagedAgentConfig(
   const worksDesignExamplesDirectory = path.join(worksDesignDirectory, 'examples');
   const scriptsDirectory = path.join(doctorDirectory, 'scripts');
   await ensureManagedDirectory(skillsDirectory, assertUsable);
-  await ensureManagedDirectory(editDirectory, assertUsable);
-  await ensureManagedDirectory(doctorDirectory, assertUsable);
-  await ensureManagedDirectory(coverImageDirectory, assertUsable);
-  await ensureManagedDirectory(coverAestheticDirectory, assertUsable);
-  await ensureManagedDirectory(runtimeDirectory, assertUsable);
-  await ensureManagedDirectory(worksDirectory, assertUsable);
-  await ensureManagedDirectory(worksDesignDirectory, assertUsable);
-  await ensureManagedDirectory(runtimeReferencesDirectory, assertUsable);
-  await ensureManagedDirectory(runtimeScriptsDirectory, assertUsable);
-  await ensureManagedDirectory(worksReferencesDirectory, assertUsable);
-  await ensureManagedDirectory(worksDesignReferencesDirectory, assertUsable);
-  await ensureManagedDirectory(worksDesignExamplesDirectory, assertUsable);
-  await ensureManagedDirectory(scriptsDirectory, assertUsable);
+  await ensureManagedDirectory(editDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(doctorDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(coverImageDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(coverAestheticDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(runtimeDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(worksDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(worksDesignDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(runtimeReferencesDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(runtimeScriptsDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(worksReferencesDirectory, assertUsable, { replaceExisting: true });
+  await ensureManagedDirectory(worksDesignReferencesDirectory, assertUsable, {
+    replaceExisting: true,
+  });
+  await ensureManagedDirectory(worksDesignExamplesDirectory, assertUsable, {
+    replaceExisting: true,
+  });
+  await ensureManagedDirectory(scriptsDirectory, assertUsable, { replaceExisting: true });
 
   const editSkillPath = path.join(editDirectory, 'SKILL.md');
-  const currentEditSkill = await readOptionalRegularTextFile(editSkillPath);
+  const currentEditSkill = await readManagedTextFileState(editSkillPath);
   const coverImageSkillPath = path.join(coverImageDirectory, 'SKILL.md');
-  const currentCoverImageSkill = await readOptionalRegularTextFile(coverImageSkillPath);
+  const currentCoverImageSkill = await readManagedTextFileState(coverImageSkillPath);
   const coverAestheticSkillPath = path.join(coverAestheticDirectory, 'SKILL.md');
-  const currentCoverAestheticSkill = await readOptionalRegularTextFile(coverAestheticSkillPath);
+  const currentCoverAestheticSkill = await readManagedTextFileState(coverAestheticSkillPath);
   const runtimeSkillPath = path.join(runtimeDirectory, 'SKILL.md');
-  const currentRuntimeSkill = await readOptionalRegularTextFile(runtimeSkillPath);
+  const currentRuntimeSkill = await readManagedTextFileState(runtimeSkillPath);
   const worksSkillPath = path.join(worksDirectory, 'SKILL.md');
-  const currentWorksSkill = await readOptionalRegularTextFile(worksSkillPath);
+  const currentWorksSkill = await readManagedTextFileState(worksSkillPath);
   const worksDesignSkillPath = path.join(worksDesignDirectory, 'SKILL.md');
-  const currentWorksDesignSkill = await readOptionalRegularTextFile(worksDesignSkillPath);
+  const currentWorksDesignSkill = await readManagedTextFileState(worksDesignSkillPath);
   const skillPath = path.join(doctorDirectory, 'SKILL.md');
-  const currentDoctorSkill = await readOptionalRegularTextFile(skillPath);
+  const currentDoctorSkill = await readManagedTextFileState(skillPath);
   const scriptPath = path.join(scriptsDirectory, 'reo-doctor.mjs');
-  const currentDoctorScript = await readOptionalRegularTextFile(scriptPath);
+  const currentDoctorScript = await readManagedTextFileState(scriptPath);
 
   await writeManagedFileIfChanged({
-    filePath: agentsPath,
-    current: currentAgents,
-    next: upsertWorkspaceAgentsManagedBlock(currentAgents),
+    filePath: reoEntryPath,
+    current: currentReoEntry,
+    next: DEFAULT_WORKSPACE_REO_MD,
     assertUsable,
   });
   await writeManagedFileIfChanged({
@@ -856,7 +869,7 @@ async function ensureWorkspaceManagedAgentConfig(
     },
     assertUsable
   );
-  await removeManagedRegularFileIfPresent(
+  await removeManagedLeafFileIfPresent(
     path.join(runtimeScriptsDirectory, 'migrate-runtime.mjs'),
     assertUsable
   );
@@ -865,7 +878,7 @@ async function ensureWorkspaceManagedAgentConfig(
     DEFAULT_REO_WORKS_REFERENCE_FILES,
     assertUsable
   );
-  await removeManagedRegularFileIfPresent(
+  await removeManagedLeafFileIfPresent(
     path.join(worksReferencesDirectory, 'quality-check.md'),
     assertUsable
   );
@@ -900,14 +913,6 @@ export async function validateWorkspaceInitializeTarget(
   const canonicalRoot = await resolveWorkspaceRoot(rootPath);
   if (typeof canonicalRoot !== 'string') {
     return canonicalRoot;
-  }
-
-  if (await exists(path.join(canonicalRoot, 'AGENTS.md'))) {
-    return workspaceError(
-      'ERR_WORKSPACE_AGENTS_CONFLICT',
-      'Workspace already contains AGENTS.md',
-      'none-written'
-    );
   }
 
   const reoDirectory = await checkWorkspaceReoDirectory(canonicalRoot);
@@ -1248,7 +1253,9 @@ export async function initializeWorkspaceFiles({
 
   try {
     assertWorkspaceUsable(assertUsable);
-    await ensureWorkspaceManagedAgentConfig(canonicalRoot, assertUsable);
+    await ensureWorkspaceManagedAgentConfig(canonicalRoot, assertUsable, {
+      createRootAgentsEntry: true,
+    });
     assertWorkspaceUsable(assertUsable);
     await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), metadata, () =>
       assertWorkspaceUsable(assertUsable)

@@ -7,6 +7,7 @@ import {
   DEFAULT_REO_EDIT_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_EXAMPLE_FILES,
   DEFAULT_WORKSPACE_AGENTS_MD,
+  DEFAULT_WORKSPACE_REO_MD,
   WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES,
 } from '../../src/main/workspaceManagedAgentTemplates.js';
 
@@ -19,18 +20,21 @@ async function readTemplate(relativePath: string): Promise<string> {
 
 test('managed Reo agent templates are sourced from external files', async () => {
   const agentsMd = await readTemplate('AGENTS.md');
+  const reoMd = await readTemplate('REO.md');
   const editSkillMd = await readTemplate('skills/reo-edit/SKILL.md');
   const reactiveExampleHtml = await readTemplate(
     'skills/reo-works-design/examples/reactive-binding.html'
   );
 
   assert.equal(DEFAULT_WORKSPACE_AGENTS_MD, agentsMd);
+  assert.equal(DEFAULT_WORKSPACE_REO_MD, reoMd);
   assert.equal(DEFAULT_REO_EDIT_SKILL_MD, editSkillMd);
   assert.equal(
     DEFAULT_REO_WORKS_DESIGN_EXAMPLE_FILES['reactive-binding.html'],
     reactiveExampleHtml
   );
-  assert.equal(WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES['AGENTS.md'], agentsMd);
+  assert.equal(WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES['AGENTS.md'], undefined);
+  assert.equal(WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES['.reo/REO.md'], reoMd);
   assert.equal(WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES['skills/reo-edit/SKILL.md'], editSkillMd);
   assert.equal(
     WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES[

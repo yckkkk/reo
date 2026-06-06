@@ -34,6 +34,7 @@ import {
   DEFAULT_REO_WORKS_SKILL_MD,
   DEFAULT_REO_WORKS_REFERENCE_FILES,
   DEFAULT_WORKSPACE_AGENTS_MD,
+  DEFAULT_WORKSPACE_REO_MD,
   initializeWorkspaceFiles,
   openWorkspaceFiles,
   readWorkspaceSnapshotFromFileTruth,
@@ -578,7 +579,7 @@ async function writeFinalizedMemoryRecording({
   );
 }
 
-test('existing AGENTS.md conflict does not write any workspace files', async () => {
+test('initialize workspace preserves an existing user AGENTS.md and writes Reo-owned entry', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-conflict-'));
   const agentsPath = path.join(root, 'AGENTS.md');
   await writeFile(agentsPath, '用户已有规则\n');
@@ -592,17 +593,17 @@ test('existing AGENTS.md conflict does not write any workspace files', async () 
     now: () => '2026-05-06T13:08:00.000Z',
   });
 
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_AGENTS_CONFLICT');
-  }
+  assert.equal(result.ok, true);
   assert.equal(await sha256(agentsPath), beforeHash);
-  await assert.rejects(stat(path.join(root, '.reo')));
+  assert.equal(await readFile(path.join(root, '.reo', 'REO.md'), 'utf8'), DEFAULT_WORKSPACE_REO_MD);
+  await stat(path.join(root, 'skills', 'reo-edit', 'SKILL.md'));
 });
 
-test('dangling AGENTS.md symlink conflict does not write workspace files', async () => {
+test('initialize workspace leaves an existing AGENTS.md symlink untouched', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-dangling-agents-'));
-  await symlink(path.join(root, 'missing-user-agents.md'), path.join(root, 'AGENTS.md'));
+  const userAgentsTarget = path.join(root, 'missing-user-agents.md');
+  const agentsPath = path.join(root, 'AGENTS.md');
+  await symlink(userAgentsTarget, agentsPath);
 
   const result = await initializeWorkspaceFiles({
     rootPath: root,
@@ -612,13 +613,10 @@ test('dangling AGENTS.md symlink conflict does not write workspace files', async
     now: () => '2026-05-06T13:08:00.000Z',
   });
 
-  assert.equal(result.ok, false);
-  if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_WORKSPACE_AGENTS_CONFLICT');
-    assert.equal(result.error.dataRetention, 'none-written');
-  }
-  await assert.rejects(stat(path.join(root, '.reo')));
-  await assert.rejects(stat(path.join(root, 'memories')));
+  assert.equal(result.ok, true);
+  assert.equal(await realpath(agentsPath).catch(() => userAgentsTarget), userAgentsTarget);
+  assert.equal(await readFile(path.join(root, '.reo', 'REO.md'), 'utf8'), DEFAULT_WORKSPACE_REO_MD);
+  await stat(path.join(root, 'memories'));
 });
 
 test('workspace init creates stable root files and Reo agent skill entry', async () => {
@@ -650,23 +648,30 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   ]);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
-  assert.match(agentsText, /Codex/);
-  assert.match(agentsText, /核心实体/);
-  assert.match(agentsText, /不需要离开当前记忆空间查询 Reo 仓库源码/);
-  assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-generative-runtime\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-generative-runtime\/scripts\//);
-  assert.match(agentsText, /widgets\//);
-  assert.match(agentsText, /widget\.md/);
-  assert.match(agentsText, /mount: workspace-rail/);
-  assert.match(agentsText, /skills\/reo-works\/references\//);
-  assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works-design\/references\//);
-  assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
-  assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
+  assert.match(agentsText, /\.reo\/REO\.md/);
+  assert.match(agentsText, /固定的官方同名 Reo skills/);
+  assert.match(agentsText, /`reo-edit`/);
+  assert.match(agentsText, /`reo-doctor`/);
+  assert.doesNotMatch(agentsText, /核心实体/);
+  assert.doesNotMatch(agentsText, /<!-- reo-managed:agent-entry:start/);
+  const reoText = await readFile(path.join(root, '.reo', 'REO.md'), 'utf8');
+  assert.equal(reoText, DEFAULT_WORKSPACE_REO_MD);
+  assert.match(reoText, /Codex/);
+  assert.match(reoText, /核心实体/);
+  assert.match(reoText, /不需要离开当前记忆空间查询 Reo 仓库源码/);
+  assert.match(reoText, /skills\/reo-edit\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-cover-image\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-works\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-generative-runtime\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-generative-runtime\/scripts\//);
+  assert.match(reoText, /widgets\//);
+  assert.match(reoText, /widget\.md/);
+  assert.match(reoText, /mount: workspace-rail/);
+  assert.match(reoText, /skills\/reo-works\/references\//);
+  assert.match(reoText, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-works-design\/references\//);
+  assert.match(reoText, /skills\/reo-doctor\/SKILL\.md/);
   assert.doesNotMatch(agentsText, /普通文字/);
   assert.doesNotMatch(agentsText, /var\(--tt-color-highlight-blue\)/);
   assert.doesNotMatch(agentsText, /source\.hash/);
@@ -866,6 +871,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   );
   assert.match(scriptText, /reo-doctor/);
   assert.deepEqual((await readdir(path.join(root, '.reo'))).sort(), [
+    'REO.md',
     'drafts',
     'index.json',
     'workspace.json',
@@ -876,8 +882,8 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   }
 });
 
-test('managed AGENTS block presents ordinary file editing before Reo internals', () => {
-  assertIncludesInOrder(DEFAULT_WORKSPACE_AGENTS_MD, [
+test('managed Reo entry presents ordinary file editing before Reo internals', () => {
+  assertIncludesInOrder(DEFAULT_WORKSPACE_REO_MD, [
     '## 普通任务默认路径',
     '不要把能力限制成 Markdown-only',
     '验证直接文件效果后停止',
@@ -885,18 +891,22 @@ test('managed AGENTS block presents ordinary file editing before Reo internals',
     '## 核心实体',
   ]);
   assert.match(
-    DEFAULT_WORKSPACE_AGENTS_MD,
+    DEFAULT_WORKSPACE_REO_MD,
     /Markdown、同节点 `content\.tiptap\.json`、附件和普通对象文件/
   );
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-cover-image\/SKILL\.md/);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-cover-aesthetic\/SKILL\.md/);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works\/SKILL\.md/);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works\/references\//);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works-design\/SKILL\.md/);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /skills\/reo-works-design\/references\//);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /验证直接文件效果后停止/);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /Reo 明确提示 needs-review/);
-  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /workspace-relative 信息与 recovery hint/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-cover-image\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works\/references\//);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works-design\/references\//);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /验证直接文件效果后停止/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /Reo 明确提示 needs-review/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /workspace-relative 信息与 recovery hint/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /\.reo\/REO\.md/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /固定的官方同名 Reo skills/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /`reo-doctor`/);
+  assert.doesNotMatch(DEFAULT_WORKSPACE_AGENTS_MD, /## 核心实体/);
 });
 
 test('managed reo-edit skill keeps stop rules explicit and keeps Tiptap JSON non-default', () => {
@@ -1443,7 +1453,8 @@ test('open workspace silently restores missing Reo agent managed config', async 
   const opened = await openWorkspaceFiles({ rootPath: root });
 
   assert.equal(opened.ok, true);
-  assert.equal(await readFile(path.join(root, 'AGENTS.md'), 'utf8'), DEFAULT_WORKSPACE_AGENTS_MD);
+  await assert.rejects(stat(path.join(root, 'AGENTS.md')));
+  assert.equal(await readFile(path.join(root, '.reo', 'REO.md'), 'utf8'), DEFAULT_WORKSPACE_REO_MD);
   assert.equal(
     (await readFile(path.join(root, 'skills', 'reo-doctor', 'SKILL.md'), 'utf8')).includes(
       'name: reo-doctor'
@@ -1486,7 +1497,7 @@ test('open workspace silently restores missing Reo agent managed config', async 
   await stat(path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
 });
 
-test('open workspace preserves custom AGENTS content while adding the Reo managed block', async () => {
+test('open workspace preserves custom AGENTS content while repairing Reo-owned config', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-custom-agents-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -1495,8 +1506,15 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
     createWorkspaceId: () => 'ws_custom_agents',
     now: () => '2026-05-26T12:43:00.000Z',
   });
-  await writeFile(path.join(root, 'AGENTS.md'), '# 用户规则\n\n保留我的长期偏好。\n');
-  await rm(path.join(root, 'skills'), { force: true, recursive: true });
+  const customAgents = '# 用户规则\n\n保留我的长期偏好。\n';
+  await writeFile(path.join(root, 'AGENTS.md'), customAgents);
+  await mkdir(path.join(root, 'skills', 'user-skill'), { recursive: true });
+  await writeFile(path.join(root, 'skills', 'user-skill', 'SKILL.md'), 'user skill stays\n');
+  await writeFile(path.join(root, 'skills', 'reo-user-extension.md'), 'user reo extension stays\n');
+  await writeFile(
+    path.join(root, 'skills', 'reo-edit', 'SKILL.md'),
+    'user changed official skill\n'
+  );
   await mkdir(path.join(root, 'skills', 'reo-works', 'references'), { recursive: true });
   await writeFile(
     path.join(root, 'skills', 'reo-works', 'references', 'quality-check.md'),
@@ -1507,16 +1525,13 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
 
   assert.equal(opened.ok, true);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
-  assert.match(agentsText, /# 用户规则/);
-  assert.match(agentsText, /保留我的长期偏好/);
-  assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
-  assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
-  assert.equal((agentsText.match(/reo-managed:agent-entry:start/g) ?? []).length, 1);
+  assert.equal(agentsText, customAgents);
+  assert.equal(await readFile(path.join(root, '.reo', 'REO.md'), 'utf8'), DEFAULT_WORKSPACE_REO_MD);
   await stat(path.join(root, 'skills', 'reo-edit', 'SKILL.md'));
+  assert.equal(
+    await readFile(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), 'utf8'),
+    DEFAULT_REO_EDIT_SKILL_MD
+  );
   await stat(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'));
   await stat(path.join(root, 'skills', 'reo-works', 'SKILL.md'));
@@ -1529,9 +1544,17 @@ test('open workspace preserves custom AGENTS content while adding the Reo manage
     path.join(root, 'skills', 'reo-works-design', 'references', 'interaction-patterns.md')
   );
   await stat(path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'));
+  assert.equal(
+    await readFile(path.join(root, 'skills', 'user-skill', 'SKILL.md'), 'utf8'),
+    'user skill stays\n'
+  );
+  assert.equal(
+    await readFile(path.join(root, 'skills', 'reo-user-extension.md'), 'utf8'),
+    'user reo extension stays\n'
+  );
 });
 
-test('open workspace upgrades known legacy Reo AGENTS template instead of preserving slow-path guidance', async () => {
+test('open workspace does not rewrite legacy Reo AGENTS content', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-legacy-agents-'));
   await initializeWorkspaceFiles({
     rootPath: root,
@@ -1557,14 +1580,84 @@ test('open workspace upgrades known legacy Reo AGENTS template instead of preser
       '',
     ].join('\n')
   );
+  const beforeHash = await sha256(path.join(root, 'AGENTS.md'));
 
   const opened = await openWorkspaceFiles({ rootPath: root });
 
   assert.equal(opened.ok, true);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
-  assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
-  assert.doesNotMatch(agentsText, /source\.hash/);
-  assert.doesNotMatch(agentsText, /如果要精确表达 Tiptap JSON/);
+  assert.equal(await sha256(path.join(root, 'AGENTS.md')), beforeHash);
+  assert.match(agentsText, /source\.hash/);
+  assert.match(agentsText, /如果要精确表达 Tiptap JSON/);
+  assert.equal(await readFile(path.join(root, '.reo', 'REO.md'), 'utf8'), DEFAULT_WORKSPACE_REO_MD);
+});
+
+test('open workspace replaces official Reo skill path collisions and preserves user skills', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-skill-collision-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Skill collision',
+    description: '',
+    createWorkspaceId: () => 'ws_skill_collision',
+    now: () => '2026-05-26T12:43:00.000Z',
+  });
+  await rm(path.join(root, 'skills', 'reo-edit'), { force: true, recursive: true });
+  await writeFile(path.join(root, 'skills', 'reo-edit'), 'same official skill name\n');
+  await mkdir(path.join(root, 'skills', 'reo-user-helper'), { recursive: true });
+  await writeFile(path.join(root, 'skills', 'reo-user-helper', 'SKILL.md'), 'user helper\n');
+
+  const opened = await openWorkspaceFiles({ rootPath: root });
+
+  assert.equal(opened.ok, true);
+  assert.equal(
+    await readFile(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), 'utf8'),
+    DEFAULT_REO_EDIT_SKILL_MD
+  );
+  assert.equal(
+    await readFile(path.join(root, 'skills', 'reo-user-helper', 'SKILL.md'), 'utf8'),
+    'user helper\n'
+  );
+});
+
+test('open workspace does not recursively remove user directories at stale managed file names', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-open-stale-managed-dir-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Stale managed directory',
+    description: '',
+    createWorkspaceId: () => 'ws_stale_managed_dir',
+    now: () => '2026-05-26T12:43:00.000Z',
+  });
+  const staleRuntimeDirectory = path.join(
+    root,
+    'skills',
+    'reo-generative-runtime',
+    'scripts',
+    'migrate-runtime.mjs'
+  );
+  const staleWorksDirectory = path.join(
+    root,
+    'skills',
+    'reo-works',
+    'references',
+    'quality-check.md'
+  );
+  await mkdir(staleRuntimeDirectory, { recursive: true });
+  await writeFile(path.join(staleRuntimeDirectory, 'user-note.txt'), 'runtime user directory\n');
+  await mkdir(staleWorksDirectory, { recursive: true });
+  await writeFile(path.join(staleWorksDirectory, 'user-note.txt'), 'works user directory\n');
+
+  const opened = await openWorkspaceFiles({ rootPath: root });
+
+  assert.equal(opened.ok, true);
+  assert.equal(
+    await readFile(path.join(staleRuntimeDirectory, 'user-note.txt'), 'utf8'),
+    'runtime user directory\n'
+  );
+  assert.equal(
+    await readFile(path.join(staleWorksDirectory, 'user-note.txt'), 'utf8'),
+    'works user directory\n'
+  );
 });
 
 test('reo-doctor skill script repairs managed config without overwriting custom AGENTS content', async () => {
@@ -1577,6 +1670,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     now: () => '2026-05-26T12:43:00.000Z',
   });
   await writeFile(path.join(root, 'AGENTS.md'), '# 用户规则\n\n只修改当前任务需要的文件。\n');
+  await rm(path.join(root, '.reo', 'REO.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-doctor', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), { force: true });
   await rm(path.join(root, 'skills', 'reo-cover-image', 'SKILL.md'), { force: true });
@@ -1599,6 +1693,9 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   await rm(path.join(root, 'skills', 'reo-works-design', 'references', 'charts.md'), {
     force: true,
   });
+  await rm(path.join(root, 'skills', 'reo-works-design', 'examples', 'reactive-binding.html'), {
+    force: true,
+  });
 
   const result = spawnSync(
     process.execPath,
@@ -1610,7 +1707,7 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
   const report = JSON.parse(result.stdout) as {
     readonly ok: boolean;
     readonly repaired: {
-      readonly agentsMd: boolean;
+      readonly reoMd: boolean;
       readonly doctorSkill: boolean;
       readonly editSkill: boolean;
       readonly coverImageSkill: boolean;
@@ -1622,10 +1719,11 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
       readonly worksDesignSkill: boolean;
       readonly worksReferences: readonly string[];
       readonly worksDesignReferences: readonly string[];
+      readonly worksDesignExamples: readonly string[];
     };
   };
   assert.equal(report.ok, true);
-  assert.equal(report.repaired.agentsMd, true);
+  assert.equal(report.repaired.reoMd, true);
   assert.equal(report.repaired.doctorSkill, true);
   assert.equal(report.repaired.editSkill, true);
   assert.equal(report.repaired.coverImageSkill, true);
@@ -1651,9 +1749,10 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     'workflows.md',
   ]);
   assert.deepEqual(report.repaired.worksDesignReferences, ['charts.md']);
+  assert.deepEqual(report.repaired.worksDesignExamples, ['reactive-binding.html']);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
-  assert.match(agentsText, /只修改当前任务需要的文件/);
-  assert.match(agentsText, /<!-- reo-managed:agent-entry:start v\d+ -->/);
+  assert.equal(agentsText, '# 用户规则\n\n只修改当前任务需要的文件。\n');
+  assert.equal(await readFile(path.join(root, '.reo', 'REO.md'), 'utf8'), DEFAULT_WORKSPACE_REO_MD);
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-doctor', 'SKILL.md'), 'utf8'),
     /^name: reo-doctor/m
@@ -1702,6 +1801,58 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
       'utf8'
     ),
     /native SVG/
+  );
+  assert.match(
+    await readFile(
+      path.join(root, 'skills', 'reo-works-design', 'examples', 'reactive-binding.html'),
+      'utf8'
+    ),
+    /复习强度/
+  );
+});
+
+test('reo-doctor skill script does not recursively remove stale managed file directories', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-doctor-stale-managed-dir-'));
+  await initializeWorkspaceFiles({
+    rootPath: root,
+    title: 'Doctor stale managed directory',
+    description: '',
+    createWorkspaceId: () => 'ws_doctor_stale_managed_dir',
+    now: () => '2026-05-26T12:43:00.000Z',
+  });
+  const staleRuntimeDirectory = path.join(
+    root,
+    'skills',
+    'reo-generative-runtime',
+    'scripts',
+    'migrate-runtime.mjs'
+  );
+  const staleWorksDirectory = path.join(
+    root,
+    'skills',
+    'reo-works',
+    'references',
+    'quality-check.md'
+  );
+  await mkdir(staleRuntimeDirectory, { recursive: true });
+  await writeFile(path.join(staleRuntimeDirectory, 'user-note.txt'), 'runtime user directory\n');
+  await mkdir(staleWorksDirectory, { recursive: true });
+  await writeFile(path.join(staleWorksDirectory, 'user-note.txt'), 'works user directory\n');
+
+  const result = spawnSync(
+    process.execPath,
+    [path.join(root, 'skills', 'reo-doctor', 'scripts', 'reo-doctor.mjs'), '--fix'],
+    { cwd: root, encoding: 'utf8' }
+  );
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(
+    await readFile(path.join(staleRuntimeDirectory, 'user-note.txt'), 'utf8'),
+    'runtime user directory\n'
+  );
+  assert.equal(
+    await readFile(path.join(staleWorksDirectory, 'user-note.txt'), 'utf8'),
+    'works user directory\n'
   );
 });
 
@@ -1948,7 +2099,7 @@ test('reo-doctor skill script falls back for inherited review reasons', async ()
   ]);
 });
 
-test('reo-doctor skill script does not overwrite symlink targets while repairing managed config', async () => {
+test('reo-doctor skill script replaces official skill symlink without touching AGENTS', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-doctor-symlink-'));
   const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-doctor-outside-'));
   await initializeWorkspaceFiles({
@@ -1977,20 +2128,21 @@ test('reo-doctor skill script does not overwrite symlink targets while repairing
   const report = JSON.parse(result.stdout) as {
     readonly ok: boolean;
     readonly repaired: {
-      readonly agentsMd: boolean;
+      readonly reoMd: boolean;
       readonly editSkill: boolean;
     };
     readonly issues: readonly { readonly path: string; readonly code: string }[];
   };
-  assert.equal(report.ok, false);
-  assert.equal(report.repaired.agentsMd, false);
-  assert.equal(report.repaired.editSkill, false);
-  assert.deepEqual(report.issues.map((issue) => [issue.path, issue.code]).sort(), [
-    ['AGENTS.md', 'not-file'],
-    ['skills/reo-edit/SKILL.md', 'not-file'],
-  ]);
+  assert.equal(report.ok, true);
+  assert.equal(report.repaired.reoMd, false);
+  assert.equal(report.repaired.editSkill, true);
+  assert.deepEqual(report.issues, []);
   assert.equal(await readFile(outsideAgents, 'utf8'), 'outside agents must stay unchanged\n');
   assert.equal(await readFile(outsideSkill, 'utf8'), 'outside skill must stay unchanged\n');
+  assert.equal(
+    await readFile(path.join(root, 'skills', 'reo-edit', 'SKILL.md'), 'utf8'),
+    DEFAULT_REO_EDIT_SKILL_MD
+  );
 });
 
 test('open workspace does not update AGENTS before rejecting unsafe managed skill paths', async () => {

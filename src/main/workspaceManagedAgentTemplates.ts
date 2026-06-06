@@ -2,9 +2,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const WORKSPACE_AGENTS_MANAGED_BLOCK_START = '<!-- reo-managed:agent-entry:start v1 -->';
-export const WORKSPACE_AGENTS_MANAGED_BLOCK_END = '<!-- reo-managed:agent-entry:end -->';
-
 const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
 const bundledTemplateRoot = path.join(moduleDirectory, 'workspace-agent-config');
 const sourceTemplateRoot = path.resolve(process.cwd(), 'src/main/workspace-agent-config');
@@ -19,15 +16,6 @@ function readManagedTemplate(relativePath: string): string {
   throw new Error(`Missing Reo managed agent template: ${relativePath}`);
 }
 
-function extractManagedBlock(agentsMd: string): string {
-  const startIndex = agentsMd.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_START);
-  const endIndex = agentsMd.indexOf(WORKSPACE_AGENTS_MANAGED_BLOCK_END);
-  if (startIndex < 0 || endIndex < startIndex) {
-    throw new Error('Reo managed AGENTS.md template is missing the managed block markers');
-  }
-  return agentsMd.slice(startIndex, endIndex + WORKSPACE_AGENTS_MANAGED_BLOCK_END.length);
-}
-
 function extractFirstCssFence(markdown: string): string {
   const match = /```css\n([\s\S]*?)\n```/.exec(markdown);
   if (!match?.[1]) {
@@ -37,9 +25,7 @@ function extractFirstCssFence(markdown: string): string {
 }
 
 export const DEFAULT_WORKSPACE_AGENTS_MD = readManagedTemplate('AGENTS.md');
-export const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = extractManagedBlock(
-  DEFAULT_WORKSPACE_AGENTS_MD
-);
+export const DEFAULT_WORKSPACE_REO_MD = readManagedTemplate('REO.md');
 
 export const DEFAULT_REO_EDIT_SKILL_MD = readManagedTemplate('skills/reo-edit/SKILL.md');
 export const DEFAULT_REO_COVER_IMAGE_SKILL_MD = readManagedTemplate(
@@ -124,7 +110,7 @@ export const DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS = extractFirstCssFence(
 );
 
 export const WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES: Readonly<Record<string, string>> = {
-  'AGENTS.md': DEFAULT_WORKSPACE_AGENTS_MD,
+  '.reo/REO.md': DEFAULT_WORKSPACE_REO_MD,
   'skills/reo-edit/SKILL.md': DEFAULT_REO_EDIT_SKILL_MD,
   'skills/reo-cover-image/SKILL.md': DEFAULT_REO_COVER_IMAGE_SKILL_MD,
   'skills/reo-cover-aesthetic/SKILL.md': DEFAULT_REO_COVER_AESTHETIC_SKILL_MD,

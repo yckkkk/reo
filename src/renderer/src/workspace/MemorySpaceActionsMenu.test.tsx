@@ -98,7 +98,7 @@ describe('MemorySpaceActionsMenu', () => {
     );
   });
 
-  it('opens the memory space AGENTS file without showing a success toast', async () => {
+  it('opens the memory space agent entry without showing a success toast', async () => {
     render(
       <MemorySpaceActionsMenu
         actionIdentity={{ workspaceId: 'wsp-1' }}

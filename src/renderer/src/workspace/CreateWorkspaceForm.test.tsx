@@ -116,7 +116,7 @@ describe('CreateWorkspaceForm', () => {
     selection.resolve({ ok: true, value: { status: 'canceled' } });
   });
 
-  it('shows a toast for existing AGENTS.md conflict without clearing user input', async () => {
+  it('shows a toast for initialize failure without clearing user input', async () => {
     const user = userEvent.setup();
     const onWorkspaceReady = vi.fn();
     reoWorkspace.chooseDirectory.mockResolvedValue({
@@ -130,8 +130,8 @@ describe('CreateWorkspaceForm', () => {
     reoWorkspace.initializeWorkspace.mockResolvedValue({
       ok: false,
       error: {
-        code: 'ERR_WORKSPACE_AGENTS_CONFLICT',
-        message: 'Folder already contains AGENTS.md',
+        code: 'ERR_WORKSPACE_INIT_FAILED',
+        message: 'Workspace could not be initialized',
       },
     });
 
@@ -144,7 +144,7 @@ describe('CreateWorkspaceForm', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     expect(toast.error).toHaveBeenCalledWith('无法创建记忆空间', {
-      description: expect.stringContaining('AGENTS.md'),
+      description: expect.stringContaining('无法创建记忆空间'),
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByLabelText('记忆空间名称')).toHaveValue('Daily memory');
@@ -166,8 +166,8 @@ describe('CreateWorkspaceForm', () => {
     reoWorkspace.initializeWorkspace.mockResolvedValue({
       ok: false,
       error: {
-        code: 'ERR_WORKSPACE_AGENTS_CONFLICT',
-        message: 'Folder already contains AGENTS.md',
+        code: 'ERR_WORKSPACE_INIT_FAILED',
+        message: 'Workspace could not be initialized',
       },
     });
 

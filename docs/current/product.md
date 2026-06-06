@@ -136,9 +136,9 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 
 当前不实现 Reo runtime 内嵌的 AI chat、tool use、自动整理或 AI side effects。Reo 自身不调用任何远程 AI 服务（语音设置中的 ASR 凭证除外，见 `decisions/0004-doubao-voice-asr-endpoint-baseline.md`）。
 
-当前 agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现。Agent 在 Memory 上工作时同时读两层 context：
+当前 agent 协作通过外部 Codex-class agent + 文件真源 + prompt-bridge 入口实现。Agent 在 Memory 上工作时读取 Reo 托管入口和用户自带 context：
 
-- **AGENTS.md**（项目 / Workspace 真源）：记忆空间 root 与每个 Memory root 的 AGENTS.md 描述记忆空间目的、文件结构、Reo 管理路径和 agent 协作规则；Reo 不覆盖已有 `AGENTS.md`。
+- **.reo/REO.md**（Reo 托管 agent 入口）：描述记忆空间文件结构、Reo 管理路径和 agent 协作规则；root `AGENTS.md` 若存在，归用户或一次性新建指针所有，Reo 打开、修复和更新时不覆盖。
 - **users.md**（用户个人 context）：Workspace root 的 users.md 描述用户是谁、长期目标、当前关注、表达偏好、agent 输出风格偏好；agent 每次操作前读取，让所有 skill 输出根据用户个性化。Memory level users.md override 由未来 spec 决定。
 
 当前记忆空间托管 skills 包括 `reo-edit`、`reo-cover-image`、`reo-cover-aesthetic`、`reo-works`、`reo-generative-runtime`、`reo-works-design` 和 `reo-doctor`。`reo-cover-image` 负责 Memory 与 Segment cover 的生成、替换、默认模板切换、恢复默认和文件验证；`reo-cover-aesthetic` 是基于开源 aesthetic skill 优化后的 Reo 内置封面审美工作流；`reo-works` 负责作品片段与作品补充的创建和更新，`reo-generative-runtime` 负责 runtime bundle、状态、模板、脚本和验证，`reo-works-design` 负责作品视觉/交互生成约束。
@@ -152,4 +152,4 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 
 Shared Generative Runtime 是当前作品能力：作品片段和作品补充以本地 runtime bundle 运行，并通过显式 `window.reo` bridge 使用状态、Reo 数据、当前作品标题 mutation、宿主 UI 和 agent prompt action。Reo 只守 host、IPC、file-truth 和 typed mutation 边界，不做 key/token 管理、联网确认、权限弹窗、内容审查或质量审核。
 
-Agent-ready 的当前验证方式是本地文件结构、`AGENTS.md`、托管 skills、Memory metadata、audio/note/artifact Segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。
+Agent-ready 的当前验证方式是本地文件结构、`.reo/REO.md`、可选用户 `AGENTS.md`、托管 skills、Memory metadata、audio/note/artifact Segment 和已保存 transcript 可以被外部 Codex-class agent 读取并理解。

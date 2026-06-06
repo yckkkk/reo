@@ -16,7 +16,7 @@ export type ResolverErrorCode =
   | 'ERR_WORKSPACE_SEGMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_WIDGET_NOT_FOUND'
-  | 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING'
+  | 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING'
   | 'ERR_ENTITY_DOCUMENT_MISSING'
   | 'ERR_WORKSPACE_METADATA_INVALID'
   | 'ERR_WORKSPACE_UNSAFE_PATH';
@@ -27,7 +27,7 @@ export type ResolverResult<T> =
 
 export type MemorySpacePaths = {
   readonly rootAbsolute: string;
-  readonly agentsFileAbsolute: string;
+  readonly agentEntryFileAbsolute: string;
 };
 
 export type MemoryPaths = {
@@ -222,7 +222,7 @@ function hasErrorCode(error: unknown, code: string): boolean {
 async function validateRequiredFile(
   fs: FsProbe,
   filePath: string,
-  missingCode: 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING' | 'ERR_ENTITY_DOCUMENT_MISSING'
+  missingCode: 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING' | 'ERR_ENTITY_DOCUMENT_MISSING'
 ): Promise<ResolverResult<null>> {
   const fileState = fs.safeFile
     ? await fs.safeFile(filePath)
@@ -268,7 +268,7 @@ export async function resolveMemorySpacePaths(
     readonly registry?: RegistryLookup;
     readonly fs?: FsProbe;
     readonly memorySpaceRootValidator?: MemorySpaceRootValidator;
-    readonly requireAgentsFile?: boolean;
+    readonly requireAgentEntryFile?: boolean;
   } = {}
 ): Promise<ResolverResult<MemorySpacePaths>> {
   const fs = deps.fs ?? nodeFsProbe;
@@ -286,15 +286,15 @@ export async function resolveMemorySpacePaths(
   }
 
   const rootAbsolute = rootValidation.value.rootAbsolute;
-  const agentsFileAbsolute = path.join(rootAbsolute, 'AGENTS.md');
-  if (deps.requireAgentsFile) {
-    const agentsFileValidation = await validateRequiredFile(
+  const agentEntryFileAbsolute = path.join(rootAbsolute, '.reo', 'REO.md');
+  if (deps.requireAgentEntryFile) {
+    const agentEntryFileValidation = await validateRequiredFile(
       fs,
-      agentsFileAbsolute,
-      'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING'
+      agentEntryFileAbsolute,
+      'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING'
     );
-    if (!agentsFileValidation.ok) {
-      return agentsFileValidation;
+    if (!agentEntryFileValidation.ok) {
+      return agentEntryFileValidation;
     }
   }
 
@@ -302,7 +302,7 @@ export async function resolveMemorySpacePaths(
     ok: true,
     value: {
       rootAbsolute,
-      agentsFileAbsolute,
+      agentEntryFileAbsolute,
     },
   };
 }

@@ -17,7 +17,7 @@ const allowMemorySpaceRoot = async ({ rootPath }: { readonly rootPath: string })
   value: { rootAbsolute: rootPath },
 });
 
-test('resolveMemorySpacePaths returns root and AGENTS.md absolute paths for known workspaceId', async () => {
+test('resolveMemorySpacePaths returns root and Reo agent entry absolute paths for known workspaceId', async () => {
   const registry = {
     async findByWorkspaceId(id: string) {
       return id === 'wsp-1' ? { canonicalRoot: '/tmp/reo-ws-1' } : null;
@@ -25,7 +25,7 @@ test('resolveMemorySpacePaths returns root and AGENTS.md absolute paths for know
   };
   const fs = {
     async exists(filePath: string) {
-      return filePath === '/tmp/reo-ws-1' || filePath === '/tmp/reo-ws-1/AGENTS.md';
+      return filePath === '/tmp/reo-ws-1' || filePath === '/tmp/reo-ws-1/.reo/REO.md';
     },
   };
 
@@ -39,7 +39,7 @@ test('resolveMemorySpacePaths returns root and AGENTS.md absolute paths for know
     ok: true,
     value: {
       rootAbsolute: '/tmp/reo-ws-1',
-      agentsFileAbsolute: '/tmp/reo-ws-1/AGENTS.md',
+      agentEntryFileAbsolute: '/tmp/reo-ws-1/.reo/REO.md',
     },
   });
 });
@@ -72,7 +72,7 @@ test('resolveMemorySpacePaths returns ERR_WORKSPACE_ROOT_MISSING when root path 
   assert.deepEqual(result, { ok: false, code: 'ERR_WORKSPACE_ROOT_MISSING' });
 });
 
-test('resolveMemorySpacePaths returns ERR_MEMORY_SPACE_AGENTS_FILE_MISSING when AGENTS.md is required and missing', async () => {
+test('resolveMemorySpacePaths returns ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING when .reo/REO.md is required and missing', async () => {
   const registry = {
     async findByWorkspaceId() {
       return { canonicalRoot: '/tmp/reo-ws-1' };
@@ -88,17 +88,18 @@ test('resolveMemorySpacePaths returns ERR_MEMORY_SPACE_AGENTS_FILE_MISSING when 
     registry,
     fs,
     memorySpaceRootValidator: allowMemorySpaceRoot,
-    requireAgentsFile: true,
+    requireAgentEntryFile: true,
   });
 
-  assert.deepEqual(result, { ok: false, code: 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING' });
+  assert.deepEqual(result, { ok: false, code: 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING' });
 });
 
-test('resolveMemorySpacePaths rejects symlinked AGENTS.md when required', async () => {
+test('resolveMemorySpacePaths rejects symlinked .reo/REO.md when required', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-entity-space-agents-link-'));
   const targetPath = path.join(rootPath, 'target.md');
+  await mkdir(path.join(rootPath, '.reo'), { recursive: true });
   await writeFile(targetPath, '# outside\n');
-  await symlink(targetPath, path.join(rootPath, 'AGENTS.md'));
+  await symlink(targetPath, path.join(rootPath, '.reo', 'REO.md'));
   const registry = {
     async findByWorkspaceId() {
       return { canonicalRoot: rootPath };
@@ -108,7 +109,7 @@ test('resolveMemorySpacePaths rejects symlinked AGENTS.md when required', async 
   const result = await resolveMemorySpacePaths('wsp-1', {
     registry,
     memorySpaceRootValidator: allowMemorySpaceRoot,
-    requireAgentsFile: true,
+    requireAgentEntryFile: true,
   });
 
   assert.deepEqual(result, { ok: false, code: 'ERR_WORKSPACE_UNSAFE_PATH' });
@@ -122,7 +123,7 @@ test('resolveMemorySpacePaths accepts current registry-style resolveMemorySpace 
   };
   const fs = {
     async exists(filePath: string) {
-      return filePath === '/tmp/reo-ws-1' || filePath === '/tmp/reo-ws-1/AGENTS.md';
+      return filePath === '/tmp/reo-ws-1' || filePath === '/tmp/reo-ws-1/.reo/REO.md';
     },
   };
 
@@ -136,7 +137,7 @@ test('resolveMemorySpacePaths accepts current registry-style resolveMemorySpace 
     ok: true,
     value: {
       rootAbsolute: '/tmp/reo-ws-1',
-      agentsFileAbsolute: '/tmp/reo-ws-1/AGENTS.md',
+      agentEntryFileAbsolute: '/tmp/reo-ws-1/.reo/REO.md',
     },
   });
 });

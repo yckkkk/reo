@@ -503,7 +503,7 @@ type ResolveMemorySpacePaths = (
   deps?: {
     readonly registry?: WorkspaceMemorySpaceRegistry;
     readonly fs?: FsProbe;
-    readonly requireAgentsFile?: boolean;
+    readonly requireAgentEntryFile?: boolean;
   }
 ) => Promise<ResolverResult<MemorySpacePaths>>;
 type ResolveMemoryPaths = (
@@ -1104,22 +1104,22 @@ function handleOpenMemorySpaceAgentsFileCore({
     channel: WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
     schema: workspaceOpenMemorySpaceAgentsFileRequestSchema,
     invalidMessage: 'openMemorySpaceAgentsFile request is invalid',
-    resolveFailureMessage: 'Memory space AGENTS.md path could not be resolved',
+    resolveFailureMessage: 'Memory space agent entry path could not be resolved',
     resolve: (request, memorySpaceRegistry) =>
       resolver(request.workspaceId, {
         registry: memorySpaceRegistry,
-        requireAgentsFile: true,
+        requireAgentEntryFile: true,
         ...(fs ? { fs } : {}),
       }),
     run: (paths) =>
       openEntityDocument({
         fs: entityActionFsForResolver(fs, resolver, resolveMemorySpacePaths),
-        paths: { documentAbsolute: paths.agentsFileAbsolute },
-        missingCode: 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING',
-        missingMessage: 'Memory space AGENTS.md is missing',
-        unsafeMessage: 'Memory space AGENTS.md path is unsafe',
+        paths: { documentAbsolute: paths.agentEntryFileAbsolute },
+        missingCode: 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING',
+        missingMessage: 'Memory space agent entry is missing',
+        unsafeMessage: 'Memory space agent entry path is unsafe',
         openPath,
-        failureMessage: 'Memory space AGENTS.md could not be opened',
+        failureMessage: 'Memory space agent entry could not be opened',
       }),
   });
 }
@@ -3604,7 +3604,7 @@ type EntityActionMissingPathCode =
   | 'ERR_WORKSPACE_SEGMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_WIDGET_NOT_FOUND'
-  | 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING'
+  | 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING'
   | 'ERR_ENTITY_DOCUMENT_MISSING';
 
 const PROMPT_TARGET_MARKDOWN_MAX_BYTES = 1_048_576;
@@ -4018,7 +4018,7 @@ function buildWorkspaceArtifactAgentPrompt({
 }): string {
   const runtimeBundleLine = `- 写入同目录 runtime bundle：\`${ARTIFACT_RUNTIME_ENTRY_FILE}\`、\`${ARTIFACT_RUNTIME_MANIFEST_FILE}\`、\`${ARTIFACT_RUNTIME_STATE_FILE}\` 和 \`${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\`。`;
   const common = [
-    '请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；作品运行时 bundle、状态和验证先阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；用户未指定风格时默认按 `reo-works-design` 的 Reo 视觉变量和参考模块，涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
+    '请在当前 Reo 记忆空间根目录内工作。先阅读 `.reo/REO.md`，再阅读 `skills/reo-works/SKILL.md`，并按其中指引读取 `skills/reo-works/references/`；作品运行时 bundle、状态和验证先阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；用户未指定风格时默认按 `reo-works-design` 的 Reo 视觉变量和参考模块，涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
     '',
     '边界：',
     '- 只使用下方 workspace-relative path，不要使用绝对路径。',
@@ -4189,7 +4189,7 @@ function buildWorkspaceWidgetAgentPrompt({
 }): string {
   const runtimeBundleLine = `- 写入同目录 runtime bundle：\`${ARTIFACT_RUNTIME_ENTRY_FILE}\`、\`${ARTIFACT_RUNTIME_MANIFEST_FILE}\`、\`${ARTIFACT_RUNTIME_STATE_FILE}\` 和 \`${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\`；可选图标为 \`${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/icon.svg\`。`;
   const common = [
-    '请在当前 Reo 记忆空间根目录内工作。先阅读当前 `AGENTS.md`，再阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
+    '请在当前 Reo 记忆空间根目录内工作。先阅读 `.reo/REO.md`，再阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
     '',
     '边界：',
     '- 只使用下方 workspace-relative path，不要使用绝对路径。',

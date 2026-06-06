@@ -40,6 +40,7 @@ describe('buildWorkspaceReviewAgentPrompt', () => {
     const prompt = buildWorkspaceReviewAgentPrompt(2);
 
     expect(prompt).toContain('Reo 检测到这个记忆空间有 2 个文件需要检查。');
+    expect(prompt).toContain('.reo/REO.md');
     expect(prompt).toContain('node skills/reo-doctor/scripts/reo-doctor.mjs');
     expect(prompt).toContain('.reo/review/needs-review.md');
     expect(prompt).toContain('按每条 recovery hint 处理');

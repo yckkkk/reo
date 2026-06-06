@@ -24,7 +24,7 @@ To apply deterministic safe repairs:
 node skills/reo-doctor/scripts/reo-doctor.mjs --fix
 ```
 
-The script repairs Reo managed `AGENTS.md` blocks and managed skill files, then reports unresolved issues. It must preserve user-written content in `AGENTS.md`.
+The script repairs Reo managed `.reo/REO.md` and official Reo skill files, then reports unresolved issues. It must preserve user-written content in `AGENTS.md`.
 When `.reo/review/needs-review.json` exists, the script prints the unresolved entries with workspace-relative paths and recovery hints.
 
 ## Boundaries

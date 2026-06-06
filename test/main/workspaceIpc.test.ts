@@ -110,6 +110,7 @@ import { createWorkspaceHandleStore } from '../../src/main/workspaceHandles.js';
 import { acquireWorkspaceLock } from '../../src/main/workspaceLock.js';
 import {
   DEFAULT_WORKSPACE_AGENTS_MD,
+  DEFAULT_WORKSPACE_REO_MD,
   initializeWorkspaceFiles,
   setBeforeWorkspaceIndexReconciliationPersistForTest,
 } from '../../src/main/workspaceFiles.js';
@@ -159,7 +160,7 @@ const microphoneEvent = {
   sender: { ...event.sender, id: 101 },
 };
 type MemorySpaceResolverDepsForTest = {
-  readonly requireAgentsFile?: boolean;
+  readonly requireAgentEntryFile?: boolean;
 };
 type MemoryResolverDepsForTest = {
   readonly requireDocument?: boolean;
@@ -1098,15 +1099,19 @@ test('initializeWorkspace creates a named workspace directory under the selected
   ]);
   const agentsText = await readFile(path.join(workspaceRoot, 'AGENTS.md'), 'utf8');
   assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
-  assert.match(agentsText, /核心实体/);
-  assert.match(agentsText, /skills\/reo-edit\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-cover-image\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works\/references\//);
-  assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
-  assert.match(agentsText, /skills\/reo-works-design\/references\//);
-  assert.match(agentsText, /skills\/reo-doctor\/SKILL\.md/);
+  assert.match(agentsText, /\.reo\/REO\.md/);
+  assert.doesNotMatch(agentsText, /核心实体/);
+  const reoText = await readFile(path.join(workspaceRoot, '.reo', 'REO.md'), 'utf8');
+  assert.equal(reoText, DEFAULT_WORKSPACE_REO_MD);
+  assert.match(reoText, /核心实体/);
+  assert.match(reoText, /skills\/reo-edit\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-cover-image\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-cover-aesthetic\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-works\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-works\/references\//);
+  assert.match(reoText, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(reoText, /skills\/reo-works-design\/references\//);
+  assert.match(reoText, /skills\/reo-doctor\/SKILL\.md/);
   assert.doesNotMatch(agentsText, /普通文字/);
   assert.doesNotMatch(agentsText, /source\.hash/);
   await stat(path.join(workspaceRoot, 'skills', 'reo-edit', 'SKILL.md'));
@@ -6093,7 +6098,7 @@ test('revealMemorySpaceInFinder rejects untrusted sender and does not show the f
       ok: true,
       value: {
         rootAbsolute: '/tmp/reo-memory-space',
-        agentsFileAbsolute: '/tmp/reo-memory-space/AGENTS.md',
+        agentEntryFileAbsolute: '/tmp/reo-memory-space/.reo/REO.md',
       },
     }),
     showItemInFolder: (filePath: string) => {
@@ -6173,7 +6178,7 @@ test('revealMemorySpaceInFinder shows the canonical memory space root', async ()
         ok: true,
         value: {
           rootAbsolute: '/tmp/reo-memory-space-canonical',
-          agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+          agentEntryFileAbsolute: '/tmp/reo-memory-space-canonical/.reo/REO.md',
         },
       };
     },
@@ -6755,7 +6760,7 @@ test('openMemorySpaceAgentsFile rejects untrusted sender and does not open the f
       ok: true,
       value: {
         rootAbsolute: '/tmp/reo-memory-space',
-        agentsFileAbsolute: '/tmp/reo-memory-space/AGENTS.md',
+        agentEntryFileAbsolute: '/tmp/reo-memory-space/.reo/REO.md',
       },
     }),
     openPath: async (filePath: string) => {
@@ -6797,7 +6802,7 @@ test('openMemorySpaceAgentsFile rejects invalid request and does not open the fi
   assert.deepEqual(openedPaths, []);
 });
 
-test('openMemorySpaceAgentsFile returns agents-file missing when the resolver cannot find AGENTS.md', async () => {
+test('openMemorySpaceAgentsFile returns agent-entry missing when the resolver cannot find .reo/REO.md', async () => {
   const openedPaths: string[] = [];
   const result = await handleOpenMemorySpaceAgentsFileForTest({
     event,
@@ -6809,8 +6814,8 @@ test('openMemorySpaceAgentsFile returns agents-file missing when the resolver ca
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
     resolver: async (workspaceId: string, deps?: MemorySpaceResolverDepsForTest) => {
       assert.equal(workspaceId, 'ws_missing_agents');
-      assert.equal(deps?.requireAgentsFile, true);
-      return { ok: false, code: 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING' };
+      assert.equal(deps?.requireAgentEntryFile, true);
+      return { ok: false, code: 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING' };
     },
     openPath: async (filePath: string) => {
       openedPaths.push(filePath);
@@ -6820,7 +6825,7 @@ test('openMemorySpaceAgentsFile returns agents-file missing when the resolver ca
 
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.equal(result.error.code, 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING');
+    assert.equal(result.error.code, 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING');
     assert.equal('dataRetention' in result.error, false);
   }
   assert.deepEqual(openedPaths, []);
@@ -6840,7 +6845,7 @@ test('openMemorySpaceAgentsFile returns shell-open failed when Electron cannot o
       ok: true,
       value: {
         rootAbsolute: '/tmp/reo-memory-space',
-        agentsFileAbsolute: '/tmp/reo-memory-space/AGENTS.md',
+        agentEntryFileAbsolute: '/tmp/reo-memory-space/.reo/REO.md',
       },
     }),
     openPath: async (filePath: string) => {
@@ -6853,10 +6858,10 @@ test('openMemorySpaceAgentsFile returns shell-open failed when Electron cannot o
   if (!result.ok) {
     assert.equal(result.error.code, 'ERR_SHELL_OPEN_FAILED');
   }
-  assert.deepEqual(openedPaths, ['/tmp/reo-memory-space/AGENTS.md']);
+  assert.deepEqual(openedPaths, ['/tmp/reo-memory-space/.reo/REO.md']);
 });
 
-test('openMemorySpaceAgentsFile opens the resolved AGENTS.md file', async () => {
+test('openMemorySpaceAgentsFile opens the resolved Reo agent entry file', async () => {
   const openedPaths: string[] = [];
   const result = await handleOpenMemorySpaceAgentsFileForTest({
     event,
@@ -6868,12 +6873,12 @@ test('openMemorySpaceAgentsFile opens the resolved AGENTS.md file', async () => 
     isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
     resolver: async (workspaceId: string, deps?: MemorySpaceResolverDepsForTest) => {
       assert.equal(workspaceId, 'ws_runtime_validated');
-      assert.equal(deps?.requireAgentsFile, true);
+      assert.equal(deps?.requireAgentEntryFile, true);
       return {
         ok: true,
         value: {
           rootAbsolute: '/tmp/reo-memory-space-canonical',
-          agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+          agentEntryFileAbsolute: '/tmp/reo-memory-space-canonical/.reo/REO.md',
         },
       };
     },
@@ -6884,7 +6889,7 @@ test('openMemorySpaceAgentsFile opens the resolved AGENTS.md file', async () => 
   });
 
   assert.deepEqual(result, { ok: true });
-  assert.deepEqual(openedPaths, ['/tmp/reo-memory-space-canonical/AGENTS.md']);
+  assert.deepEqual(openedPaths, ['/tmp/reo-memory-space-canonical/.reo/REO.md']);
 });
 
 test('copyMemorySpaceAbsolutePath rejects untrusted sender and does not write clipboard', async () => {
@@ -6982,7 +6987,7 @@ test('copyMemorySpaceAbsolutePath returns clipboard-write failed when clipboard 
       ok: true,
       value: {
         rootAbsolute: '/tmp/reo-memory-space-canonical',
-        agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+        agentEntryFileAbsolute: '/tmp/reo-memory-space-canonical/.reo/REO.md',
       },
     }),
     writeText: (text: string) => {
@@ -7014,7 +7019,7 @@ test('copyMemorySpaceAbsolutePath writes the resolved root absolute path to clip
         ok: true,
         value: {
           rootAbsolute: '/tmp/reo-memory-space-canonical',
-          agentsFileAbsolute: '/tmp/reo-memory-space-canonical/AGENTS.md',
+          agentEntryFileAbsolute: '/tmp/reo-memory-space-canonical/.reo/REO.md',
         },
       };
     },
@@ -7136,6 +7141,7 @@ test('copyNeedsReviewAgentPrompt writes a main-owned safe prompt to clipboard', 
   assert.deepEqual(result, { ok: true });
   assert.equal(copiedText.length, 1);
   assert.match(copiedText[0] ?? '', /2 个文件需要检查/);
+  assert.match(copiedText[0] ?? '', /\.reo\/REO\.md/);
   assert.match(copiedText[0] ?? '', /node skills\/reo-doctor\/scripts\/reo-doctor\.mjs/);
   assert.match(copiedText[0] ?? '', /\.reo\/review\/needs-review\.md/);
   assert.equal((copiedText[0] ?? '').includes('/tmp/reo-review-prompt-success'), false);
@@ -7247,6 +7253,7 @@ test('copyArtifactAgentPrompt writes a create segment prompt without creating fi
   assert.deepEqual(result, { ok: true });
   assert.equal(copiedText.length, 1);
   assert.match(copiedText[0] ?? '', /创建一个 Reo 作品片段/);
+  assert.match(copiedText[0] ?? '', /\.reo\/REO\.md/);
   assert.match(copiedText[0] ?? '', /skills\/reo-works\/SKILL\.md/);
   assert.match(copiedText[0] ?? '', /skills\/reo-works\/references\//);
   assert.match(copiedText[0] ?? '', /skills\/reo-generative-runtime\/SKILL\.md/);
@@ -7293,7 +7300,8 @@ test('copyWidgetAgentPrompt writes a create prompt with managed entry and Widget
   assert.equal(copiedText.length, 1);
   const prompt = copiedText[0] ?? '';
   assert.match(prompt, /创建一个 Reo Workspace 侧栏 Widget/);
-  assert.match(prompt, /AGENTS\.md/);
+  assert.match(prompt, /\.reo\/REO\.md/);
+  assert.doesNotMatch(prompt, /AGENTS\.md/);
   assert.match(prompt, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(prompt, /skills\/reo-generative-runtime\/references\//);
   assert.match(prompt, /skills\/reo-generative-runtime\/scripts\//);
@@ -7359,6 +7367,8 @@ test('copyWidgetAgentPrompt writes an update prompt scoped to an existing Widget
   assert.equal(copiedText.length, 1);
   const prompt = copiedText[0] ?? '';
   assert.match(prompt, /更新一个 Reo Workspace 侧栏 Widget/);
+  assert.match(prompt, /\.reo\/REO\.md/);
+  assert.doesNotMatch(prompt, /AGENTS\.md/);
   assert.match(prompt, /widget directory: `widgets\/wdg_prompt--Daily`/);
   assert.match(prompt, /metadata: `widgets\/wdg_prompt--Daily\/widget\.md`/);
   assert.match(prompt, /widgetId: wdg_prompt/);
@@ -7634,6 +7644,7 @@ test('copyArtifactAgentPrompt writes an update supplement prompt scoped to the t
   assert.deepEqual(result, { ok: true });
   assert.equal(copiedText.length, 1);
   assert.match(copiedText[0] ?? '', /更新一个已有 Reo 作品补充/);
+  assert.match(copiedText[0] ?? '', /\.reo\/REO\.md/);
   assert.match(
     copiedText[0] ?? '',
     /memories\/mem_prompt--产品复盘\/segments\/seg_artifact--复习表\/supplements\/sup_artifact--补充/
@@ -7736,6 +7747,7 @@ test('copyArtifactAgentPrompt writes an update segment prompt for a damaged work
   assert.deepEqual(result, { ok: true });
   assert.equal(copiedText.length, 1);
   assert.match(copiedText[0] ?? '', /更新一个已有 Reo 作品片段/);
+  assert.match(copiedText[0] ?? '', /\.reo\/REO\.md/);
   assert.match(copiedText[0] ?? '', /entry\.html/);
   assert.equal((copiedText[0] ?? '').includes(root), false);
   assert.equal((copiedText[0] ?? '').includes('wh_ipc'), false);
