@@ -1,5 +1,13 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +20,7 @@ import type {
   WorkspaceMemorySummary,
   WorkspaceNoteSegmentContent,
   WorkspaceNoteSegmentSupplementContent,
+  WorkspaceWidgetProjection,
 } from './workspace/workspaceApi';
 import {
   memoryDetailQueryKey,
@@ -96,6 +105,15 @@ describe('App', () => {
     updateSegmentTitle: vi.fn(),
     updateSegmentContentTitle: vi.fn(),
     updateSegmentSupplementTitle: vi.fn(),
+    updateWidgetTitle: vi.fn(),
+    updateWidgetTabOrder: vi.fn(),
+    deleteWidget: vi.fn(),
+    restoreDeletedWidget: vi.fn(),
+    revealWidgetInFinder: vi.fn(),
+    openWidgetDocument: vi.fn(),
+    copyWidgetAbsolutePath: vi.fn(),
+    copyWidgetRelativePath: vi.fn(),
+    copyWidgetAgentPrompt: vi.fn(),
     saveTranscript: vi.fn(),
     saveSegmentSupplementTranscript: vi.fn(),
     requestSegmentTranscriptionBackfill: vi.fn(),
@@ -128,6 +146,51 @@ describe('App', () => {
       reject = promiseReject;
     });
     return { promise, reject, resolve };
+  }
+
+  function createDragDataTransfer() {
+    const data = new Map<string, string>();
+    return {
+      dropEffect: 'none',
+      effectAllowed: 'all',
+      getData: vi.fn((type: string) => data.get(type) ?? ''),
+      setData: vi.fn((type: string, value: string) => {
+        data.set(type, value);
+      }),
+    } as unknown as DataTransfer;
+  }
+
+  function mockTabRect(element: HTMLElement, left = 0, width = 100) {
+    Object.defineProperty(element, 'getBoundingClientRect', {
+      configurable: true,
+      value: () =>
+        ({
+          bottom: 30,
+          height: 30,
+          left,
+          right: left + width,
+          top: 0,
+          width,
+          x: left,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    });
+  }
+
+  function fireWidgetTabDragOver(
+    element: HTMLElement,
+    input: {
+      readonly clientX: number;
+      readonly dataTransfer: DataTransfer;
+    }
+  ) {
+    const event = createEvent.dragOver(element, { dataTransfer: input.dataTransfer });
+    Object.defineProperty(event, 'clientX', {
+      configurable: true,
+      value: input.clientX,
+    });
+    fireEvent(element, event);
   }
 
   function expectRichEditorContent(editor: HTMLElement, expectedText: string | readonly string[]) {
@@ -438,6 +501,27 @@ describe('App', () => {
       ok: false,
       error: { code: 'ERR_RECORDING_NOT_FOUND', message: 'Supplement not found' },
     });
+    reoWorkspace.updateWidgetTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND', message: 'Widget not found' },
+    });
+    reoWorkspace.updateWidgetTabOrder.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND', message: 'Widget not found' },
+    });
+    reoWorkspace.deleteWidget.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND', message: 'Widget not found' },
+    });
+    reoWorkspace.restoreDeletedWidget.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND', message: 'Widget not found' },
+    });
+    reoWorkspace.revealWidgetInFinder.mockResolvedValue({ ok: true });
+    reoWorkspace.openWidgetDocument.mockResolvedValue({ ok: true });
+    reoWorkspace.copyWidgetAbsolutePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyWidgetRelativePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyWidgetAgentPrompt.mockResolvedValue({ ok: true });
     reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
       ok: false,
       error: {
@@ -4860,6 +4944,399 @@ describe('App', () => {
       within(titlebar).getByRole('button', { name: '外部空间 记忆空间操作' })
     ).toBeInTheDocument();
     expect(within(titlebar).getByRole('button', { name: '外部记忆 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('projects externally created workspace widgets from file truth refreshes', async () => {
+    const user = userEvent.setup();
+    let fileTruthChanged: Parameters<Window['reoWorkspace']['onFileTruthChanged']>[0] | null = null;
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: '生日记录',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 1000,
+      audioByteLength: 3,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    const widget = {
+      workspaceId: 'ws_1',
+      widgetId: 'wdg_overview',
+      type: 'widget' as const,
+      format: 'html' as const,
+      mount: 'workspace-rail' as const,
+      title: 'Workspace 总览',
+      createdAt: '2026-06-05T15:19:53.000Z',
+      updatedAt: '2026-06-05T15:19:53.000Z',
+      icon: { source: 'default' as const },
+      entryByteLength: 1024,
+      entryHash: BASELINE_HASH_A,
+      previewVersion: BASELINE_HASH_B,
+    };
+    reoWorkspace.onFileTruthChanged.mockImplementation((listener) => {
+      fileTruthChanged = listener;
+      return () => {};
+    });
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+          widgets: [widget],
+        },
+      });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
+    expect(
+      within(titlebar).queryByRole('tab', { name: 'Workspace 总览 Widget' })
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      fileTruthChanged?.({
+        kind: 'changed',
+        reason: 'file-system',
+        sequence: 1,
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+      });
+    });
+
+    await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
+    await user.click(within(titlebar).getByRole('button', { name: '展开记忆列表' }));
+    expect(
+      within(titlebar).getByRole('tab', { name: 'Workspace 总览 Widget' })
+    ).toBeInTheDocument();
+  });
+
+  function createWidgetReorderFixture() {
+    const memory = {
+      memoryId: 'mem_birthday',
+      title: '生日记录',
+      createdAt: '2026-05-06T13:08:00.000Z',
+      updatedAt: '2026-05-06T13:10:00.000Z',
+      segmentCount: 1,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 0,
+      audioSegmentCount: 1,
+      audioDurationMs: 1000,
+      audioByteLength: 3,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    } satisfies WorkspaceMemorySummary;
+    const overviewWidget = {
+      workspaceId: 'ws_1',
+      widgetId: 'wdg_overview',
+      type: 'widget' as const,
+      format: 'html' as const,
+      mount: 'workspace-rail' as const,
+      title: 'Workspace 总览',
+      createdAt: '2026-06-05T15:19:53.000Z',
+      updatedAt: '2026-06-05T15:19:53.000Z',
+      icon: { source: 'default' as const },
+      entryByteLength: 1024,
+      entryHash: BASELINE_HASH_A,
+      previewVersion: BASELINE_HASH_B,
+    } satisfies WorkspaceWidgetProjection;
+    const secondWidget = {
+      ...overviewWidget,
+      widgetId: 'wdg_second',
+      title: '第二个 Widget',
+      entryHash: BASELINE_HASH_C,
+    } satisfies WorkspaceWidgetProjection;
+    const todayWidget = {
+      ...overviewWidget,
+      widgetId: 'wdg_today',
+      title: '今日空间总览',
+      entryHash: BASELINE_TIPTAP_HASH_A,
+    } satisfies WorkspaceWidgetProjection;
+    const widgetsById = new Map<string, WorkspaceWidgetProjection>(
+      [overviewWidget, secondWidget, todayWidget].map((widget) => [widget.widgetId, widget])
+    );
+    const widgetsForOrder = (widgetTabOrder: readonly string[]) =>
+      widgetTabOrder
+        .map((widgetId) => widgetsById.get(widgetId))
+        .filter((widget): widget is WorkspaceWidgetProjection => widget !== undefined);
+
+    return {
+      memory,
+      overviewWidget,
+      secondWidget,
+      todayWidget,
+      widgetsForOrder,
+    };
+  }
+
+  async function renderWidgetReorderWorkspace({
+    memory,
+    overviewWidget,
+    secondWidget,
+    todayWidget,
+    user,
+  }: ReturnType<typeof createWidgetReorderFixture> & {
+    readonly user: ReturnType<typeof userEvent.setup>;
+  }) {
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: 'Private notes',
+          memories: [memory],
+          widgets: [overviewWidget, secondWidget, todayWidget],
+        },
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: 'Private notes',
+        memories: [memory],
+        widgets: [overviewWidget, secondWidget, todayWidget],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+
+    const titlebar = screen.getByRole('banner', { name: '标题栏' });
+    await user.click(within(titlebar).getByRole('button', { name: '展开记忆列表' }));
+    const tabStrip = titlebar.querySelector('[data-slot="workspace-rail-tab-strip"]');
+    expect(tabStrip).toBeInstanceOf(HTMLElement);
+    const widgetTabNames = () =>
+      within(tabStrip as HTMLElement)
+        .getAllByRole('tab')
+        .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' Widget'))
+        .map((tab) => tab.getAttribute('aria-label'));
+    const widgetTabItem = (name: string) =>
+      within(tabStrip as HTMLElement)
+        .getByRole('tab', { name })
+        .closest('[data-slot="workspace-widget-tab"]') as HTMLElement;
+
+    return { widgetTabItem, widgetTabNames };
+  }
+
+  it('submits consecutive Widget tab reorder gestures without dropping the second while the first is pending', async () => {
+    const user = userEvent.setup();
+    const firstReorder =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateWidgetTabOrder']>>>();
+    const widgetFixture = createWidgetReorderFixture();
+
+    reoWorkspace.updateWidgetTabOrder
+      .mockReturnValueOnce(firstReorder.promise)
+      .mockImplementation(
+        async (payload: Parameters<Window['reoWorkspace']['updateWidgetTabOrder']>[0]) => ({
+          ok: true as const,
+          value: { widgets: widgetFixture.widgetsForOrder(payload.widgetTabOrder) },
+        })
+      );
+
+    const { widgetTabItem, widgetTabNames } = await renderWidgetReorderWorkspace({
+      ...widgetFixture,
+      user,
+    });
+
+    expect(widgetTabNames()).toEqual([
+      'Workspace 总览 Widget',
+      '第二个 Widget Widget',
+      '今日空间总览 Widget',
+    ]);
+
+    const firstDataTransfer = createDragDataTransfer();
+    const overviewItem = widgetTabItem('Workspace 总览 Widget');
+    const todayItem = widgetTabItem('今日空间总览 Widget');
+    mockTabRect(overviewItem);
+    fireEvent.dragStart(todayItem, { dataTransfer: firstDataTransfer });
+    fireWidgetTabDragOver(overviewItem, { clientX: -10, dataTransfer: firstDataTransfer });
+    fireEvent.dragEnd(todayItem, { dataTransfer: firstDataTransfer });
+
+    await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(1));
+    expect(widgetTabNames()).toEqual([
+      '今日空间总览 Widget',
+      'Workspace 总览 Widget',
+      '第二个 Widget Widget',
+    ]);
+
+    const secondDataTransfer = createDragDataTransfer();
+    const currentTodayItem = widgetTabItem('今日空间总览 Widget');
+    const currentSecondItem = widgetTabItem('第二个 Widget Widget');
+    mockTabRect(currentTodayItem);
+    fireEvent.dragStart(currentSecondItem, { dataTransfer: secondDataTransfer });
+    fireWidgetTabDragOver(currentTodayItem, { clientX: -10, dataTransfer: secondDataTransfer });
+    fireEvent.dragEnd(currentSecondItem, { dataTransfer: secondDataTransfer });
+
+    await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(2));
+    expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenLastCalledWith({
+      workspaceHandle: 'workspace-handle-1',
+      workspaceId: 'ws_1',
+      widgetTabOrder: ['wdg_second', 'wdg_today', 'wdg_overview'],
+    });
+    expect(widgetTabNames()).toEqual([
+      '第二个 Widget Widget',
+      '今日空间总览 Widget',
+      'Workspace 总览 Widget',
+    ]);
+
+    await act(async () => {
+      firstReorder.resolve({
+        ok: true,
+        value: {
+          widgets: widgetFixture.widgetsForOrder(['wdg_today', 'wdg_overview', 'wdg_second']),
+        },
+      });
+    });
+
+    expect(widgetTabNames()).toEqual([
+      '第二个 Widget Widget',
+      '今日空间总览 Widget',
+      'Workspace 总览 Widget',
+    ]);
+  });
+
+  it('rolls back failed consecutive Widget reorders to the last confirmed file-truth order', async () => {
+    const user = userEvent.setup();
+    const firstReorder =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateWidgetTabOrder']>>>();
+    const secondReorder =
+      createDeferred<Awaited<ReturnType<Window['reoWorkspace']['updateWidgetTabOrder']>>>();
+    const widgetFixture = createWidgetReorderFixture();
+
+    reoWorkspace.updateWidgetTabOrder
+      .mockReturnValueOnce(firstReorder.promise)
+      .mockReturnValueOnce(secondReorder.promise);
+
+    const { widgetTabItem, widgetTabNames } = await renderWidgetReorderWorkspace({
+      ...widgetFixture,
+      user,
+    });
+
+    const firstDataTransfer = createDragDataTransfer();
+    const overviewItem = widgetTabItem('Workspace 总览 Widget');
+    const todayItem = widgetTabItem('今日空间总览 Widget');
+    mockTabRect(overviewItem);
+    fireEvent.dragStart(todayItem, { dataTransfer: firstDataTransfer });
+    fireWidgetTabDragOver(overviewItem, { clientX: -10, dataTransfer: firstDataTransfer });
+    fireEvent.dragEnd(todayItem, { dataTransfer: firstDataTransfer });
+
+    await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(1));
+    expect(widgetTabNames()).toEqual([
+      '今日空间总览 Widget',
+      'Workspace 总览 Widget',
+      '第二个 Widget Widget',
+    ]);
+
+    const secondDataTransfer = createDragDataTransfer();
+    const currentTodayItem = widgetTabItem('今日空间总览 Widget');
+    const currentSecondItem = widgetTabItem('第二个 Widget Widget');
+    mockTabRect(currentTodayItem);
+    fireEvent.dragStart(currentSecondItem, { dataTransfer: secondDataTransfer });
+    fireWidgetTabDragOver(currentTodayItem, { clientX: -10, dataTransfer: secondDataTransfer });
+    fireEvent.dragEnd(currentSecondItem, { dataTransfer: secondDataTransfer });
+
+    await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(2));
+    expect(widgetTabNames()).toEqual([
+      '第二个 Widget Widget',
+      '今日空间总览 Widget',
+      'Workspace 总览 Widget',
+    ]);
+
+    await act(async () => {
+      firstReorder.resolve({
+        ok: false,
+        error: { code: 'ERR_WORKSPACE_WIDGET_UPDATE_FAILED', message: 'First write failed' },
+      });
+    });
+    expect(widgetTabNames()).toEqual([
+      '第二个 Widget Widget',
+      '今日空间总览 Widget',
+      'Workspace 总览 Widget',
+    ]);
+
+    await act(async () => {
+      secondReorder.resolve({
+        ok: false,
+        error: { code: 'ERR_WORKSPACE_WIDGET_UPDATE_FAILED', message: 'Second write failed' },
+      });
+    });
+
+    expect(widgetTabNames()).toEqual([
+      'Workspace 总览 Widget',
+      '第二个 Widget Widget',
+      '今日空间总览 Widget',
+    ]);
   });
 
   it('refreshes a Memory cover from file truth events without visibility or reselect', async () => {

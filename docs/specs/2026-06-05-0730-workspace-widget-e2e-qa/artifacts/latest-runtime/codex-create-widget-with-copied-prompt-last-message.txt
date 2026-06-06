@@ -1,0 +1,17 @@
+已创建新的右侧栏 Widget：
+
+`widgets/wdg_20260605195958_6d9db460--待处理提醒/`
+
+包含：
+- `widget.md`
+- `entry.html`
+- `runtime.json`
+- `state.json`
+- `assets/icon.svg`
+
+这个 Widget 是一个小型待处理提醒面板：可勾选提醒、可新增一条提醒、会读取 `workspace.memories` 显示最多 3 个相关记忆，并用 `const memoryId = memory.memoryId` 调用 `window.reo.ui.selectMemory({ memoryId })` 切换主内容。状态通过 `window.reo.state` 持久写回 `state.json`，没有使用 `localStorage` / `IndexedDB`。
+
+验证已通过：
+- `validate-runtime`: ok，无 issues
+- `inspect-runtime`: ok，确认加载 Reo bridge，资产包含 `icon.svg`
+- 已检查没有绝对路径、`file://`、`.reo` 依赖、`workspaceId` 或 `memory.id` 主键误用。

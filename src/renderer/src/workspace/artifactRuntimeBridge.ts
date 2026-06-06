@@ -1,5 +1,9 @@
 import { useEffect, useRef, type RefObject } from 'react';
-import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
+import type {
+  WorkspaceMemoryDetail,
+  WorkspaceMemorySummary,
+  WorkspaceSession,
+} from './workspaceApi';
 
 export type ArtifactRuntimeBridgeTarget =
   | {
@@ -14,15 +18,22 @@ export type ArtifactRuntimeBridgeTarget =
       readonly memoryId: string;
       readonly segmentId: string;
       readonly supplementId: string;
+    }
+  | {
+      readonly targetType: 'widget';
+      readonly workspaceId: string;
+      readonly widgetId: string;
     };
 
 type RuntimeApi = Partial<
   Pick<
     Window['reoWorkspace'],
     | 'copyArtifactAgentPrompt'
+    | 'copyWidgetAgentPrompt'
     | 'readArtifactRuntimeState'
     | 'updateSegmentSupplementTitle'
     | 'updateSegmentTitle'
+    | 'updateWidgetTitle'
     | 'writeArtifactRuntimeState'
   >
 >;
@@ -35,10 +46,11 @@ export type ArtifactRuntimeBridgeOptions = {
   readonly api: RuntimeApi;
   readonly enabled?: boolean;
   readonly iframeRef: RefObject<HTMLIFrameElement | null>;
-  readonly memory: WorkspaceMemoryDetail;
-  readonly onProductMutation: () => void;
+  readonly memory: WorkspaceMemoryDetail | WorkspaceMemorySummary | null;
+  readonly onProductMutation: (value: unknown) => void;
   readonly readMemoryDetail: ReadMemoryDetailForRuntime;
   readonly onRequestFullscreen: () => void;
+  readonly onSelectMemory?: ((memoryId: string) => boolean) | undefined;
   readonly src: string;
   readonly target: ArtifactRuntimeBridgeTarget;
   readonly workspaceSession: WorkspaceSession;
@@ -53,7 +65,7 @@ type ArtifactRuntimeMessageHandlerLiveOptions = {
 };
 
 type RuntimeRequest = {
-  readonly source: 'reo-runtime';
+  readonly source: 'reo-render';
   readonly type: 'request';
   readonly requestId: string;
   readonly method: string;
@@ -96,7 +108,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isRuntimeRequest(value: unknown): value is RuntimeRequest {
   return (
     isRecord(value) &&
-    value['source'] === 'reo-runtime' &&
+    value['source'] === 'reo-render' &&
     value['type'] === 'request' &&
     typeof value['requestId'] === 'string' &&
     value['requestId'].length > 0 &&
@@ -149,6 +161,16 @@ function runtimeTargetPayload({
   readonly target: ArtifactRuntimeBridgeTarget;
   readonly workspaceHandle: string;
 }) {
+  if (target.targetType === 'widget') {
+    return {
+      workspaceHandle,
+      workspaceId: target.workspaceId,
+      targetType: target.targetType,
+      widgetId: target.widgetId,
+      requestId,
+    };
+  }
+
   const base = {
     workspaceHandle,
     workspaceId: target.workspaceId,
@@ -164,9 +186,12 @@ function currentObject({
   memory,
   target,
 }: {
-  readonly memory: WorkspaceMemoryDetail;
+  readonly memory: WorkspaceMemoryDetail | WorkspaceMemorySummary | null;
   readonly target: ArtifactRuntimeBridgeTarget;
 }) {
+  if (target.targetType === 'widget' || !memory || !('segments' in memory)) {
+    return null;
+  }
   const segment = memory.segments.find((candidate) => candidate.segmentId === target.segmentId);
   if (!segment) {
     return null;
@@ -184,10 +209,27 @@ function currentContext({
   target,
   workspaceSession,
 }: {
-  readonly memory: WorkspaceMemoryDetail;
+  readonly memory: WorkspaceMemoryDetail | WorkspaceMemorySummary | null;
   readonly target: ArtifactRuntimeBridgeTarget;
   readonly workspaceSession: WorkspaceSession;
 }) {
+  if (target.targetType === 'widget') {
+    return {
+      workspace: workspaceSession.snapshot,
+      memory: null,
+      target,
+      currentMemory: memory
+        ? (workspaceSession.snapshot.memories.find(
+            (candidate) => candidate.memoryId === memory.memoryId
+          ) ?? null)
+        : null,
+      currentObject:
+        workspaceSession.snapshot.widgets?.find(
+          (candidate) => candidate.widgetId === target.widgetId
+        ) ?? null,
+    };
+  }
+
   return {
     workspace: workspaceSession.snapshot,
     memory:
@@ -228,10 +270,10 @@ async function unwrapResult(result: unknown): Promise<unknown> {
 
 async function unwrapMutationResult(
   result: unknown,
-  onProductMutation: () => void
+  onProductMutation: (value: unknown) => void
 ): Promise<unknown> {
   const value = await unwrapResult(result);
-  onProductMutation();
+  onProductMutation(value);
   return value;
 }
 
@@ -242,6 +284,7 @@ async function handleRuntimeRequest(
     memory,
     onProductMutation,
     onRequestFullscreen,
+    onSelectMemory,
     readMemoryDetail,
     target,
     workspaceSession,
@@ -278,7 +321,17 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'content.readMemoryDetail') {
+    if (target.targetType === 'widget') {
+      const requestedMemoryId = requiredString(request.payload, 'memoryId');
+      return readMemoryDetail?.({ memoryId: requestedMemoryId }) ?? missingApi(request.method);
+    }
     const requestedMemoryId = optionalString(request.payload, 'memoryId');
+    if (!memory) {
+      throw new ArtifactRuntimeBridgeError(
+        'ERR_REO_RUNTIME_MEMORY_NOT_FOUND',
+        'Current runtime memory was not found'
+      );
+    }
     if (requestedMemoryId === undefined || requestedMemoryId === target.memoryId) {
       return memory;
     }
@@ -286,7 +339,12 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'content.readCurrentObject') {
-    const object = currentObject({ memory, target });
+    const object =
+      target.targetType === 'widget'
+        ? (workspaceSession.snapshot.widgets?.find(
+            (candidate) => candidate.widgetId === target.widgetId
+          ) ?? null)
+        : currentObject({ memory, target });
     if (!object) {
       throw new ArtifactRuntimeBridgeError(
         'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
@@ -298,6 +356,18 @@ async function handleRuntimeRequest(
 
   if (request.method === 'mutations.updateTitle') {
     const title = requiredString(request.payload, 'title');
+    if (target.targetType === 'widget') {
+      return unwrapMutationResult(
+        await (api.updateWidgetTitle?.({
+          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceId: target.workspaceId,
+          widgetId: target.widgetId,
+          title,
+        } as Parameters<Window['reoWorkspace']['updateWidgetTitle']>[0]) ??
+          missingApi(request.method)),
+        onProductMutation
+      );
+    }
     if (target.targetType === 'supplement') {
       return unwrapMutationResult(
         await (api.updateSegmentSupplementTitle?.({
@@ -330,7 +400,41 @@ async function handleRuntimeRequest(
     return { expanded: true };
   }
 
+  if (request.method === 'ui.selectMemory') {
+    if (target.targetType !== 'widget') {
+      throw new ArtifactRuntimeBridgeError(
+        'ERR_REO_RUNTIME_UNSUPPORTED_METHOD',
+        'ui.selectMemory is only available to workspace widgets'
+      );
+    }
+    const memoryId = requiredString(request.payload, 'memoryId');
+    const memoryExists = workspaceSession.snapshot.memories.some(
+      (candidate) => candidate.memoryId === memoryId
+    );
+    if (!memoryExists) {
+      throw new ArtifactRuntimeBridgeError(
+        'ERR_REO_RUNTIME_MEMORY_NOT_FOUND',
+        'Memory was not found'
+      );
+    }
+    if (!onSelectMemory) {
+      missingApi(request.method);
+    }
+    return { selected: onSelectMemory(memoryId) };
+  }
+
   if (request.method === 'agent.copyPrompt') {
+    if (target.targetType === 'widget') {
+      return unwrapResult(
+        await (api.copyWidgetAgentPrompt?.({
+          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceId: target.workspaceId,
+          action: 'update-widget',
+          widgetId: target.widgetId,
+        } as Parameters<Window['reoWorkspace']['copyWidgetAgentPrompt']>[0]) ??
+          missingApi(request.method))
+      );
+    }
     const requestedAction = optionalString(request.payload, 'action');
     const action =
       requestedAction === 'create-supplement' && target.targetType === 'segment'
@@ -491,6 +595,7 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
     api: options.api,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
+    onSelectMemory: options.onSelectMemory,
     readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,
     target: options.target,
@@ -501,6 +606,7 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
     api: options.api,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
+    onSelectMemory: options.onSelectMemory,
     readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,
     target: options.target,

@@ -1,0 +1,201 @@
+{
+  "stateMachine": [
+    "S1 copied UI prompt is consumed by Codex CLI to create a new Widget directory",
+    "S2 file truth projects the new Widget tab with a custom icon",
+    "S3 selecting the tab mounts the Widget iframe within the right rail",
+    "S4 clicking a reminder toggles durable state.json progress",
+    "S5 clicking a Memory button writes lastSelectedMemoryId and switches host Memory"
+  ],
+  "invariants": [
+    "The new Widget is discovered from widget.md/runtime files, not manually injected.",
+    "The right rail iframe does not exceed rail width or host scroll width.",
+    "Reminder text and memory text shrink or wrap inside the narrow rail.",
+    "User actions persist through window.reo.state into state.json.",
+    "Memory navigation uses memory.memoryId through window.reo.ui.selectMemory."
+  ],
+  "widgetId": "wdg_20260605195958_6d9db460",
+  "tabProjection": {
+    "label": "待处理提醒 Widget",
+    "selected": "false",
+    "customNaturalWidth": 150,
+    "customOpacity": "1",
+    "fallbackOpacity": "0",
+    "rect": {
+      "left": 1118,
+      "top": 3,
+      "width": 30,
+      "height": 30
+    }
+  },
+  "mountedProjection": {
+    "selected": "true",
+    "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353139353935385f3664396462343630/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605195958_6d9db460/entry.html?v=d33444dbb8ad4f86eab27f4f590d623c1da4091d94c1ab2e3615a01f9c5c0f53",
+    "panelRect": {
+      "left": 961,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 239,
+      "height": 752
+    },
+    "railRect": {
+      "left": 960,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 240,
+      "height": 752
+    },
+    "viewport": {
+      "width": 1200,
+      "height": 800
+    },
+    "overflow": {
+      "documentScrollWidth": 1200,
+      "bodyScrollWidth": 1200
+    }
+  },
+  "widgetTextProjection": {
+    "viewportWidth": 239,
+    "documentScrollWidth": 239,
+    "bodyScrollWidth": 239,
+    "reminderCount": 3,
+    "memoryButtonCount": 3,
+    "reminderTitleOverflowWrap": "anywhere",
+    "memoryTitleTextOverflow": "ellipsis",
+    "signalOverflowWrap": "anywhere"
+  },
+  "firstReminder": {
+    "text": "看一眼当前记忆有没有没收尾的事",
+    "beforePressed": "false"
+  },
+  "stateBeforeToggle": {
+    "schemaVersion": 1,
+    "stores": {
+      "ui": {
+        "lastViewedAt": null,
+        "lastSelectedMemoryId": null
+      },
+      "data": {
+        "items": [
+          {
+            "id": "rem_20260605195958_01",
+            "text": "看一眼当前记忆有没有没收尾的事",
+            "scope": "当前记忆",
+            "done": false,
+            "createdAt": "2026-06-05"
+          },
+          {
+            "id": "rem_20260605195958_02",
+            "text": "检查最近补充或作品里有没有下一步",
+            "scope": "最近内容",
+            "done": false,
+            "createdAt": "2026-06-05"
+          },
+          {
+            "id": "rem_20260605195958_03",
+            "text": "确认 workspace 有没有 needs-review 提示",
+            "scope": "工作区",
+            "done": false,
+            "createdAt": "2026-06-05"
+          }
+        ]
+      },
+      "progress": {
+        "completed": 0
+      },
+      "draft": {
+        "text": ""
+      }
+    }
+  },
+  "stateAfterToggle": {
+    "schemaVersion": 1,
+    "stores": {
+      "ui": {
+        "lastViewedAt": "2026-06-06T03:06:30.655Z",
+        "lastSelectedMemoryId": null
+      },
+      "data": {
+        "items": [
+          {
+            "id": "rem_20260605195958_01",
+            "text": "看一眼当前记忆有没有没收尾的事",
+            "scope": "当前记忆",
+            "done": true,
+            "createdAt": "2026-06-05"
+          },
+          {
+            "id": "rem_20260605195958_02",
+            "text": "检查最近补充或作品里有没有下一步",
+            "scope": "最近内容",
+            "done": false,
+            "createdAt": "2026-06-05"
+          },
+          {
+            "id": "rem_20260605195958_03",
+            "text": "确认 workspace 有没有 needs-review 提示",
+            "scope": "工作区",
+            "done": false,
+            "createdAt": "2026-06-05"
+          }
+        ]
+      },
+      "progress": {
+        "completed": 1
+      },
+      "draft": {
+        "text": ""
+      }
+    }
+  },
+  "memoryChoice": {
+    "memoryId": "mem_20260517063940_89533fee",
+    "title": "生活"
+  },
+  "stateAfterMemorySelect": {
+    "schemaVersion": 1,
+    "stores": {
+      "ui": {
+        "lastViewedAt": "2026-06-06T03:06:30.773Z",
+        "lastSelectedMemoryId": "mem_20260517063940_89533fee"
+      },
+      "data": {
+        "items": [
+          {
+            "id": "rem_20260605195958_01",
+            "text": "看一眼当前记忆有没有没收尾的事",
+            "scope": "当前记忆",
+            "done": true,
+            "createdAt": "2026-06-05"
+          },
+          {
+            "id": "rem_20260605195958_02",
+            "text": "检查最近补充或作品里有没有下一步",
+            "scope": "最近内容",
+            "done": false,
+            "createdAt": "2026-06-05"
+          },
+          {
+            "id": "rem_20260605195958_03",
+            "text": "确认 workspace 有没有 needs-review 提示",
+            "scope": "工作区",
+            "done": false,
+            "createdAt": "2026-06-05"
+          }
+        ]
+      },
+      "progress": {
+        "completed": 1
+      },
+      "draft": {
+        "text": ""
+      }
+    }
+  },
+  "bridgeProjection": {
+    "titlebarText": "测试生活",
+    "selected": "true",
+    "frameMounted": true
+  }
+}

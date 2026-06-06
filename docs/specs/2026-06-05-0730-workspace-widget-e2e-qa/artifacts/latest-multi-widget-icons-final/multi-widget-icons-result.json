@@ -1,0 +1,86 @@
+{
+  "stateMachine": [
+    "S1 expanded rail projects at least two widget tabs",
+    "S2 every widget tab loads its custom icon without fallback",
+    "S3 hovering each widget tab reveals only its embedded More action",
+    "S4 selecting different widget tabs swaps the mounted iframe"
+  ],
+  "invariants": [
+    "Custom icons are loaded by the app shell as images from reo-render.",
+    "No widget tab renders custom icon and fallback icon at the same time.",
+    "Each widget tab owns its own More reveal target.",
+    "Only the selected widget iframe is mounted."
+  ],
+  "tabs": [
+    {
+      "label": "Workspace 总览 Widget",
+      "hasCustom": true,
+      "hasFallback": false,
+      "customComplete": true,
+      "customNaturalWidth": 150,
+      "customOpacity": "1",
+      "moreAriaHidden": "true",
+      "moreTabIndex": "-1",
+      "rect": {
+        "left": 1084,
+        "top": 3,
+        "width": 30,
+        "height": 30
+      }
+    },
+    {
+      "label": "第二个 Widget Widget",
+      "hasCustom": true,
+      "hasFallback": false,
+      "customComplete": true,
+      "customNaturalWidth": 150,
+      "customOpacity": "1",
+      "moreAriaHidden": "true",
+      "moreTabIndex": "-1",
+      "rect": {
+        "left": 1118,
+        "top": 3,
+        "width": 30,
+        "height": 30
+      }
+    }
+  ],
+  "hoverProjections": [
+    {
+      "label": "Workspace 总览 Widget",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "moreOpacity": "0.937691",
+      "moreRect": {
+        "left": 1095.39599609375,
+        "top": 8.155771255493164,
+        "width": 18.4580078125,
+        "height": 19.688457489013672
+      }
+    },
+    {
+      "label": "第二个 Widget Widget",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "moreOpacity": "0.93456",
+      "moreRect": {
+        "left": 1129.46533203125,
+        "top": 8.16360092163086,
+        "width": 18.3818359375,
+        "height": 19.67279815673828
+      }
+    }
+  ],
+  "switchProjections": [
+    {
+      "label": "第二个 Widget Widget",
+      "selected": "true",
+      "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353039333430305f6237633364396531/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605093400_b7c3d9e1/entry.html?v=b0b778b6e5a2559c64de7ce187bf3be5e3f5b6669dfb15a11a2fea4f35fb5bc4"
+    },
+    {
+      "label": "Workspace 总览 Widget",
+      "selected": "true",
+      "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353038313935335f6136303035326136/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605081953_a60052a6/entry.html?v=c5139e78f901ff78ad1d4446b159d43722903d6c58cb90e5c8d0408c03c95d13"
+    }
+  ]
+}

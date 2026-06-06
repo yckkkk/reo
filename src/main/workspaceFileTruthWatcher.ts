@@ -97,6 +97,20 @@ export function isIgnoredWorkspaceFileEventPath(rootPath: string, changedPath: s
   if (parts[0] === '.reo' && IGNORED_REO_TECHNICAL_CHILDREN.has(parts[1] ?? '')) {
     return true;
   }
+  if (
+    (parts.length === 3 && parts[0] === 'widgets' && parts[2] === 'state.json') ||
+    (parts.length === 5 &&
+      parts[0] === 'memories' &&
+      parts[2] === 'segments' &&
+      parts[4] === 'state.json') ||
+    (parts.length === 7 &&
+      parts[0] === 'memories' &&
+      parts[2] === 'segments' &&
+      parts[4] === 'supplements' &&
+      parts[6] === 'state.json')
+  ) {
+    return true;
+  }
   return false;
 }
 

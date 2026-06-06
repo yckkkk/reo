@@ -11,6 +11,7 @@ import {
 import type { WorkspaceReviewSummary } from '../workspace-contract/workspace-contract.js';
 
 export type WorkspaceReviewEntryCategory =
+  | 'widget'
   | 'markdown-segment'
   | 'markdown-supplement'
   | 'tiptap-sidecar';
@@ -19,18 +20,23 @@ export type WorkspaceReviewEntryReason =
   | 'ambiguous-candidate'
   | 'content-conflict'
   | 'duplicate-id'
+  | 'invalid-widget'
   | 'invalid-sidecar'
   | 'missing-artifact-entry'
+  | 'missing-widget-entry'
   | 'markdown-write-required'
   | 'oversized-artifact-entry'
+  | 'oversized-widget-entry'
   | 'unsupported-artifact-format'
+  | 'unsupported-widget-format'
+  | 'unsupported-widget-mount'
   | 'unsupported-tiptap-content';
 
 export type WorkspaceReviewEntryInput = {
   readonly category: WorkspaceReviewEntryCategory;
   readonly reason: WorkspaceReviewEntryReason;
-  readonly objectType?: 'segment' | 'supplement';
-  readonly kind?: 'audio' | 'note' | 'artifact';
+  readonly objectType?: 'segment' | 'supplement' | 'widget';
+  readonly kind?: 'audio' | 'note' | 'artifact' | 'widget';
   readonly paths: readonly string[];
 };
 
@@ -60,16 +66,24 @@ export const WORKSPACE_REVIEW_RECOVERY_HINTS = {
     'Both Markdown and content.tiptap.json changed. Choose one source; do not guess a merge.',
   'duplicate-id':
     'Keep exactly one object with this id in the reported parent scope. Move, rename, or assign a new id to duplicates while preserving user payload.',
+  'invalid-widget':
+    'Fix widget.md frontmatter to a valid workspace widget contract: title, kind: widget, format: html, mount: workspace-rail, and a stable wdg_ id or directory prefix.',
   'invalid-sidecar':
     'Fix content.tiptap.json to valid Reo Tiptap sidecar JSON, or remove only that sidecar when Markdown should regenerate it.',
   'missing-artifact-entry':
     'Create the required entry.html runtime entry next to the reported Markdown file, or change this candidate back to a supported non-artifact kind.',
+  'missing-widget-entry':
+    'Create the required entry.html runtime entry next to widget.md, or remove the invalid widget candidate.',
   'markdown-write-required':
     'The sidecar can serialize, but Reo could not write the Markdown mirror in this read path. Refresh through Reo or manually update Markdown and sidecar to match.',
   'oversized-artifact-entry':
     'Keep the artifact entry HTML under 1 MiB. Split large media or data into assets/, or simplify the entry before refreshing Reo.',
+  'oversized-widget-entry':
+    'Keep the widget entry HTML under 1 MiB. Split large media or data into assets/, or simplify the entry before refreshing Reo.',
   'unsupported-artifact-format':
     'Use format: html for Reo artifact candidates, or change the object kind to a supported non-artifact kind.',
+  'unsupported-widget-format': 'Use format: html for Reo workspace widgets.',
+  'unsupported-widget-mount': 'Use mount: workspace-rail for this widget, or remove it.',
   'unsupported-tiptap-content':
     "Simplify content.tiptap.json to Reo's durable Tiptap profile or recreate the rich structure through Reo UI or Markdown.",
 } satisfies Record<WorkspaceReviewEntryReason, string>;
@@ -135,7 +149,10 @@ function summarizeEntries(entries: readonly WorkspaceReviewEntry[]): WorkspaceRe
   return {
     needsReviewCount: entries.length,
     markdownCandidateCount: entries.filter(
-      (entry) => entry.category === 'markdown-segment' || entry.category === 'markdown-supplement'
+      (entry) =>
+        entry.category === 'markdown-segment' ||
+        entry.category === 'markdown-supplement' ||
+        entry.category === 'widget'
     ).length,
     tiptapSidecarCount: entries.filter((entry) => entry.category === 'tiptap-sidecar').length,
   };

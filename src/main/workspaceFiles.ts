@@ -26,10 +26,12 @@ import {
 import {
   checkWorkspaceDraftsDirectory,
   checkWorkspaceMemoriesDirectory,
+  checkWorkspaceWidgetsDirectory,
   checkWorkspaceReoDirectory,
   createNewWorkspaceRootDirectory,
   ensureWorkspaceDraftsDirectory,
   ensureWorkspaceMemoriesDirectory,
+  ensureWorkspaceWidgetsDirectory,
   getWorkspaceIndexPath,
   getWorkspaceMetadataPath,
   resolveWorkspaceRoot,
@@ -38,10 +40,13 @@ import {
   WORKSPACE_REVIEW_FALLBACK_RECOVERY_HINT,
   WORKSPACE_REVIEW_RECOVERY_HINTS,
   writeWorkspaceNeedsReviewReport,
+  type WorkspaceReviewEntryInput,
 } from './workspaceReviewReport.js';
 import {
   workspaceError,
+  workspaceWidgetTabOrderItemSchema,
   workspaceMemorySummarySchema,
+  type WorkspaceWidgetProjection,
   type WorkspaceErrorEnvelope,
   type WorkspaceReviewSummary,
   type WorkspaceSnapshot,
@@ -49,6 +54,10 @@ import {
 import { REO_TIPTAP_HIGHLIGHT_COLOR_VALUES } from '../tiptap-markdown/tiptapHighlightColors.js';
 import { isSafeWorkspaceDirectoryName } from '../workspace-contract/workspace-name.js';
 import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
+import {
+  readWorkspaceWidgetsFromFileTruth,
+  workspaceWidgetOrderFromMetadata,
+} from './workspaceWidgets.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
   runInWorkspaceDirectorySync,
@@ -79,6 +88,7 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '- 普通编辑、创建、重命名和移动任务不需要离开当前记忆空间查询 Reo 仓库源码、全局记忆或历史文档；当前 `AGENTS.md`、`skills/reo-edit/SKILL.md` 和目标文件通常已经足够。',
   '- 封面生成、替换、默认模板切换、恢复默认或验证任务先读 `skills/reo-cover-image/SKILL.md`；需要审美判断时再读 `skills/reo-cover-aesthetic/SKILL.md`。',
   '- 创建或更新作品片段、作品补充时先读 `skills/reo-works/SKILL.md` 与 `skills/reo-works/references/`；作品运行时 bundle、模板、状态和验证由 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/` 承担。',
+  '- 创建或更新右侧栏 Widget 时使用 `widgets/` 下的 Widget 目录；先读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`。',
   '- 创建或更新作品时，用户未指定风格默认按 `skills/reo-works-design/SKILL.md` 和 `skills/reo-works-design/references/` 的 Reo 视觉变量和参考模块；用户明确指定风格时仍用该 skill 对齐布局、交互和 runtime 边界。',
   '- 不要为了普通内容任务推理 hash、sidecar、manifest、index 或 lock；先完成用户可见的文件改动。',
   '- 验证直接文件效果后停止；Reo 会在打开、刷新或保存时收敛可确定的技术镜像。',
@@ -95,6 +105,7 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '- Memory：`memories/` 下的一组长期主题或语义容器。',
   '- Segment：Memory 内的正文片段，可以是 note、audio 或作品。',
   '- SegmentSupplement：挂在某个 Segment 下的补充内容。',
+  '- Widget：`widgets/` 下挂载到右侧 rail 的独立小工具，不属于某个 Memory、Segment 或 Supplement。',
   '- `.reo/`：Reo 的技术完整性层，保存索引、manifest、草稿、回收站、lock 和恢复信息。',
   '- `skills/`：给 agent 使用的工作流技能，不是用户语义内容本身；当前托管入口包括 `reo-edit`、`reo-cover-image`、`reo-cover-aesthetic`、`reo-generative-runtime`、`reo-works`、`reo-works-design` 和 `reo-doctor`。',
   '',
@@ -104,6 +115,7 @@ const DEFAULT_WORKSPACE_AGENTS_MANAGED_BLOCK = [
   '- Memory 使用 `memory.md`，Segment 使用 `segment.md`，SegmentSupplement 使用 `supplement.md`。',
   '- `content.tiptap.json` 是同一正文的富结构载体，由 Reo 与编辑器维护。',
   '- 作品对象使用 `kind: artifact`、`format: html`；运行时 bundle 是同目录 `entry.html`、`runtime.json`、`state.json` 和 `assets/`。',
+  '- 右侧栏 Widget 使用 `widgets/<widget-directory>/widget.md`，frontmatter 必须包含 `id`、`title`、`kind: widget`、`format: html`、`mount: workspace-rail`；运行时 bundle 是同目录 `entry.html`、`runtime.json`、`state.json` 和 `assets/`。',
   '- 普通 `.json`、`.html` 或未被对象合同识别的文件不会自动成为 Reo 对象。',
   '- 目录 basename 是用户可见名称的一部分；对象身份由稳定 id 承载。',
   '',
@@ -400,12 +412,12 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD =
   [
     '---',
     'name: reo-generative-runtime',
-    'description: Shared Reo generative runtime skill for building small local Web app bundles used by works and future components. Use for entry.html/runtime.json/state.json/assets, window.reo bridge, state, templates, network, scaffold and validation.',
+    'description: Shared Reo generative runtime skill for building small local Web app bundles used by works and workspace rail widgets. Use for entry.html/runtime.json/state.json/assets, widget.md, window.reo bridge, state, templates, network, scaffold and validation.',
     '---',
     '',
     '# Reo Generative Runtime',
     '',
-    'Use this skill whenever you create or update a Reo runtime object. A runtime object is a small local Web app bundle owned by the user. Works are the current consumer; future components use the same runtime contract.',
+    'Use this skill whenever you create or update a Reo runtime object. A runtime object is a small local Web app bundle owned by the user. Works and workspace rail widgets are current consumers of the same runtime contract.',
     '',
     '## Runtime Bundle',
     '',
@@ -416,17 +428,19 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD =
     '- `state.json`: user-visible state stores that agents can inspect and edit.',
     '- `assets/`: local images, CSS, JS, fonts or data files copied into the bundle.',
     '',
+    'For workspace rail widgets, the object directory is `widgets/<widget-directory>/`. The object Markdown file is `widget.md`; its frontmatter must contain only stable widget contract fields such as `id`, `title`, `kind: widget`, `format: html` and `mount: workspace-rail`. Do not add `workspaceId` or raw paths to `widget.md`.',
+    '',
     'Read `references/bundle-contract.md` before writing files.',
     '',
     '## State',
     '',
-    '`state.json` is the durable agent-readable state file. Runtime code may read and write it through `window.reo.state` with a version/baseline contract. If a work needs to remember user actions, progress, preferences, check-ins or todo items, write that durable state to `state.json`; browser storage such as localStorage and IndexedDB is only a fast UI cache or compatibility cache. State writes update the running work through the returned state/version; they do not reload the host iframe.',
+    '`state.json` is the durable agent-readable state file. Runtime code may read and write it through `window.reo.state` with a version/baseline contract. If a work or widget needs to remember user actions, progress, preferences, check-ins, filters or todo items, write that durable state to `state.json`; browser storage such as localStorage and IndexedDB is only a fast UI cache or compatibility cache. State writes update the running work or widget through the returned state/version; they do not reload the host iframe.',
     '',
     'Read `references/state-and-storage.md` for store naming, versioning and merge rules.',
     '',
     '## Bridge',
     '',
-    'To use Reo data, state, UI, mutation or agent prompt actions, explicitly load `reo-artifact://vendor/reo-runtime/bridge.js` from `entry.html`. This provides `window.reo` inside the iframe. Do not invent any other host bridge.',
+    'To use Reo data, state, UI, mutation or agent prompt actions, explicitly load `reo-render://vendor/reo-render/bridge.js` from `entry.html`. This provides `window.reo` inside the iframe. Do not invent any other host bridge. Memory summaries expose `memoryId`, not `id`; when iterating `workspace.memories`, use `const memoryId = memory.memoryId` before calling `selectMemory` or `readMemoryDetail`. Workspace rail widgets may call `window.reo.ui.selectMemory({ memoryId })` to switch the main content Memory; this does not switch away from the widget tab.',
     '',
     'Read `references/bridge-api.md` before using `window.reo`.',
     '',
@@ -440,9 +454,13 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD =
     '',
     'Read `references/templates.md` before choosing structure.',
     '',
+    '## Responsive Layout',
+    '',
+    'Runtime layouts must survive narrow iframes and right rail widgets. For flex/grid text containers, set `min-width: 0`; for single-line labels use `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`; for long identifiers or free text use `overflow-wrap: anywhere`. Never let titles, ids, URLs or generated prose create horizontal overflow.',
+    '',
     '## Scripts',
     '',
-    '- Scaffold a runnable bundle in an existing target object directory: `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <target-directory> --title "作品标题" --template dashboard`.',
+    '- Scaffold a runnable bundle in an existing target object directory: `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <target-directory> --title "标题" --template dashboard`.',
     '- Validate a bundle can run: `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>`.',
     '- Inspect a bundle summary: `node skills/reo-generative-runtime/scripts/inspect-runtime.mjs <target-directory>`.',
     '',
@@ -466,7 +484,9 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BUNDLE_CONTRACT_REFERENCE_MD =
     '',
     '## Markdown object contract',
     '',
-    'Works still use Markdown frontmatter to become Reo objects:',
+    'Works and workspace rail widgets use Markdown frontmatter to become Reo objects.',
+    '',
+    'Work Segment:',
     '',
     '```markdown',
     '---',
@@ -480,7 +500,24 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BUNDLE_CONTRACT_REFERENCE_MD =
     'Agent-created runtime work. Entry: `entry.html`.',
     '```',
     '',
-    'For new supplements, use the same fields in `supplement.md` with a `sup_YYYYMMDDHHMMSS_8hex` id. Existing Reo objects may use older valid ids; when creating new objects, do not invent placeholder ids like `seg_agent_*` or `sup_agent_*`.',
+    'For new supplements, use the same artifact fields in `supplement.md` with a `sup_YYYYMMDDHHMMSS_8hex` id. Existing Reo objects may use older valid ids; when creating new objects, do not invent placeholder ids like `seg_agent_*` or `sup_agent_*`.',
+    '',
+    'Workspace rail Widget:',
+    '',
+    '```markdown',
+    '---',
+    'id: wdg_20260605075957_755b96e2',
+    'title: Workspace 总览',
+    'kind: widget',
+    'format: html',
+    'mount: workspace-rail',
+    '---',
+    '# Workspace 总览',
+    '',
+    'Right rail widget. Entry: `entry.html`.',
+    '```',
+    '',
+    'For new widgets, create `widgets/<wdg_YYYYMMDDHHMMSS_8hex--Readable-title>/widget.md` with the same `wdg_` id as the directory prefix. Keep `widget.md` frontmatter strict: do not add `workspaceId`, raw paths, state, cache, preview or `.reo` fields.',
     '',
     '## runtime.json',
     '',
@@ -502,7 +539,7 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BUNDLE_CONTRACT_REFERENCE_MD =
     'If the work uses Reo runtime APIs, add the vendor bridge script before your own script:',
     '',
     '```html',
-    '<script src="reo-artifact://vendor/reo-runtime/bridge.js"></script>',
+    '<script src="reo-render://vendor/reo-render/bridge.js"></script>',
     '```',
     '',
     '## Assets',
@@ -516,7 +553,7 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_STATE_REFERENCE_MD =
   [
     '# Reo runtime state and storage',
     '',
-    'Use this reference when the work has user interaction, checkboxes, filters, drafts, progress or generated data.',
+    'Use this reference when the work or widget has user interaction, checkboxes, filters, drafts, progress or generated data.',
     '',
     '## state.json',
     '',
@@ -553,7 +590,7 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_STATE_REFERENCE_MD =
     '',
     'Each runtime object has its own origin, so localStorage and IndexedDB are isolated per object. Use browser storage for fast UI cache when helpful. Do not use browser storage as the only long-term state for check-ins, todo items, progress or user preferences; keep `state.json` as the visible durable state that users and agents can inspect and modify.',
     '',
-    'Writing `state.json` through `window.reo.state.write` does not reload the host iframe. Update the DOM from the returned result. Reo reloads the iframe when `entry.html`, `runtime.json` or `assets/` change, and the user can manually reload from the work tab More menu with “刷新页面”.',
+    'Writing `state.json` through `window.reo.state.write` does not reload the host iframe. Update the DOM from the returned result. Reo reloads the iframe when `entry.html`, `runtime.json` or `assets/` change, and the user can manually reload from the work or widget tab More menu with “刷新页面”.',
     '',
     '## Agent updates',
     '',
@@ -564,14 +601,14 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BRIDGE_REFERENCE_MD =
   [
     '# Reo runtime bridge API',
     '',
-    'Use this reference when a work needs live Reo context, durable state, host UI coordination, typed product writes or agent prompt actions.',
+    'Use this reference when a work or widget needs live Reo context, durable state, host UI coordination, typed product writes or agent prompt actions.',
     '',
     '## Setup',
     '',
     'Add this script before your own runtime script:',
     '',
     '```html',
-    '<script src="reo-artifact://vendor/reo-runtime/bridge.js"></script>',
+    '<script src="reo-render://vendor/reo-render/bridge.js"></script>',
     '```',
     '',
     'The script creates `window.reo`. All methods return Promises. On Reo errors, the Promise rejects with `error.code` and `error.message`.',
@@ -584,7 +621,23 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BRIDGE_REFERENCE_MD =
     '- `window.reo.content.readCurrentObject()` for the current Reo object projection without raw paths.',
     '- `window.reo.mutations.updateTitle({ title })` for the current work title.',
     '- `window.reo.ui.requestFullscreen()` to ask the host preview to expand.',
+    '- `window.reo.ui.selectMemory({ memoryId })` for workspace rail widgets that need to switch the main content Memory after reading `workspace.memories`; this keeps the widget tab active and does not make the widget become Memory content.',
     '- `window.reo.agent.copyPrompt({ action })` to copy a Reo-built agent prompt. Use `action: "create-supplement"` from a work Segment; otherwise omit action to update the current work.',
+    '',
+    '## Workspace Memory ids',
+    '',
+    '`window.reo.workspace.read()` returns Memory summaries with `memoryId`. Use that exact field for selection and detail reads:',
+    '',
+    '```js',
+    'const snapshot = await window.reo.workspace.read();',
+    'for (const memory of snapshot.workspace.memories) {',
+    '  const memoryId = memory.memoryId;',
+    '  button.dataset.memoryId = memoryId;',
+    '  button.addEventListener("click", () => window.reo.ui.selectMemory({ memoryId }));',
+    '}',
+    '```',
+    '',
+    'Do not use `memory.id`; that field is not part of the runtime workspace summary contract.',
     '',
     '## Boundaries',
     '',
@@ -592,9 +645,10 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_BRIDGE_REFERENCE_MD =
     '- Do not invent methods outside documented `window.reo` groups.',
     '- Reo bridge mutations are typed product actions, not a generic file bridge.',
     '- Artifact works cannot write arbitrary note bodies through `window.reo`; use agent prompt actions when a work needs a broader Reo content edit.',
+    '- Workspace rail widgets cannot create, rename, reorder or delete widgets through `window.reo`; use agent prompt actions and the workspace file contract for broader edits.',
     '- Network, CDN and browser APIs are allowed; browser CORS rules still apply.',
     '',
-    'Reo does not provide a runtime key, token or hidden value store for works. If a work needs user-provided values, keep that behavior explicit inside the user-owned work and agent instructions.',
+    'Reo does not provide a runtime key, token or hidden value store for works or widgets. If a runtime object needs user-provided values, keep that behavior explicit inside the user-owned files and agent instructions.',
   ].join('\n') + '\n';
 
 const DEFAULT_REO_GENERATIVE_RUNTIME_TEMPLATES_REFERENCE_MD =
@@ -616,6 +670,10 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_TEMPLATES_REFERENCE_MD =
     '- data tool: filter, sort, calculator or converter grounded in Memory data.',
     '',
     'Start with the closest family, ship a runnable bundle, then add only the interactions the user asked for.',
+    '',
+    '## Responsive text',
+    '',
+    'Right rail widgets are narrow. Put `min-width: 0` on flex/grid text columns and any parent that should shrink. Single-line titles, memory names, counters and menu labels should use `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`. Long ids, URLs or user text that may not contain spaces should use `overflow-wrap: anywhere` instead of forcing horizontal scroll.',
   ].join('\n') + '\n';
 
 const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATION_REFERENCE_MD =
@@ -631,8 +689,9 @@ const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATION_REFERENCE_MD =
     '- `entry.html` is a complete HTML document with useful visible content.',
     '- Local files are under `assets/` and referenced by relative URLs.',
     '- No `file://`, absolute local path, symlink, `.reo/` dependency or editor temp file is required.',
-    '- If `entry.html` uses `window.reo`, it also loads `reo-artifact://vendor/reo-runtime/bridge.js`.',
-    '- The work stays light enough for future agent edits.',
+    '- If `entry.html` uses `window.reo`, it also loads `reo-render://vendor/reo-render/bridge.js`.',
+    '- Narrow embeds do not have horizontal text overflow; flex/grid text containers can shrink with `min-width: 0`, single-line labels ellipsize, and long unbroken text can wrap.',
+    '- The work or widget stays light enough for future agent edits.',
     '',
     'Run `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>` before ending a runtime task. This check validates runnability; it does not review taste, content quality, network choices or user choices.',
   ].join('\n') + '\n';
@@ -841,7 +900,7 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS =
     '}',
     '',
     'function entryHtml(title, config) {',
-    '  return `<!doctype html>\\n<html lang="zh-CN">\\n<head>\\n  <meta charset="utf-8">\\n  <meta name="viewport" content="width=device-width, initial-scale=1">\\n  <title>${escapeHtml(title)}</title>\\n  <style>${styleCss()}</style>\\n</head>\\n<body data-template="${config.id}">\\n  <main>\\n    <h1>${escapeHtml(title)}</h1>\\n    <p class="lead">${escapeHtml(config.summary)}</p>\\n    ${bodyForTemplate(config)}\\n  </main>\\n  <script src="reo-artifact://vendor/reo-runtime/bridge.js"></script>\\n  <script>\\n    (function(){\\n      var currentVersion = null;\\n      var state = { schemaVersion: 1, stores: { data: { items: [] } } };\\n      function items(){ return ((state.stores || {}).data || {}).items || []; }\\n      function render(){ var list = document.getElementById("todo-list"); if (!list) return; list.textContent = ""; items().forEach(function(item, index){ var row = document.createElement("li"); var label = document.createElement("span"); var button = document.createElement("button"); label.textContent = String(item && item.text ? item.text : ""); button.type = "button"; button.setAttribute("data-index", String(index)); button.textContent = item && item.done ? "已完成" : "完成"; row.appendChild(label); row.appendChild(button); list.appendChild(row); }); }\\n      function save(next){ if (!window.reo || !currentVersion) { state = next; render(); return Promise.resolve(); } return window.reo.state.write(next, { baselineVersion: currentVersion }).then(function(result){ if (result.status === "saved") { state = result.state; currentVersion = result.version; } else if (result.status === "stale") { state = result.currentState; currentVersion = result.currentVersion; } render(); }).catch(function(){ state = next; render(); }); }\\n      window.reo?.state?.read?.().then(function(snapshot){ state = snapshot.state || state; currentVersion = snapshot.version; render(); }).catch(render);\\n      document.addEventListener("submit", function(event){ if (event.target && event.target.id === "todo-form") { event.preventDefault(); var input = document.getElementById("todo-input"); var text = input && input.value ? input.value.trim() : ""; if (!text) return; if (input) input.value = ""; var next = Object.assign({}, state, { stores: Object.assign({}, state.stores, { data: { items: items().concat([{ text: text, done: false }]) } }) }); void save(next); } });\\n      document.addEventListener("click", function(event){ var button = event.target && event.target.closest ? event.target.closest("[data-index]") : null; if (!button) return; var index = Number(button.getAttribute("data-index")); var nextItems = items().map(function(item, itemIndex){ return itemIndex === index ? Object.assign({}, item, { done: !item.done }) : item; }); var next = Object.assign({}, state, { stores: Object.assign({}, state.stores, { data: { items: nextItems }, progress: { completed: nextItems.filter(function(item){ return item.done; }).length } }) }); void save(next); });\\n    })();\\n  </script>\\n</body>\\n</html>\\n`;',
+    '  return `<!doctype html>\\n<html lang="zh-CN">\\n<head>\\n  <meta charset="utf-8">\\n  <meta name="viewport" content="width=device-width, initial-scale=1">\\n  <title>${escapeHtml(title)}</title>\\n  <style>${styleCss()}</style>\\n</head>\\n<body data-template="${config.id}">\\n  <main>\\n    <h1>${escapeHtml(title)}</h1>\\n    <p class="lead">${escapeHtml(config.summary)}</p>\\n    ${bodyForTemplate(config)}\\n  </main>\\n  <script src="reo-render://vendor/reo-render/bridge.js"></script>\\n  <script>\\n    (function(){\\n      var currentVersion = null;\\n      var state = { schemaVersion: 1, stores: { data: { items: [] } } };\\n      function items(){ return ((state.stores || {}).data || {}).items || []; }\\n      function render(){ var list = document.getElementById("todo-list"); if (!list) return; list.textContent = ""; items().forEach(function(item, index){ var row = document.createElement("li"); var label = document.createElement("span"); var button = document.createElement("button"); label.textContent = String(item && item.text ? item.text : ""); button.type = "button"; button.setAttribute("data-index", String(index)); button.textContent = item && item.done ? "已完成" : "完成"; row.appendChild(label); row.appendChild(button); list.appendChild(row); }); }\\n      function save(next){ if (!window.reo || !currentVersion) { state = next; render(); return Promise.resolve(); } return window.reo.state.write(next, { baselineVersion: currentVersion }).then(function(result){ if (result.status === "saved") { state = result.state; currentVersion = result.version; } else if (result.status === "stale") { state = result.currentState; currentVersion = result.currentVersion; } render(); }).catch(function(){ state = next; render(); }); }\\n      window.reo?.state?.read?.().then(function(snapshot){ state = snapshot.state || state; currentVersion = snapshot.version; render(); }).catch(render);\\n      document.addEventListener("submit", function(event){ if (event.target && event.target.id === "todo-form") { event.preventDefault(); var input = document.getElementById("todo-input"); var text = input && input.value ? input.value.trim() : ""; if (!text) return; if (input) input.value = ""; var next = Object.assign({}, state, { stores: Object.assign({}, state.stores, { data: { items: items().concat([{ text: text, done: false }]) } }) }); void save(next); } });\\n      document.addEventListener("click", function(event){ var button = event.target && event.target.closest ? event.target.closest("[data-index]") : null; if (!button) return; var index = Number(button.getAttribute("data-index")); var nextItems = items().map(function(item, itemIndex){ return itemIndex === index ? Object.assign({}, item, { done: !item.done }) : item; }); var next = Object.assign({}, state, { stores: Object.assign({}, state.stores, { data: { items: nextItems }, progress: { completed: nextItems.filter(function(item){ return item.done; }).length } }) }); void save(next); });\\n    })();\\n  </script>\\n</body>\\n</html>\\n`;',
     '}',
     '',
     'const config = templateConfig(template);',
@@ -936,7 +995,7 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS =
     '',
     'if (entry && !/<!doctype html>/i.test(entry)) add("entry-not-html-document", "entry.html", "entry.html should be a complete HTML document.");',
     'if (entry && /file:\\/\\//i.test(entry)) add("file-url", "entry.html", "Copy local resources into assets/ instead of using file://.");',
-    'if (entry && /window\\.reo\\b/.test(entry) && !/reo-artifact:\\/\\/vendor\\/reo-runtime\\/bridge\\.js/.test(entry)) add("bridge-script-missing", "entry.html", "Load reo-artifact://vendor/reo-runtime/bridge.js before using window.reo.");',
+    'if (entry && /window\\.reo\\b/.test(entry) && !/reo-render:\\/\\/vendor\\/reo-render\\/bridge\\.js/.test(entry)) add("bridge-script-missing", "entry.html", "Load reo-render://vendor/reo-render/bridge.js before using window.reo.");',
     'if (entry) validateInlineScripts(entry);',
     'for (const [fileName, text] of [["runtime.json", runtime], ["state.json", state]]) {',
     '  if (!text) continue;',
@@ -1013,7 +1072,7 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS =
     '  target: relative || ".",',
     '  title: runtime && typeof runtime.title === "string" ? runtime.title : null,',
     '  template: runtime && typeof runtime.template === "string" ? runtime.template : null,',
-    '  usesBridge: !!entry && /reo-artifact:\\/\\/vendor\\/reo-runtime\\/bridge\\.js/.test(entry),',
+    '  usesBridge: !!entry && /reo-render:\\/\\/vendor\\/reo-render\\/bridge\\.js/.test(entry),',
     '  files: { entry: !!entry, runtime: !!runtime, state: !!state, assets },',
     '};',
     'console.log(JSON.stringify(report, null, 2));',
@@ -1379,7 +1438,7 @@ export const DEFAULT_REO_WORKS_RUNTIME_CONTRACT_REFERENCE_MD =
     '- Scripts are optional and bounded to the current document.',
     '- Ordinary Web network, CDN libraries, remote fonts/images and browser `fetch`/XHR are allowed when useful.',
     '- No Node, Electron, raw filesystem paths, `file://`, symlinks or `.reo/` internals.',
-    '- `window.reo` usage loads `reo-artifact://vendor/reo-runtime/bridge.js` before work code.',
+    '- `window.reo` usage loads `reo-render://vendor/reo-render/bridge.js` before work code.',
     '- `state.json` is a JSON object and remains readable after agent edits.',
     '',
     '## Projection check',
@@ -2012,6 +2071,7 @@ const workspaceMetadataSchema = z
     title: z.string(),
     description: z.string(),
     createdAt: z.string(),
+    widgetTabOrder: z.array(workspaceWidgetTabOrderItemSchema).optional(),
   })
   .strict();
 
@@ -2409,15 +2469,34 @@ function finalizeWorkspaceRootDirectoryRename({
 function snapshotFrom(
   metadata: WorkspaceMetadata,
   index: WorkspaceIndex,
-  review?: WorkspaceReviewSummary
+  review?: WorkspaceReviewSummary,
+  widgets: readonly WorkspaceWidgetProjection[] = []
 ): WorkspaceSnapshot {
   return {
     workspaceId: metadata.workspaceId,
     title: metadata.title,
     description: metadata.description,
     memories: index.memories,
+    ...(widgets.length > 0 ? { widgets: [...widgets] } : {}),
     ...(review ? { review } : {}),
   };
+}
+
+async function readSnapshotWidgets({
+  canonicalRoot,
+  metadata,
+}: {
+  readonly canonicalRoot: string;
+  readonly metadata: WorkspaceMetadata;
+}): Promise<{
+  readonly widgets: readonly WorkspaceWidgetProjection[];
+  readonly reviewEntries: readonly WorkspaceReviewEntryInput[];
+}> {
+  return readWorkspaceWidgetsFromFileTruth({
+    widgetTabOrder: workspaceWidgetOrderFromMetadata(metadata),
+    rootPath: canonicalRoot,
+    workspaceId: metadata.workspaceId,
+  });
 }
 
 async function repairWorkspaceTitleMetadataMirror({
@@ -2435,11 +2514,34 @@ async function repairWorkspaceTitleMetadataMirror({
   }
 
   const nextMetadata = { ...metadata, title: rootTitle };
-  await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), nextMetadata, () =>
+  const writtenMetadata = await writeWorkspaceMetadataPreservingWidgetTabOrder({
+    canonicalRoot,
+    metadata: nextMetadata,
+    ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+  return writtenMetadata;
+}
+
+async function writeWorkspaceMetadataPreservingWidgetTabOrder({
+  canonicalRoot,
+  metadata,
+  assertWorkspaceUsable: assertUsable,
+}: {
+  readonly canonicalRoot: string;
+  readonly metadata: WorkspaceMetadata;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<WorkspaceMetadata> {
+  assertWorkspaceUsable(assertUsable);
+  const latestMetadata = await readMetadata(canonicalRoot);
+  const metadataToWrite =
+    latestMetadata?.widgetTabOrder === undefined
+      ? metadata
+      : { ...metadata, widgetTabOrder: latestMetadata.widgetTabOrder };
+  await writeWorkspaceJsonAtomic(getWorkspaceMetadataPath(canonicalRoot), metadataToWrite, () =>
     assertWorkspaceUsable(assertUsable)
   );
-  assertWorkspaceUsable(assertUsable);
-  return nextMetadata;
+  return metadataToWrite;
 }
 
 function sameMemorySummaries(
@@ -2770,6 +2872,10 @@ export async function validateWorkspaceInitializeTarget(
   if (typeof memoriesDirectory !== 'string') {
     return memoriesDirectory;
   }
+  const widgetsDirectory = await checkWorkspaceWidgetsDirectory(canonicalRoot);
+  if (typeof widgetsDirectory !== 'string') {
+    return widgetsDirectory;
+  }
 
   return { ok: true, canonicalRoot };
 }
@@ -2812,6 +2918,10 @@ async function validateWorkspaceOpenCanonicalTarget(
   const memoriesDirectory = await checkWorkspaceMemoriesDirectory(canonicalRoot);
   if (typeof memoriesDirectory !== 'string') {
     return memoriesDirectory;
+  }
+  const widgetsDirectory = await checkWorkspaceWidgetsDirectory(canonicalRoot);
+  if (typeof widgetsDirectory !== 'string') {
+    return widgetsDirectory;
   }
 
   const metadata = await readMetadata(canonicalRoot);
@@ -3058,6 +3168,11 @@ export async function initializeWorkspaceFiles({
       return memoriesDirectory;
     }
     assertWorkspaceUsable(assertUsable);
+    const widgetsDirectory = await ensureWorkspaceWidgetsDirectory(canonicalRoot, assertUsable);
+    if (typeof widgetsDirectory !== 'string') {
+      return widgetsDirectory;
+    }
+    assertWorkspaceUsable(assertUsable);
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {
       return error.envelope;
@@ -3101,7 +3216,7 @@ export async function initializeWorkspaceFiles({
 
   return {
     ok: true,
-    snapshot: snapshotFrom(metadata, index),
+    snapshot: snapshotFrom(metadata, index, undefined, []),
   };
 }
 
@@ -3111,6 +3226,7 @@ export async function openWorkspaceFiles({
 }: OpenWorkspaceFilesOptions): Promise<WorkspaceFilesResult> {
   let index: WorkspaceIndex;
   let metadata: WorkspaceMetadata;
+  let canonicalRoot: string;
   try {
     assertWorkspaceUsable(assertUsable);
     const target = await validateWorkspaceOpenTarget(rootPath);
@@ -3118,7 +3234,7 @@ export async function openWorkspaceFiles({
       assertWorkspaceUsable(assertUsable);
       return target;
     }
-    const { canonicalRoot } = target;
+    canonicalRoot = target.canonicalRoot;
     metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
     const draftsDirectory = await ensureWorkspaceDraftsDirectory(canonicalRoot, assertUsable);
@@ -3129,6 +3245,11 @@ export async function openWorkspaceFiles({
     const memoriesDirectory = await ensureWorkspaceMemoriesDirectory(canonicalRoot, assertUsable);
     if (typeof memoriesDirectory !== 'string') {
       return memoriesDirectory;
+    }
+    assertWorkspaceUsable(assertUsable);
+    const widgetsDirectory = await ensureWorkspaceWidgetsDirectory(canonicalRoot, assertUsable);
+    if (typeof widgetsDirectory !== 'string') {
+      return widgetsDirectory;
     }
     assertWorkspaceUsable(assertUsable);
     await ensureWorkspaceManagedAgentConfig(canonicalRoot, assertUsable);
@@ -3157,9 +3278,10 @@ export async function openWorkspaceFiles({
       'previous-file-preserved'
     );
   }
+  const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
   return {
     ok: true,
-    snapshot: snapshotFrom(metadata, index),
+    snapshot: snapshotFrom(metadata, index, undefined, widgets.widgets),
   };
 }
 
@@ -3281,11 +3403,11 @@ export async function renameWorkspaceRootFromFileTruth({
 
     const nextMetadata = { ...metadata, title };
     try {
-      await writeWorkspaceJsonAtomic(
-        getWorkspaceMetadataPath(nextCanonicalRoot),
-        nextMetadata,
-        () => assertWorkspaceUsable(assertUsable)
-      );
+      await writeWorkspaceMetadataPreservingWidgetTabOrder({
+        canonicalRoot: nextCanonicalRoot,
+        metadata: nextMetadata,
+        ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+      });
     } catch (error) {
       if (error instanceof WorkspaceOpenAborted) {
         return workspaceErrorAfterRootRename(error.envelope);
@@ -3314,10 +3436,14 @@ export async function renameWorkspaceRootFromFileTruth({
       );
     }
 
+    const widgets = await readSnapshotWidgets({
+      canonicalRoot: nextCanonicalRoot,
+      metadata: nextMetadata,
+    });
     return {
       ok: true,
       canonicalRoot: nextCanonicalRoot,
-      snapshot: snapshotFrom(nextMetadata, index),
+      snapshot: snapshotFrom(nextMetadata, index, undefined, widgets.widgets),
     };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {
@@ -3372,15 +3498,16 @@ export async function readWorkspaceSnapshotFromFileTruth({
       },
       rebuiltMemories: readModel.memories,
     });
+    const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
     const review = await writeWorkspaceNeedsReviewReport({
       ...(assertUsable ? { assertUsable: () => assertWorkspaceUsable(assertUsable) } : {}),
-      entries: readModel.reviewEntries,
+      entries: [...readModel.reviewEntries, ...widgets.reviewEntries],
       rootPath: canonicalRoot,
     });
     assertWorkspaceUsable(assertUsable);
     return {
       ok: true,
-      snapshot: snapshotFrom(metadata, index, review),
+      snapshot: snapshotFrom(metadata, index, review, widgets.widgets),
     };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {
@@ -3438,9 +3565,10 @@ export async function readWorkspaceSnapshotFromIndex({
     }
 
     assertWorkspaceUsable(assertUsable);
+    const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
     return {
       ok: true,
-      snapshot: snapshotFrom(metadata, index),
+      snapshot: snapshotFrom(metadata, index, undefined, widgets.widgets),
     };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {

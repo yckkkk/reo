@@ -1,0 +1,70 @@
+{
+  "stateMachine": [
+    "S1 rail is expanded and at least three Widget tabs are projected",
+    "S2 dragging the third Widget before the first updates the UI projection",
+    "S3 the first drag persists widgetTabOrder to .reo/workspace.json",
+    "S4 dragging the remaining Widget before the first moved Widget updates the UI again",
+    "S5 the second drag persists the latest widgetTabOrder without dropping or reverting"
+  ],
+  "invariants": [
+    "Widget id set is unchanged by reorder.",
+    "UI tab order and metadata widgetTabOrder converge after each drag.",
+    "The only durable side effect is .reo/workspace.json widgetTabOrder."
+  ],
+  "widgets": [
+    {
+      "id": "wdg_20260605081953_a60052a6",
+      "title": "Workspace 总览",
+      "label": "Workspace 总览 Widget"
+    },
+    {
+      "id": "wdg_20260605093400_b7c3d9e1",
+      "title": "第二个 Widget",
+      "label": "第二个 Widget Widget"
+    },
+    {
+      "id": "wdg_20260605095155_99c581bf",
+      "title": "今日空间总览",
+      "label": "今日空间总览 Widget"
+    }
+  ],
+  "initialMetadataOrder": [
+    "wdg_20260605081953_a60052a6",
+    "wdg_20260605095155_99c581bf",
+    "wdg_20260605093400_b7c3d9e1"
+  ],
+  "initialUiOrder": [
+    "wdg_20260605081953_a60052a6",
+    "wdg_20260605095155_99c581bf",
+    "wdg_20260605093400_b7c3d9e1"
+  ],
+  "firstExpectedOrder": [
+    "wdg_20260605093400_b7c3d9e1",
+    "wdg_20260605081953_a60052a6",
+    "wdg_20260605095155_99c581bf"
+  ],
+  "firstDragEventLabels": ["第二个 Widget Widget", "Workspace 总览 Widget", "今日空间总览 Widget"],
+  "firstUiLabels": ["第二个 Widget Widget", "Workspace 总览 Widget", "今日空间总览 Widget"],
+  "firstMetadataOrder": [
+    "wdg_20260605093400_b7c3d9e1",
+    "wdg_20260605081953_a60052a6",
+    "wdg_20260605095155_99c581bf"
+  ],
+  "secondExpectedOrder": [
+    "wdg_20260605095155_99c581bf",
+    "wdg_20260605093400_b7c3d9e1",
+    "wdg_20260605081953_a60052a6"
+  ],
+  "secondDragEventLabels": ["今日空间总览 Widget", "第二个 Widget Widget", "Workspace 总览 Widget"],
+  "secondUiLabels": ["今日空间总览 Widget", "第二个 Widget Widget", "Workspace 总览 Widget"],
+  "secondMetadataOrder": [
+    "wdg_20260605095155_99c581bf",
+    "wdg_20260605093400_b7c3d9e1",
+    "wdg_20260605081953_a60052a6"
+  ],
+  "finalMetadataOrder": [
+    "wdg_20260605095155_99c581bf",
+    "wdg_20260605093400_b7c3d9e1",
+    "wdg_20260605081953_a60052a6"
+  ]
+}

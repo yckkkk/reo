@@ -4444,7 +4444,7 @@ function readArtifactRuntimeBundlePreviewVersionInKnownDirectory(
   entry: { readonly byteLength: number; readonly hash: string }
 ): string {
   const hash = createHash('sha256');
-  hash.update('reo-artifact-runtime-preview-v1\n');
+  hash.update('reo-render-preview-v1\n');
   appendArtifactPreviewDescriptor(hash, {
     fileName: ARTIFACT_RUNTIME_ENTRY_FILE,
     fileScope: 'root',

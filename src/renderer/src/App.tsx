@@ -42,6 +42,8 @@ import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import { MemoryTitleDialog } from './workspace/MemoryTitleDialog';
+import { WidgetDeleteDialog } from './workspace/WidgetDeleteDialog';
+import { WidgetRenameDialog } from './workspace/WidgetRenameDialog';
 import { SegmentDeleteDialog } from './workspace/SegmentDeleteDialog';
 import { SegmentContentRenameDialog } from './workspace/SegmentContentRenameDialog';
 import { SegmentSupplementDeleteDialog } from './workspace/SegmentSupplementDeleteDialog';
@@ -76,6 +78,7 @@ import { WorkspaceLibraryPage } from './workspace/WorkspaceLibraryPage';
 import { MemorySpaceRemoveDialog } from './workspace/MemorySpaceRemoveDialog';
 import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
 import { WorkspaceTitlebar } from './workspace/WorkspaceTitlebar';
+import { MEMORY_RAIL_TAB, type WorkspaceRailTab } from './workspace/workspaceRailTabs';
 import {
   memorySummaryAfterSegmentRemoval,
   memorySummaryAfterSegmentRestore,
@@ -87,7 +90,9 @@ import {
 } from './workspace/segmentDeleteProjection';
 import {
   closeWorkspace,
+  copyWidgetAgentPrompt,
   createMemory,
+  deleteWidget,
   deleteMemory,
   deleteSegment,
   deleteSegmentSupplement,
@@ -107,6 +112,7 @@ import {
   requestSegmentSupplementTranscriptionBackfill,
   requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
+  restoreDeletedWidget,
   restoreMemoryCover,
   restoreSegmentCover,
   restoreDeletedSegmentSupplement,
@@ -115,6 +121,8 @@ import {
   switchMemoryDefaultCover,
   switchSegmentDefaultCover,
   updateMemorySpaceTitle,
+  updateWidgetTabOrder,
+  updateWidgetTitle,
   updateMemoryTitle,
   updateSegmentContentTitle,
   updateSegmentSupplementTitle,
@@ -125,6 +133,7 @@ import {
   type FinalizedSegmentSupplementNote,
   type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
+  type WorkspaceWidgetProjection,
   type WorkspaceNoteSegmentContent,
   type WorkspaceNoteSegmentSupplementContent,
   type WorkspaceError,
@@ -178,6 +187,13 @@ type PendingWorkspaceRelease = {
   readonly promise: Promise<boolean> | null;
   readonly releaseId: symbol;
   readonly session: WorkspaceSession;
+};
+type WidgetReorderState = {
+  readonly workspaceHandle: string;
+  readonly workspaceId: string;
+  readonly latestStartedMutationId: number;
+  readonly latestConfirmedMutationId: number;
+  readonly confirmedWidgets: readonly WorkspaceWidgetProjection[];
 };
 type MemoryCreateIntent =
   | { readonly afterCreate: 'stay-on-stage' }
@@ -461,12 +477,75 @@ function sameMemorySummary(first: WorkspaceMemorySummary, second: WorkspaceMemor
   );
 }
 
+function sameWorkspaceWidgetIcon(
+  first: WorkspaceWidgetProjection['icon'],
+  second: WorkspaceWidgetProjection['icon']
+): boolean {
+  if (first.source !== second.source) {
+    return false;
+  }
+  if (first.source === 'default' && second.source === 'default') {
+    return true;
+  }
+  if (first.source !== 'custom-mask' || second.source !== 'custom-mask') {
+    return false;
+  }
+  return first.url === second.url && first.version === second.version;
+}
+
+function sameWorkspaceWidget(
+  first: WorkspaceWidgetProjection,
+  second: WorkspaceWidgetProjection
+): boolean {
+  const sameCommon =
+    first.workspaceId === second.workspaceId &&
+    first.widgetId === second.widgetId &&
+    first.type === second.type &&
+    first.format === second.format &&
+    first.mount === second.mount &&
+    first.title === second.title &&
+    first.createdAt === second.createdAt &&
+    first.updatedAt === second.updatedAt &&
+    sameWorkspaceWidgetIcon(first.icon, second.icon);
+  if (!sameCommon) {
+    return false;
+  }
+
+  if (first.runtimeFault !== undefined || second.runtimeFault !== undefined) {
+    return (
+      first.runtimeFault !== undefined &&
+      second.runtimeFault !== undefined &&
+      first.runtimeFault.reason === second.runtimeFault.reason &&
+      first.runtimeFault.diagnostic === second.runtimeFault.diagnostic
+    );
+  }
+
+  return (
+    first.entryByteLength === second.entryByteLength &&
+    first.entryHash === second.entryHash &&
+    first.previewVersion === second.previewVersion
+  );
+}
+
+function widgetListFromRuntimeMutation(
+  value: unknown
+): readonly WorkspaceWidgetProjection[] | null {
+  return typeof value === 'object' &&
+    value !== null &&
+    'widgets' in value &&
+    Array.isArray((value as { readonly widgets?: unknown }).widgets)
+    ? (value as { readonly widgets: readonly WorkspaceWidgetProjection[] }).widgets
+    : null;
+}
+
 function sameWorkspaceSnapshot(
   first: WorkspaceSession['snapshot'],
   second: WorkspaceSession['snapshot']
 ): boolean {
   const firstReview = first.review;
   const secondReview = second.review;
+  const firstWidgets = first.widgets ?? [];
+  const secondWidgets = second.widgets ?? [];
   const sameReview =
     firstReview === secondReview ||
     (firstReview !== undefined &&
@@ -479,6 +558,11 @@ function sameWorkspaceSnapshot(
     first.title === second.title &&
     first.description === second.description &&
     sameReview &&
+    firstWidgets.length === secondWidgets.length &&
+    firstWidgets.every((widget, index) => {
+      const other = secondWidgets[index];
+      return other !== undefined && sameWorkspaceWidget(widget, other);
+    }) &&
     first.memories.length === second.memories.length &&
     first.memories.every((memory, index) => {
       const other = second.memories[index];
@@ -740,6 +824,12 @@ export function App() {
   const [memoryCreateIntent, setMemoryCreateIntent] = useState<MemoryCreateIntent | null>(null);
   const [memoryDeleteTarget, setMemoryDeleteTarget] = useState<WorkspaceMemorySummary | null>(null);
   const [memoryRenameTarget, setMemoryRenameTarget] = useState<WorkspaceMemorySummary | null>(null);
+  const [widgetDeleteTarget, setWidgetDeleteTarget] = useState<WorkspaceWidgetProjection | null>(
+    null
+  );
+  const [widgetRenameTarget, setWidgetRenameTarget] = useState<WorkspaceWidgetProjection | null>(
+    null
+  );
   const [segmentDeleteTarget, setSegmentDeleteTarget] = useState<SegmentDeleteTarget | null>(null);
   const [segmentContentClearTarget, setSegmentContentClearTarget] =
     useState<SegmentContentClearTarget | null>(null);
@@ -768,6 +858,11 @@ export function App() {
   const [memoryStudioInlineMarkdownDirty, setMemoryStudioInlineMarkdownDirty] = useState(false);
   const [memoryRailInline, setMemoryRailInline] = useState(canShowInlineMemoryRail);
   const [memoryRailOpen, setMemoryRailOpen] = useState(false);
+  const [activeWorkspaceRailTab, setActiveWorkspaceRailTab] =
+    useState<WorkspaceRailTab>(MEMORY_RAIL_TAB);
+  const [widgetRefreshVersions, setWidgetRefreshVersions] = useState<
+    Readonly<Record<string, number>>
+  >({});
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
   const [appMode, setAppMode] = useState<AppMode>('app');
@@ -792,6 +887,8 @@ export function App() {
   const workspaceSessionRef = useRef<WorkspaceSession | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
   const workspaceSnapshotRefreshRequestRef = useRef(0);
+  const widgetReorderMutationIdRef = useRef(0);
+  const widgetReorderStateRef = useRef<WidgetReorderState | null>(null);
   const workspaceReleaseRecordsRef = useRef<Map<string, PendingWorkspaceRelease>>(new Map());
   const recordingRecoveryActionIdRef = useRef(0);
   const runningTranscriptionBackfillsRef = useRef<Map<string, string>>(new Map());
@@ -807,6 +904,14 @@ export function App() {
       const resolvedSession =
         typeof nextSession === 'function' ? nextSession(currentSession) : nextSession;
       if (resolvedSession !== currentSession) {
+        const workspaceChanged =
+          currentSession?.workspaceHandle !== resolvedSession?.workspaceHandle ||
+          currentSession?.workspaceId !== resolvedSession?.workspaceId;
+        if (workspaceChanged) {
+          setActiveWorkspaceRailTab(MEMORY_RAIL_TAB);
+          setWidgetRefreshVersions({});
+          widgetReorderStateRef.current = null;
+        }
         const currentReviewToastSessionKey = currentSession
           ? `${currentSession.workspaceHandle}:${currentSession.workspaceId}`
           : null;
@@ -2317,6 +2422,12 @@ export function App() {
     activeWorkspaceSession.snapshot.memories[0] ??
     null;
   const currentMemoryId = currentMemory?.memoryId ?? null;
+  const workspaceWidgets = activeWorkspaceSession.snapshot.widgets ?? [];
+  const effectiveWorkspaceRailTab =
+    activeWorkspaceRailTab.kind === 'widget' &&
+    !workspaceWidgets.some((widget) => widget.widgetId === activeWorkspaceRailTab.widgetId)
+      ? MEMORY_RAIL_TAB
+      : activeWorkspaceRailTab;
 
   function workspaceSessionMatches(expectedSession: WorkspaceSession) {
     const currentSession = workspaceSessionRef.current;
@@ -3166,6 +3277,90 @@ export function App() {
     return null;
   }
 
+  async function saveRenamedWidget(widget: WorkspaceWidgetProjection, title: string) {
+    const nextTitle = title.trim();
+    if (nextTitle === widget.title.trim()) {
+      return null;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+    const snapshotQueryKey = workspaceSnapshotQueryKey(mutationSession);
+    const optimisticWidget = { ...widget, title: nextTitle };
+    const optimisticWidgets = (mutationSession.snapshot.widgets ?? []).map((candidate) =>
+      candidate.widgetId === widget.widgetId ? optimisticWidget : candidate
+    );
+
+    setWidgetRenameTarget(null);
+    applyWidgetListUpdate(optimisticWidgets, mutationSession);
+
+    void (async () => {
+      const rollback = () => {
+        queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+          snapshotQueryKey,
+          (currentSnapshot) => ({
+            ...(currentSnapshot ?? mutationSession.snapshot),
+            widgets: (currentSnapshot?.widgets ?? mutationSession.snapshot.widgets ?? []).map(
+              (candidate) => (candidate.widgetId === widget.widgetId ? widget : candidate)
+            ),
+          })
+        );
+        setWorkspaceSession((currentSession) =>
+          currentSession?.workspaceHandle === mutationSession.workspaceHandle &&
+          currentSession.workspaceId === mutationSession.workspaceId
+            ? {
+                ...currentSession,
+                snapshot: {
+                  ...currentSession.snapshot,
+                  widgets: (currentSession.snapshot.widgets ?? []).map((candidate) =>
+                    candidate.widgetId === widget.widgetId ? widget : candidate
+                  ),
+                },
+              }
+            : currentSession
+        );
+      };
+
+      try {
+        const response = await updateWidgetTitle({
+          workspaceHandle: mutationSession.workspaceHandle,
+          workspaceId: mutationSession.workspaceId,
+          widgetId: widget.widgetId,
+          title: nextTitle,
+        });
+
+        if (!mutationSessionIsActive()) {
+          return;
+        }
+
+        if (!response.ok) {
+          rollback();
+          showReoToast({
+            type: 'error',
+            title: '无法保存 Widget 名称',
+            description: workspaceErrorDisplayMessage(response.error, '无法重命名 Widget。'),
+          });
+          return;
+        }
+
+        applyWidgetListUpdate(response.value.widgets, mutationSession);
+      } catch (error) {
+        if (!mutationSessionIsActive()) {
+          return;
+        }
+
+        rollback();
+        showReoToast({
+          type: 'error',
+          title: '无法保存 Widget 名称',
+          description: unknownErrorDisplayMessage(error, '无法重命名 Widget。'),
+        });
+      }
+    })();
+
+    return null;
+  }
+
   async function saveRenamedSegment(target: SegmentRenameTarget, title: string) {
     const nextTitle = title.trim();
     if (nextTitle === target.segment.title.trim()) {
@@ -3563,6 +3758,41 @@ export function App() {
     );
   }
 
+  function applyWidgetListUpdate(
+    widgets: readonly WorkspaceWidgetProjection[],
+    session: WorkspaceSession = activeWorkspaceSession
+  ) {
+    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      snapshotQueryKey,
+      (currentSnapshot) => ({
+        ...(currentSnapshot ?? session.snapshot),
+        widgets: [...widgets],
+      })
+    );
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
+        ? {
+            ...currentSession,
+            snapshot: {
+              ...currentSession.snapshot,
+              widgets: [...widgets],
+            },
+          }
+        : currentSession
+    );
+  }
+
+  function handleWidgetRuntimeMutation(value: unknown): boolean {
+    const widgets = widgetListFromRuntimeMutation(value);
+    if (!widgets) {
+      return false;
+    }
+    applyWidgetListUpdate(widgets, activeWorkspaceSession);
+    return true;
+  }
+
   function applySegmentCoverUpdate({
     memory,
     segment,
@@ -3601,6 +3831,8 @@ export function App() {
     setWorkspaceCreateOpen(false);
     setMemoryCreateIntent(null);
     setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
@@ -3619,6 +3851,54 @@ export function App() {
     }
   }
 
+  function openWidgetRenameDialog(widget: WorkspaceWidgetProjection) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
+    setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(widget);
+    setSegmentDeleteTarget(null);
+    setSegmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+  }
+
+  function openWidgetDeleteDialog(widget: WorkspaceWidgetProjection) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
+    setMemoryRenameTarget(null);
+    setWidgetRenameTarget(null);
+    setSegmentDeleteTarget(null);
+    setSegmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+    setWidgetDeleteTarget(widget);
+  }
+
+  function handleWidgetDeleteOpenChange(nextOpen: boolean) {
+    if (!nextOpen && workspaceActionPending) {
+      return;
+    }
+
+    if (!nextOpen) {
+      setWidgetDeleteTarget(null);
+    }
+  }
+
   function openSegmentDeleteDialog(target: SegmentDeleteTarget) {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -3629,6 +3909,8 @@ export function App() {
     setMemoryCreateIntent(null);
     setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
     setSegmentSupplementRenameTarget(null);
@@ -3656,6 +3938,8 @@ export function App() {
     setMemoryCreateIntent(null);
     setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementRenameTarget(null);
@@ -5071,11 +5355,286 @@ export function App() {
 
   function selectMemory(memoryId: string) {
     if (blockWorkspaceFlowInterruption()) {
-      return;
+      return false;
     }
 
     setSelectedMemoryId(memoryId);
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+    return true;
+  }
+
+  function copyWorkspaceWidgetPrompt(
+    payload:
+      | { readonly action: 'create-widget' }
+      | { readonly action: 'update-widget'; readonly widgetId: string }
+  ) {
+    void copyWidgetAgentPrompt({
+      workspaceHandle: activeWorkspaceSession.workspaceHandle,
+      workspaceId: activeWorkspaceSession.workspaceId,
+      ...payload,
+    })
+      .then((result) => {
+        if (!result.ok) {
+          showReoToast({
+            type: 'error',
+            title: '无法复制 Widget 提示词',
+            description: workspaceErrorDisplayMessage(result.error, '无法复制 Widget 提示词。'),
+          });
+          return;
+        }
+        showReoToast({
+          type: 'success',
+          title: '已复制 Widget 提示词',
+          description:
+            payload.action === 'create-widget'
+              ? '交给您的 Agent 后，它会在当前记忆空间创建 Widget 文件。'
+              : '交给您的 Agent 后，它会更新这个 Widget 文件。',
+        });
+      })
+      .catch((error) => {
+        showReoToast({
+          type: 'error',
+          title: '无法复制 Widget 提示词',
+          description: unknownErrorDisplayMessage(error, '无法复制 Widget 提示词。'),
+        });
+      });
+  }
+
+  function requestCreateWidget() {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+    setMemoryRailOpen(true);
+    copyWorkspaceWidgetPrompt({ action: 'create-widget' });
+  }
+
+  function requestUpdateWidget(widget: WorkspaceWidgetProjection) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+    copyWorkspaceWidgetPrompt({ action: 'update-widget', widgetId: widget.widgetId });
+  }
+
+  function refreshWidget(widget: WorkspaceWidgetProjection) {
+    setWidgetRefreshVersions((current) => ({
+      ...current,
+      [widget.widgetId]: (current[widget.widgetId] ?? 0) + 1,
+    }));
+  }
+
+  function reorderWidgets(widgetTabOrder: readonly string[]) {
+    const mutationSession = activeWorkspaceSession;
+    const mutationId = widgetReorderMutationIdRef.current + 1;
+    widgetReorderMutationIdRef.current = mutationId;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+    const existingReorderState = widgetReorderStateRef.current;
+    const currentWidgets = mutationSession.snapshot.widgets ?? [];
+    const reorderState =
+      existingReorderState?.workspaceHandle === mutationSession.workspaceHandle &&
+      existingReorderState.workspaceId === mutationSession.workspaceId
+        ? {
+            ...existingReorderState,
+            latestStartedMutationId: mutationId,
+          }
+        : {
+            workspaceHandle: mutationSession.workspaceHandle,
+            workspaceId: mutationSession.workspaceId,
+            latestStartedMutationId: mutationId,
+            latestConfirmedMutationId: 0,
+            confirmedWidgets: currentWidgets,
+          };
+    widgetReorderStateRef.current = reorderState;
+    const byId = new Map(currentWidgets.map((widget) => [widget.widgetId, widget]));
+    const orderedWidgetIds = new Set<string>();
+    const orderedWidgets = [
+      ...widgetTabOrder.flatMap((widgetId) => {
+        const widget = byId.get(widgetId);
+        if (widget) {
+          orderedWidgetIds.add(widgetId);
+        }
+        return widget ? [widget] : [];
+      }),
+      ...currentWidgets.filter((widget) => !orderedWidgetIds.has(widget.widgetId)),
+    ];
+    applyWidgetListUpdate(orderedWidgets, mutationSession);
+
+    void (async () => {
+      try {
+        const response = await updateWidgetTabOrder({
+          workspaceHandle: mutationSession.workspaceHandle,
+          workspaceId: mutationSession.workspaceId,
+          widgetTabOrder: [...widgetTabOrder],
+        });
+
+        if (!mutationSessionIsActive()) {
+          return;
+        }
+
+        const currentReorderState = widgetReorderStateRef.current;
+        const reorderStateMatches =
+          currentReorderState?.workspaceHandle === mutationSession.workspaceHandle &&
+          currentReorderState.workspaceId === mutationSession.workspaceId;
+
+        if (
+          response.ok &&
+          reorderStateMatches &&
+          mutationId > currentReorderState.latestConfirmedMutationId
+        ) {
+          widgetReorderStateRef.current = {
+            ...currentReorderState,
+            latestConfirmedMutationId: mutationId,
+            confirmedWidgets: response.value.widgets,
+          };
+        }
+
+        if (widgetReorderMutationIdRef.current !== mutationId) {
+          return;
+        }
+
+        if (!response.ok) {
+          applyWidgetListUpdate(
+            reorderStateMatches ? currentReorderState.confirmedWidgets : currentWidgets,
+            mutationSession
+          );
+          widgetReorderStateRef.current = null;
+          showReoToast({
+            type: 'error',
+            title: '无法调整 Widget 顺序',
+            description: workspaceErrorDisplayMessage(response.error, '无法调整 Widget 顺序。'),
+          });
+          return;
+        }
+
+        applyWidgetListUpdate(response.value.widgets, mutationSession);
+        widgetReorderStateRef.current = null;
+      } catch (error) {
+        if (!mutationSessionIsActive() || widgetReorderMutationIdRef.current !== mutationId) {
+          return;
+        }
+        const currentReorderState = widgetReorderStateRef.current;
+        const reorderStateMatches =
+          currentReorderState?.workspaceHandle === mutationSession.workspaceHandle &&
+          currentReorderState.workspaceId === mutationSession.workspaceId;
+        applyWidgetListUpdate(
+          reorderStateMatches ? currentReorderState.confirmedWidgets : currentWidgets,
+          mutationSession
+        );
+        widgetReorderStateRef.current = null;
+        showReoToast({
+          type: 'error',
+          title: '无法调整 Widget 顺序',
+          description: unknownErrorDisplayMessage(error, '无法调整 Widget 顺序。'),
+        });
+      }
+    })();
+  }
+
+  async function restoreDeletedWidgetFromUndo(
+    restoreToken: string,
+    mutationSession: WorkspaceSession
+  ) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+
+    try {
+      const response = await restoreDeletedWidget({
+        workspaceHandle: mutationSession.workspaceHandle,
+        workspaceId: mutationSession.workspaceId,
+        restoreToken,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: '无法恢复 Widget',
+          description: workspaceErrorDisplayMessage(response.error, '无法恢复 Widget。'),
+        });
+        return;
+      }
+
+      applyWidgetListUpdate(response.value.widgets, mutationSession);
+      setActiveWorkspaceRailTab({ kind: 'widget', widgetId: response.value.widget.widgetId });
+      setMemoryRailOpen(true);
+      showReoToast({ type: 'success', title: '已恢复 Widget' });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+      showReoToast({
+        type: 'error',
+        title: '无法恢复 Widget',
+        description: unknownErrorDisplayMessage(error, '无法恢复 Widget。'),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function confirmDeleteWidget() {
+    const target = widgetDeleteTarget;
+    if (!target || !beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    const mutationSessionIsActive = () => workspaceSessionMatches(mutationSession);
+
+    try {
+      const response = await deleteWidget({
+        workspaceHandle: mutationSession.workspaceHandle,
+        workspaceId: mutationSession.workspaceId,
+        widgetId: target.widgetId,
+      });
+
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: '无法删除 Widget',
+          description: workspaceErrorDisplayMessage(response.error, '无法删除 Widget。'),
+        });
+        return;
+      }
+
+      applyWidgetListUpdate(response.value.widgets, mutationSession);
+      setWidgetDeleteTarget(null);
+      if (
+        activeWorkspaceRailTab.kind === 'widget' &&
+        activeWorkspaceRailTab.widgetId === target.widgetId
+      ) {
+        setActiveWorkspaceRailTab(MEMORY_RAIL_TAB);
+      }
+      showReoToast({
+        title: '已删除 Widget',
+        description: target.title,
+        undo: {
+          onUndo: () => {
+            void restoreDeletedWidgetFromUndo(response.value.restoreToken, mutationSession);
+          },
+        },
+      });
+    } catch (error) {
+      if (!mutationSessionIsActive()) {
+        return;
+      }
+      showReoToast({
+        type: 'error',
+        title: '无法删除 Widget',
+        description: unknownErrorDisplayMessage(error, '无法删除 Widget。'),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
   }
 
   function toggleMemoryRail() {
@@ -5124,14 +5683,22 @@ export function App() {
         panelTitlebar={
           workspaceView.name === 'workspace-stage' ? (
             <WorkspaceTitlebar
+              activeRailTab={effectiveWorkspaceRailTab}
               currentMemory={currentMemory}
               memoryRailOpen={memoryRailOpen}
               onCreateMemory={() => openMemoryCreateDialog({ afterCreate: 'stay-on-stage' })}
+              onCreateWidget={requestCreateWidget}
               onDeleteMemory={openMemoryDeleteDialog}
+              onDeleteWidget={openWidgetDeleteDialog}
               onRenameMemory={setMemoryRenameTarget}
+              onRenameWidget={openWidgetRenameDialog}
+              onRequestWidgetRefresh={refreshWidget}
+              onRequestWidgetUpdate={requestUpdateWidget}
               onResetMemoryCover={(memory) => {
                 void resetMemoryCoverToDefault(memory);
               }}
+              onReorderWidgets={reorderWidgets}
+              onSelectRailTab={setActiveWorkspaceRailTab}
               onSwitchMemoryDefaultCover={(memory) => {
                 void switchMemoryDefaultCoverTemplate(memory);
               }}
@@ -5149,6 +5716,7 @@ export function App() {
               }
               onToggleMemoryRail={toggleMemoryRail}
               title={activeWorkspaceSession.snapshot.title}
+              widgets={workspaceWidgets}
               workspaceHandle={activeWorkspaceSession.workspaceHandle}
               workspaceId={activeWorkspaceSession.workspaceId}
             />
@@ -5160,6 +5728,7 @@ export function App() {
         ) : (
           <LoadedWorkspaceFrame
             workspaceSession={activeWorkspaceSession}
+            activeRailTab={effectiveWorkspaceRailTab}
             currentMemory={currentMemory}
             segmentFocusIntent={
               currentMemory && segmentFocusIntent?.memoryId === currentMemory.memoryId
@@ -5195,6 +5764,8 @@ export function App() {
               );
             }}
             onSelectMemory={selectMemory}
+            onRequestWidgetUpdate={requestUpdateWidget}
+            onWidgetRuntimeMutation={handleWidgetRuntimeMutation}
             onRenameMemory={setMemoryRenameTarget}
             onRenameSegmentContent={setSegmentContentRenameTarget}
             onRenameSegment={setSegmentRenameTarget}
@@ -5208,6 +5779,7 @@ export function App() {
             onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
             onStartRecording={requestStartRecording}
             shownReviewToastSessionKey={shownReviewToastSessionKey}
+            widgetRefreshVersions={widgetRefreshVersions}
           />
         )}
       </AppShell>
@@ -5257,6 +5829,16 @@ export function App() {
         }}
         onSave={saveRenamedMemory}
         open={memoryRenameTarget !== null}
+      />
+      <WidgetRenameDialog
+        widget={widgetRenameTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWidgetRenameTarget(null);
+          }
+        }}
+        onSave={saveRenamedWidget}
+        open={widgetRenameTarget !== null}
       />
       <SegmentRenameDialog
         target={segmentRenameTarget}
@@ -5326,6 +5908,15 @@ export function App() {
         }}
         onOpenChange={handleMemoryDeleteOpenChange}
         open={memoryDeleteTarget !== null}
+      />
+      <WidgetDeleteDialog
+        disabled={workspaceActionPending}
+        widget={widgetDeleteTarget}
+        onConfirm={() => {
+          void confirmDeleteWidget();
+        }}
+        onOpenChange={handleWidgetDeleteOpenChange}
+        open={widgetDeleteTarget !== null}
       />
       <SegmentDeleteDialog
         disabled={workspaceActionPending}

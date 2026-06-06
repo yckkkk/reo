@@ -14,18 +14,23 @@ const workspaceBridgeKeys = [
   'revealMemoryInFinder',
   'revealSegmentInFinder',
   'revealSegmentSupplementInFinder',
+  'revealWidgetInFinder',
   'openMemorySpaceAgentsFile',
   'openMemoryDocument',
   'openSegmentDocument',
   'openSegmentSupplementDocument',
+  'openWidgetDocument',
   'copyMemorySpaceAbsolutePath',
   'copyMemoryAbsolutePath',
   'copySegmentAbsolutePath',
   'copySegmentSupplementAbsolutePath',
+  'copyWidgetAbsolutePath',
   'copyMemoryRelativePath',
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
+  'copyWidgetRelativePath',
   'copyArtifactAgentPrompt',
+  'copyWidgetAgentPrompt',
   'readArtifactRuntimeState',
   'writeArtifactRuntimeState',
   'copyNeedsReviewAgentPrompt',
@@ -45,6 +50,8 @@ const workspaceBridgeKeys = [
   'restoreDeletedSegment',
   'deleteSegmentSupplement',
   'restoreDeletedSegmentSupplement',
+  'deleteWidget',
+  'restoreDeletedWidget',
   'readMemoryDetail',
   'readFinalizedAudioSegment',
   'readFinalizedAudioSegmentSupplement',
@@ -81,6 +88,8 @@ const workspaceBridgeKeys = [
   'updateSegmentContentTitle',
   'updateSegmentSupplementTitle',
   'updateSegmentContentTabOrder',
+  'updateWidgetTitle',
+  'updateWidgetTabOrder',
   'saveTranscript',
   'saveSegmentSupplementTranscript',
   'requestSegmentTranscriptionBackfill',
@@ -111,17 +120,21 @@ const workspaceEntityActionBridgeKeys = [
   'revealMemoryInFinder',
   'revealSegmentInFinder',
   'revealSegmentSupplementInFinder',
+  'revealWidgetInFinder',
   'openMemorySpaceAgentsFile',
   'openMemoryDocument',
   'openSegmentDocument',
   'openSegmentSupplementDocument',
+  'openWidgetDocument',
   'copyMemorySpaceAbsolutePath',
   'copyMemoryAbsolutePath',
   'copySegmentAbsolutePath',
   'copySegmentSupplementAbsolutePath',
+  'copyWidgetAbsolutePath',
   'copyMemoryRelativePath',
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
+  'copyWidgetRelativePath',
 ] as const;
 
 const applicationScopedBridgeContractKeys = [
@@ -577,6 +590,11 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     segmentId: 'seg_1',
     supplementId: 'sup_1',
   };
+  const widgetPayload = {
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    widgetId: 'wdg_1',
+  };
   const calls: Array<{ readonly channel: string; readonly payload?: unknown }> = [];
   const bridge = createWorkspaceBridge({
     invoke: async (channel, payload) => {
@@ -589,17 +607,21 @@ test('workspace preload bridge maps entity action and review prompt copy methods
   await bridge.revealMemoryInFinder(memoryPayload);
   await bridge.revealSegmentInFinder(segmentPayload);
   await bridge.revealSegmentSupplementInFinder(supplementPayload);
+  await bridge.revealWidgetInFinder(widgetPayload);
   await bridge.openMemorySpaceAgentsFile(memorySpacePayload);
   await bridge.openMemoryDocument(memoryPayload);
   await bridge.openSegmentDocument(segmentPayload);
   await bridge.openSegmentSupplementDocument(supplementPayload);
+  await bridge.openWidgetDocument(widgetPayload);
   await bridge.copyMemorySpaceAbsolutePath(memorySpacePayload);
   await bridge.copyMemoryAbsolutePath(memoryPayload);
   await bridge.copySegmentAbsolutePath(segmentPayload);
   await bridge.copySegmentSupplementAbsolutePath(supplementPayload);
+  await bridge.copyWidgetAbsolutePath(widgetPayload);
   await bridge.copyMemoryRelativePath(memoryPayload);
   await bridge.copySegmentRelativePath(segmentPayload);
   await bridge.copySegmentSupplementRelativePath(supplementPayload);
+  await bridge.copyWidgetRelativePath(widgetPayload);
   await bridge.copyArtifactAgentPrompt({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -607,6 +629,10 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     memoryId: 'mem_1',
     segmentId: 'seg_1',
     supplementId: 'sup_1',
+  });
+  await bridge.copyWidgetAgentPrompt({
+    ...widgetPayload,
+    action: 'update-widget',
   });
   await bridge.copyNeedsReviewAgentPrompt({
     workspaceHandle: 'wh_1',
@@ -619,17 +645,21 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     { channel: 'workspace:revealMemoryInFinder', payload: memoryPayload },
     { channel: 'workspace:revealSegmentInFinder', payload: segmentPayload },
     { channel: 'workspace:revealSegmentSupplementInFinder', payload: supplementPayload },
+    { channel: 'workspace:revealWidgetInFinder', payload: widgetPayload },
     { channel: 'workspace:openMemorySpaceAgentsFile', payload: memorySpacePayload },
     { channel: 'workspace:openMemoryDocument', payload: memoryPayload },
     { channel: 'workspace:openSegmentDocument', payload: segmentPayload },
     { channel: 'workspace:openSegmentSupplementDocument', payload: supplementPayload },
+    { channel: 'workspace:openWidgetDocument', payload: widgetPayload },
     { channel: 'workspace:copyMemorySpaceAbsolutePath', payload: memorySpacePayload },
     { channel: 'workspace:copyMemoryAbsolutePath', payload: memoryPayload },
     { channel: 'workspace:copySegmentAbsolutePath', payload: segmentPayload },
     { channel: 'workspace:copySegmentSupplementAbsolutePath', payload: supplementPayload },
+    { channel: 'workspace:copyWidgetAbsolutePath', payload: widgetPayload },
     { channel: 'workspace:copyMemoryRelativePath', payload: memoryPayload },
     { channel: 'workspace:copySegmentRelativePath', payload: segmentPayload },
     { channel: 'workspace:copySegmentSupplementRelativePath', payload: supplementPayload },
+    { channel: 'workspace:copyWidgetRelativePath', payload: widgetPayload },
     {
       channel: 'workspace:copyArtifactAgentPrompt',
       payload: {
@@ -639,6 +669,15 @@ test('workspace preload bridge maps entity action and review prompt copy methods
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         supplementId: 'sup_1',
+      },
+    },
+    {
+      channel: 'workspace:copyWidgetAgentPrompt',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        widgetId: 'wdg_1',
+        action: 'update-widget',
       },
     },
     {
@@ -738,6 +777,17 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     segmentId: 'seg_1',
     contentTabOrder: ['supplement:sup_1', 'segment'],
   });
+  await bridge.updateWidgetTitle({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    widgetId: 'wdg_1',
+    title: 'Workspace 总览',
+  });
+  await bridge.updateWidgetTabOrder({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    widgetTabOrder: ['wdg_1'],
+  });
   await bridge.deleteSegmentSupplement({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -751,6 +801,16 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     memoryId: 'mem_1',
     segmentId: 'seg_1',
     restoreToken: 'sup_1',
+  });
+  await bridge.deleteWidget({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    widgetId: 'wdg_1',
+  });
+  await bridge.restoreDeletedWidget({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    restoreToken: 'wdg_1',
   });
   await bridge.beginMicrophoneIntent({
     workspaceHandle: 'wh_1',
@@ -816,6 +876,23 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
       },
     },
     {
+      channel: 'workspace:updateWidgetTitle',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        widgetId: 'wdg_1',
+        title: 'Workspace 总览',
+      },
+    },
+    {
+      channel: 'workspace:updateWidgetTabOrder',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        widgetTabOrder: ['wdg_1'],
+      },
+    },
+    {
       channel: 'workspace:deleteSegmentSupplement',
       payload: {
         workspaceHandle: 'wh_1',
@@ -833,6 +910,22 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
         memoryId: 'mem_1',
         segmentId: 'seg_1',
         restoreToken: 'sup_1',
+      },
+    },
+    {
+      channel: 'workspace:deleteWidget',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        widgetId: 'wdg_1',
+      },
+    },
+    {
+      channel: 'workspace:restoreDeletedWidget',
+      payload: {
+        workspaceHandle: 'wh_1',
+        workspaceId: 'ws_1',
+        restoreToken: 'wdg_1',
       },
     },
     {

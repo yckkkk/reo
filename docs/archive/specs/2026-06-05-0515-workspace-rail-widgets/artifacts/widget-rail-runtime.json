@@ -1,0 +1,95 @@
+{
+  "ok": true,
+  "failures": [],
+  "metrics": {
+    "href": "http://localhost:5184/?reoScenario=memory-studio-rich",
+    "viewport": {
+      "width": 1180,
+      "height": 780
+    },
+    "document": {
+      "width": 1180,
+      "height": 780
+    },
+    "tabStrip": {
+      "left": 949.6484375,
+      "top": -1,
+      "right": 1128,
+      "bottom": 37,
+      "width": 178.3515625,
+      "height": 38
+    },
+    "widgetPanel": {
+      "left": 941,
+      "top": 48,
+      "right": 1180,
+      "bottom": 780,
+      "width": 239,
+      "height": 732
+    },
+    "memoryRailPresent": false,
+    "selectedWidgetTab": {
+      "ariaSelected": "true",
+      "rect": {
+        "left": 987.6484375,
+        "top": 3,
+        "right": 1017.6484375,
+        "bottom": 33,
+        "width": 30,
+        "height": 30
+      }
+    },
+    "createWidget": {
+      "left": 1035.6484375,
+      "top": 2,
+      "right": 1124,
+      "bottom": 34,
+      "width": 88.3515625,
+      "height": 32
+    },
+    "collapse": {
+      "left": 1136,
+      "top": 2,
+      "right": 1168,
+      "bottom": 34,
+      "width": 32,
+      "height": 32
+    },
+    "tabIcons": [
+      {
+        "left": 961.1484375,
+        "top": 10.5,
+        "right": 976.1484375,
+        "bottom": 25.5,
+        "width": 15,
+        "height": 15
+      },
+      {
+        "left": 995.1484375,
+        "top": 10.5,
+        "right": 1010.1484375,
+        "bottom": 25.5,
+        "width": 15,
+        "height": 15
+      },
+      {
+        "left": 1017.9984130859375,
+        "top": 11.350000381469727,
+        "right": 1031.2984619140625,
+        "bottom": 24.649999618530273,
+        "width": 13.300048828125,
+        "height": 13.299999237060547
+      },
+      {
+        "left": 1047.6484375,
+        "top": 11,
+        "right": 1061.6484375,
+        "bottom": 25,
+        "width": 14,
+        "height": 14
+      }
+    ],
+    "bodyTextHasFault": true,
+    "bodyTextHasAgentUpdate": true
+  }
+}

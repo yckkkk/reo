@@ -8,9 +8,9 @@
 
 四个关键词同时成立才是 Reo：围绕一件事（Memory 主题容器）+ 所有材料（多模态）+ agent 转化（不是存储 / 检索）+ 只属于用户的作品（唯一性 moat）。
 
-Reo 不是单纯录音工具，不是文件管理器，不是 AI 记录 app，不是聊天助手，不是单一模态工具——录音、视频、照片、笔记、外部导入文件、agent 生成的作品和未来 runtime 组件都平等进入 Reo 的 Workspace → Memory → Segment → SegmentSupplement 与未来 runtime 挂载对象图。
+Reo 不是单纯录音工具，不是文件管理器，不是 AI 记录 app，不是聊天助手，不是单一模态工具——录音、视频、照片、笔记、外部导入文件、agent 生成的作品和 runtime widget 都平等进入 Reo 的 Workspace → Memory → Segment → SegmentSupplement 与 runtime 挂载对象图。
 
-一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是主题容器，负责按主题聚合跨模态材料。一个 Segment 是 Memory 内的主体记录，负责承载一次具体记录（任意模态）。一个 SegmentSupplement 是围绕某个 Segment 的补充内容，负责延展上下文（任意模态）。作品是 Segment / SegmentSupplement 层级的 runtime object；未来组件使用同一 Shared Generative Runtime 能力层，但挂载在 Home、Workspace 或 Memory 级 UI 位置。
+一个 Workspace 是用户选择的本地记忆空间。一个 Memory 是主题容器，负责按主题聚合跨模态材料。一个 Segment 是 Memory 内的主体记录，负责承载一次具体记录（任意模态）。一个 SegmentSupplement 是围绕某个 Segment 的补充内容，负责延展上下文（任意模态）。作品是 Segment / SegmentSupplement 层级的 runtime object；widget 使用同一 Shared Generative Runtime 能力层，但挂载在 Workspace、Home 或 Memory 级 UI 位置。
 
 产品本质长期决策见 `docs/decisions/0006-agent-native-carrier-and-generative-ui.md`，外向定位叙事与电梯演讲见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/positioning.md`。
 
@@ -18,17 +18,17 @@ Reo 不是单纯录音工具，不是文件管理器，不是 AI 记录 app，�
 
 Reo 的价值在跨模态主题容器中长期成立。典型 Memory 形态：
 
-- **一本书的写作**：访谈录音、写作时的思考流录音、用户测试视频、白板照片、章节笔记、参考论文 PDF → agent 生成章节大纲 runtime 组件、引言库作品、章节草稿
-- **一个孩子的成长**：成长瞬间录音 / 视频、每周照片、教育判断笔记、医生 / 学校文档 → agent 生成成长册作品、性格特征 runtime 组件、走马灯回顾
-- **一个学习领域**：实时反应录音、关键讲座视频、讲义照片、结构化笔记、论文 → agent 生成概念时间线 runtime 组件、学习卡作品、按记忆曲线回顾
-- **一段关系**：重要对话录音、共同时刻视频 / 照片、情绪笔记、共享文档截图 → agent 生成关系曲线 runtime 组件、共同时刻走马灯
-- **一次旅程**：路上反思录音、关键场景视频、风景 / 食物照片、行前与实时笔记、机票 / 住宿 → agent 生成游记作品、时间线 runtime 组件
+- **一本书的写作**：访谈录音、写作时的思考流录音、用户测试视频、白板照片、章节笔记、参考论文 PDF → agent 生成章节大纲 runtime widget、引言库作品、章节草稿
+- **一个孩子的成长**：成长瞬间录音 / 视频、每周照片、教育判断笔记、医生 / 学校文档 → agent 生成成长册作品、性格特征 runtime widget、走马灯回顾
+- **一个学习领域**：实时反应录音、关键讲座视频、讲义照片、结构化笔记、论文 → agent 生成概念时间线 runtime widget、学习卡作品、按记忆曲线回顾
+- **一段关系**：重要对话录音、共同时刻视频 / 照片、情绪笔记、共享文档截图 → agent 生成关系曲线 runtime widget、共同时刻走马灯
+- **一次旅程**：路上反思录音、关键场景视频、风景 / 食物照片、行前与实时笔记、机票 / 住宿 → agent 生成游记作品、时间线 runtime widget
 
 完整场景与电梯演讲见 `docs/initiatives/2026-05-14-commercial-infrastructure-foundation/positioning.md`。
 
 Workspace 是用户选择的文件空间根；Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点：稳定 id 负责身份，文件夹名称负责用户可见命名，Markdown/frontmatter 承载语义镜像，`.reo/objects/*` manifest 承载技术完整性。用户在文件管理器里直接重命名合法内容节点后，Reo 重新读取时按文件夹名称投影 UI；用户重命名 Workspace root 后，Reo 通过 stable workspaceId 重新定位已导入记忆空间。
 
-当前已实现的 Segment 类型是 `audio`、`note` 和 `artifact`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充、`note` 笔记补充和 `artifact` 作品补充。`artifact` 的用户可见名是作品，首个入口技术是 `html`，创建和更新都通过 prompt-bridge 让外部 agent 写入文件。作品是用户拥有的小型 Web app：bundle 使用 `entry.html`、`runtime.json`、`state.json` 和 `assets/`，可使用普通 Web 网络、browser storage 和显式 `window.reo` bridge。`photo`、`video`、`imported_file` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Shared Generative Runtime 是当前作品 runtime 的能力层；未来组件复用同一能力层，但挂载 UI 仍需独立 spec。Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note + artifact first slice 是 enabling phase，不是 Reo 终局形态。
+当前已实现的 Segment 类型是 `audio`、`note` 和 `artifact`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充、`note` 笔记补充和 `artifact` 作品补充；当前已实现的 Workspace-level runtime object 是 `widget`，首个挂载点是右侧 rail。`artifact` 的用户可见名是作品，首个入口技术是 `html`，创建和更新都通过 prompt-bridge 让外部 agent 写入文件。作品和 widget 都是用户拥有的小型 Web app：bundle 使用 `entry.html`、`runtime.json`、`state.json` 和 `assets/`，可使用普通 Web 网络、browser storage 和显式 `window.reo` bridge。`photo`、`video`、`imported_file` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Shared Generative Runtime 是当前作品和 widget runtime 的能力层；Home/Memory 级 widget 挂载 UI 仍需独立 spec。Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note + artifact first slice 是 enabling phase，不是 Reo 终局形态。
 
 Reo 的核心目标是让 agent 与用户共同围绕主题积累跨模态材料，并把材料转化成只属于用户的作品。用户负责表达、思考、判断，agent 负责筛选、整理、深化、生成、引导用户用最合适的模态做下一步补充（补录音 / 拍照 / 写笔记 / 上传文件）。原始材料不被假设为资产，价值在 agent 与用户共同筛选、深化、转化成作品之后才出现。SegmentSupplement 既是用户主动的多模态补充，也是 agent 引导更深表达的载体。
 
@@ -40,7 +40,7 @@ Reo 是安静、克制、柔和的私人表达工作室。用户打开 Reo 的�
 
 Reo 的美感来自对注意力的尊重：本地优先带来安全感，agent-native 带来未来感，留白带来呼吸感，Memory 与 Segment 的生长关系带来生命感，Gallery 走马灯带来沉浸感。产品 UI 使用 Red Fluid Design System：品牌红作为表达入口，普通控件保持黑白中性语义，Fluid 多层 surface 为骨架，保留扁平阅读层、克制动效和真实音频波形。界面不用同平面描边、基础阴影或伪媒体制造完成感。
 
-极致交互气质是 Reo 产品不变量。录音 / 播放 / 转录的场景感、Memory Studio 的节奏、Gallery 走马灯的视觉听觉节奏、runtime 组件渲染一致性、prompt-bridge 操作反馈细节都必须过 craft 门槛；任何拼凑、敷衍或"先做能用版本"的功能不能进入主链，必要时先不做或留在 spec 中作为已知 gap。
+极致交互气质是 Reo 产品不变量。录音 / 播放 / 转录的场景感、Memory Studio 的节奏、Gallery 走马灯的视觉听觉节奏、runtime widget 渲染一致性、prompt-bridge 操作反馈细节都必须过 craft 门槛；任何拼凑、敷衍或"先做能用版本"的功能不能进入主链，必要时先不做或留在 spec 中作为已知 gap。
 
 ## 非目标
 
@@ -114,9 +114,9 @@ Segment 选择只在当前 Memory 内同步 card、时间轴点、播放区、�
 
 Segment card、时间轴圆点和时间标签属于同一个横向 scroll item，圆点和时间固定在对应卡片下方居中，并随 Segment strip 横向滚动；时间标签显示该 Segment 的创建时间，不显示片段时长。播放区 waveform 从 selected finalized audio Segment 的真实音频 bytes 解码峰值生成，音频无法解码时不展示固定占位波形；selected finalized note Segment 保留同一播放区位置作为不可见等高布局占位，不显示不可播放文案，不新增另一套 note-only content layout。
 
-selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，artifact Segment 始终带 `作品` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内保留播放条，并在下方使用同一套有边框 Tiptap-backed 轻量 Markdown 编辑器编辑转录正文；笔记正文、普通转录正文和补充笔记也使用这套常态编辑容器；ready 作品片段和作品补充使用隔离 iframe 预览，fault 作品显示可复制诊断和 agent 修复提示，并可复用当前内容展开壳进入沉浸式查看。作品 iframe 可通过 `window.reo` typed bridge 使用状态、上下文、全屏、agent prompt 和当前作品标题更新；Reo 不把用户 HTML 放进 renderer 同源执行，不暴露 Node/Electron/raw path，也不提供产品层作品 key/token/value 管理、联网确认、权限弹窗、内容审查或质量审核。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示；作品 runtime bundle 的 `entry.html`、`runtime.json`、`state.json` 和 `assets/` direct asset 由 `reo-artifact://` 只读预览协议显示。其它图片源保持 Markdown 图片节点但不作为当前 Reo 可加载图片源。
+selected Segment 的主内容和 finalized SegmentSupplement 都使用同一条内容 tab rail；audio Segment 始终带 `转录` tab，note Segment 始终带 `正文` tab，artifact Segment 始终带 `作品` tab，finalized SegmentSupplement 作为独立内容 tab 出现在同一条 rail 中。tab 上显示 supplement title 和类型 icon，内容区不重复显示标题或创建时间。同一 selected Segment 出现新补充内容时，Memory Studio 自动切到新 supplement tab 让新内容可见。补充录音在自己的 tab panel 内保留播放条，并在下方使用同一套有边框 Tiptap-backed 轻量 Markdown 编辑器编辑转录正文；笔记正文、普通转录正文和补充笔记也使用这套常态编辑容器；ready 作品片段和作品补充使用隔离 iframe 预览，fault 作品显示可复制诊断和 agent 修复提示，并可复用当前内容展开壳进入沉浸式查看。作品 iframe 可通过 `window.reo` typed bridge 使用状态、上下文、全屏、agent prompt 和当前作品标题更新；Reo 不把用户 HTML 放进 renderer 同源执行，不暴露 Node/Electron/raw path，也不提供产品层作品 key/token/value 管理、联网确认、权限弹窗、内容审查或质量审核。Markdown 正文中的相对图片附件通过 `attachments/<filename>` 表达，由 `reo-attachment://` 只读预览协议显示；作品 runtime bundle 的 `entry.html`、`runtime.json`、`state.json` 和 `assets/` direct asset 由 `reo-render://` 只读预览协议显示。其它图片源保持 Markdown 图片节点但不作为当前 Reo 可加载图片源。
 
-Memory Studio 只读取当前 Memory detail、selected Segment content 和 selected SegmentSupplement content，不聚合整个 Workspace。右侧 Memory rail 默认折叠并退出可访问树；用户手动展开后，宽视口使用 inline 模式，WorkspaceFrame 的第二条 grid 轨道从 `0px` 展开到 `240px`，中央舞台和底部 FAB 保持对称横向 padding；compact workspace 宽度下使用 overlay 模式，不挤压 Memory Studio 主体验。
+Memory Studio 只读取当前 Memory detail、selected Segment content 和 selected SegmentSupplement content，不聚合整个 Workspace。右侧 rail 默认折叠并退出可访问树；用户手动展开后，宽视口使用 inline 模式，WorkspaceFrame 的第二条 grid 轨道从 `0px` 展开到 `240px`，中央舞台和底部 FAB 保持对称横向 padding；compact workspace 宽度下使用 overlay 模式，不挤压 Memory Studio 主体验。Titlebar 右侧使用单个 `新增` 菜单承载 `新建记忆` 和 `新建 Widget`；右侧 rail 展开时在 `新增` 菜单与折叠按钮之间显示 Memory list tab 和 Workspace Widget tabs。Widget 是 workspace-level 侧栏对象，独立于当前 Memory，但可通过 `window.reo.ui.selectMemory({ memoryId })` 切换主内容当前 Memory。切换 Widget tab、切回 Memory list tab、折叠 rail 或切换 workspace 会按当前 active rail tab mount/unmount 对应 iframe。
 
 Memory rail 宽度收敛到 `240px`，列表 surface 使用全高 `bg-background` 并与主内容区保持同一画布填充；rail shell 使用 `border-l border-secondary` 标记主内容和右侧记忆列表的跨区域边界。MemoryRail memory item 使用 `bg-card` 表达常态卡片、`bg-secondary` 表达 hover 和当前状态，当前 Memory 同时保留 `aria-current`；不靠边框或阴影表达层级。
 
@@ -145,10 +145,10 @@ SegmentSupplement 删除是当前 Memory Studio 内容 tab 的危险操作。用
 
 长期 Reo skills 分两层：
 
-- **原子 skill**：单一职责的 prompt 模板。Day 1 出厂 8 项：引导、回顾（结合记忆曲线）、整理总结、runtime 组件生成四类基础 skill，加默认洞察、价值澄清、二阶思考、逆向思考四类思考视角 skill。
+- **原子 skill**：单一职责的 prompt 模板。Day 1 出厂 8 项：引导、回顾（结合记忆曲线）、整理总结、runtime widget 生成四类基础 skill，加默认洞察、价值澄清、二阶思考、逆向思考四类思考视角 skill。
 - **use-xxx 组合 skill**：use case 编排 skill。Day 1 出厂 3 项：`use-学习闭环`、`use-记忆回顾循环`、`use-内容创作支援`。**skill 组合是 agent 的责任，不是用户的责任**——用户体验是"帮我做学习闭环"，agent 自己决定按 use case 流程调用哪些原子 skill。
 
-当前 prompt-bridge runtime 已覆盖作品片段创建、作品补充创建和已有作品更新：点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。Workspace、Memory、Segment、SegmentSupplement 与未来 runtime 组件的 Entity More 菜单后续仍计划收敛到统一 `agent 操作 ▸` 子菜单。
+当前 prompt-bridge runtime 已覆盖作品片段创建、作品补充创建、已有作品更新、Workspace widget 创建和已有 widget 更新：点击后把带上下文的 prompt 复制到剪贴板，用户粘贴到 Codex CLI / Codex Web 让 agent 操作 Reo 文件。Workspace、Memory、Segment、SegmentSupplement 与 runtime widget 的 Entity More 菜单后续仍计划收敛到统一 `agent 操作 ▸` 子菜单。
 
 Shared Generative Runtime 是当前作品能力：作品片段和作品补充以本地 runtime bundle 运行，并通过显式 `window.reo` bridge 使用状态、Reo 数据、当前作品标题 mutation、宿主 UI 和 agent prompt action。Reo 只守 host、IPC、file-truth 和 typed mutation 边界，不做 key/token 管理、联网确认、权限弹窗、内容审查或质量审核。
 

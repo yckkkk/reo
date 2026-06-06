@@ -1,0 +1,58 @@
+{
+  "beforeFiles": [
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/entry.html",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/runtime.json",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/state.json",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/widget.md"
+  ],
+  "afterFiles": [
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/entry.html",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/runtime.json",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/state.json",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/widget.md"
+  ],
+  "collapsedProjection": {
+    "hasTabStrip": false,
+    "hasCreateButton": true,
+    "hasStandaloneNewWidgetButton": false,
+    "hasExpandButton": true
+  },
+  "expandedProjection": {
+    "hasMemoryTab": true,
+    "hasStandaloneNewWidgetButton": false,
+    "tabStripRect": {
+      "left": 1084,
+      "top": 3,
+      "right": 1148,
+      "bottom": 33,
+      "width": 64,
+      "height": 30
+    },
+    "titlebarRect": {
+      "left": 240,
+      "top": -6,
+      "right": 1200,
+      "bottom": 42,
+      "width": 960,
+      "height": 48
+    },
+    "createButtonRect": {
+      "left": 1044,
+      "top": 2,
+      "right": 1076,
+      "bottom": 34,
+      "width": 32,
+      "height": 32
+    }
+  },
+  "clipboardLength": 1902,
+  "clipboardFirstLine": "# 创建一个 Reo Workspace 侧栏 Widget",
+  "containsCreateHeading": true,
+  "containsWidgetContract": true,
+  "containsWidgetsRoot": true,
+  "containsMemoryIdRule": true,
+  "containsResponsiveTextRule": true,
+  "containsAbsolutePath": false,
+  "containsComponentTerm": false,
+  "fileSideEffectChanged": false
+}

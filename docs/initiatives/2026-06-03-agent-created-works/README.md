@@ -20,10 +20,10 @@ Reo 新增一种由外部 agent 创建的内容形态：**作品**。
 
 M2 以后，Reo 使用 **Shared Generative Runtime**：
 
-- 作品和未来组件共用同一 runtime object / bundle / bridge / state / template 合同。
-- 作品和组件不按能力分层；区别只在挂载位置和生命周期。
+- 作品和未来 widget 共用同一 runtime object / bundle / bridge / state / template 合同。
+- 作品和 widget 不按能力分层；区别只在挂载位置和生命周期。
 - 作品位于 Segment 或 SegmentSupplement。
-- 组件未来位于 Home、Workspace side tab、Memory panel/tab 等挂载点。
+- widget 位于 Workspace rail，并可在未来扩展到 Home、Memory panel/tab 等挂载点。
 
 Reo 是本地创作宿主，不是作品审查器。用户和用户 agent 创造的 runtime object 默认是用户拥有的小型 Web app。
 
@@ -58,7 +58,8 @@ M2 Shared Generative Runtime 的 works consumer 已完成实现、真实环境 E
 - 支持 runtime state、browser storage、network、agent prompt action、workspace-wide read、作品手动刷新和首批高频 product mutations。
 - `state.json` 写入不重挂宿主 iframe；entry/runtime/assets 变化或用户手动刷新才刷新页面实例。
 - 强化 AGENTS.md 与 skills，让用户不点击 Reo、不复制 prompt 时，agent 也能从记忆空间内快速创建作品。
-- 组件只做合同级预留，不实现组件挂载 UI。
+- widget 只做合同级预留，不实现挂载 UI。
+- M3 Workspace Rail Widgets 完成后，Workspace-level widget 已具备首个右侧 rail 挂载点和文件真源。
 
 ## 完成条件
 
@@ -67,7 +68,7 @@ M2 Shared Generative Runtime 的 works consumer 已完成实现、真实环境 E
 - 作品 Segment 和作品 SegmentSupplement 具备 durable 文件合同、识别路径、删除/恢复路径和 Memory Studio 投影。
 - Shared Generative Runtime 具备每对象 origin、bundle、bridge、state、network 和 agent action 基础能力。
 - 用户 agent 能通过 Reo prompt、AGENTS.md、skills、templates 和 scripts 快速创建可运行作品。
-- 作品和未来组件共用 runtime 能力层，组件挂载点有合同级设计。
+- 作品和 widget 共用 runtime 能力层，Workspace rail widget 挂载点已具备当前实现。
 - Reo 管理的 skill 群直接包含 prompt、模板、token、脚本和设计规则；最终交付给用户 agent 的 skill 不要求 agent 去参考外部项目。
 - 长期事实压缩回 `docs/current/*`，长期边界决策写入 `docs/decisions/*`。
 
@@ -85,6 +86,7 @@ M2 Shared Generative Runtime 的 works consumer 已完成实现、真实环境 E
 ## 关联
 
 - M2 执行记录：`docs/archive/specs/2026-06-03-1205-shared-generative-runtime/`
+- M3 执行记录：`docs/archive/specs/2026-06-05-0515-workspace-rail-widgets/`
 - M0/M1 执行记录：`docs/archive/specs/2026-06-03-0630-agent-created-works-model/`
 - ADR 0006：`docs/decisions/0006-agent-native-carrier-and-generative-ui.md`
 - ADR 0002：`docs/decisions/0002-electron-build-and-security-baseline.md`

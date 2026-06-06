@@ -1,0 +1,19 @@
+已在 `widgets/` 下新增右侧栏 Widget：
+
+[Workspace 总览](</Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试/widgets/wdg_20260605081953_a60052a6--Workspace-总览/widget.md>)
+
+它包含：
+- 记忆列表，可点击调用 `window.reo.ui.selectMemory({ memoryId })` 打开对应 Memory
+- 统计：memories、segments、supplements、works、widgets、needs-review
+- 搜索框和刷新按钮
+- `state.json` 持久保存搜索词和最后点击的 Memory
+- `entry.html` 已按要求加载 Reo bridge
+
+验证已通过：
+
+```text
+validate-runtime: ok=true, issues=[]
+inspect-runtime: ok=true, usesBridge=true
+```
+
+另外当前目录不是 git 仓库，所以没有 git 状态可查。

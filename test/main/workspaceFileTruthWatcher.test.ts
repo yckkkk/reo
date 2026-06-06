@@ -208,6 +208,27 @@ test('workspace file truth watcher ignore rules are path-bound to the workspace 
   assert.equal(
     isIgnoredWorkspaceFileEventPath(
       '/workspace/root',
+      '/workspace/root/widgets/wdg_live/state.json'
+    ),
+    true
+  );
+  assert.equal(
+    isIgnoredWorkspaceFileEventPath(
+      '/workspace/root',
+      '/workspace/root/memories/mem_live/segments/seg_live/state.json'
+    ),
+    true
+  );
+  assert.equal(
+    isIgnoredWorkspaceFileEventPath(
+      '/workspace/root',
+      '/workspace/root/memories/mem_live/segments/seg_live/supplements/sup_live/state.json'
+    ),
+    true
+  );
+  assert.equal(
+    isIgnoredWorkspaceFileEventPath(
+      '/workspace/root',
       '/workspace/root/memories/memory-a/segment.md'
     ),
     false

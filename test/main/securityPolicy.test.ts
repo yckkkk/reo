@@ -47,9 +47,10 @@ test('production content security policy allows attachment images without wideni
 
   assert.ok(directives.get('img-src')?.includes('blob:'));
   assert.ok(directives.get('img-src')?.includes('reo-attachment:'));
+  assert.ok(directives.get('img-src')?.includes('reo-render:'));
   assert.equal(directives.get('connect-src')?.includes('reo-attachment:'), false);
-  assert.equal(directives.get('connect-src')?.includes('reo-artifact:'), false);
-  assert.ok(directives.get('frame-src')?.includes('reo-artifact:'));
+  assert.equal(directives.get('connect-src')?.includes('reo-render:'), false);
+  assert.ok(directives.get('frame-src')?.includes('reo-render:'));
   assert.deepEqual(directives.get('media-src'), ["'self'", 'blob:']);
 });
 
@@ -62,9 +63,10 @@ test('development content security policy allows attachment images without widen
 
   assert.ok(directives.get('img-src')?.includes('blob:'));
   assert.ok(directives.get('img-src')?.includes('reo-attachment:'));
+  assert.ok(directives.get('img-src')?.includes('reo-render:'));
   assert.equal(directives.get('connect-src')?.includes('reo-attachment:'), false);
-  assert.equal(directives.get('connect-src')?.includes('reo-artifact:'), false);
-  assert.ok(directives.get('frame-src')?.includes('reo-artifact:'));
+  assert.equal(directives.get('connect-src')?.includes('reo-render:'), false);
+  assert.ok(directives.get('frame-src')?.includes('reo-render:'));
   assert.deepEqual(directives.get('media-src'), ["'self'", 'blob:']);
 });
 
@@ -89,14 +91,14 @@ test('navigation policy allows artifact iframe navigations without trusting arti
   assert.equal(isAllowedAppNavigationUrl(artifactUrl, { isMainFrame: true }), false);
   assert.equal(
     isAllowedAppNavigationUrl(
-      `reo-artifact://${host}/workspaces/ws_1/segments/seg_1/assets/style.css?v=1`,
+      `reo-render://${host}/workspaces/ws_1/segments/seg_1/assets/style.css?v=1`,
       { isMainFrame: false }
     ),
     false
   );
   assert.equal(
     isAllowedAppNavigationUrl(
-      `reo-artifact://${host}/workspaces/ws_1/segments/seg_1/payload.html?v=1`,
+      `reo-render://${host}/workspaces/ws_1/segments/seg_1/payload.html?v=1`,
       { isMainFrame: false }
     ),
     false

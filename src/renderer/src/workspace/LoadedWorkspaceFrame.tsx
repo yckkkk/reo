@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { showReoToast, toast } from '../components/ui/toaster';
 import { ExpressionDock } from './expression/ExpressionDock';
 import {
@@ -18,6 +18,7 @@ import {
 } from './MemoryStudio';
 import { closeAudioWaveformDecoder } from './audioWaveform';
 import { MemoryRail } from './MemoryRail';
+import { WorkspaceWidgetPanel } from './WorkspaceWidgetPanel';
 import type {
   SegmentSupplementDeleteTarget,
   SegmentSupplementRenameTarget,
@@ -30,7 +31,11 @@ import type {
 } from './segmentActionTargets';
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
-import type { WorkspaceMemorySummary, WorkspaceSession } from './workspaceApi';
+import type {
+  WorkspaceMemorySummary,
+  WorkspaceSession,
+  WorkspaceWidgetProjection,
+} from './workspaceApi';
 import type {
   SavedNoteSegmentContent,
   SavedNoteSegmentSupplementContent,
@@ -38,12 +43,14 @@ import type {
 import { copyArtifactAgentPrompt, copyNeedsReviewAgentPrompt } from './workspaceApi';
 import { workspaceSnapshotQueryOptions } from './workspaceQueries';
 import { workspaceReviewToastId } from './workspaceReviewToast';
+import type { WorkspaceRailTab } from './workspaceRailTabs';
 
 type LoadedWorkspaceFrameProps = {
   readonly currentMemory?: WorkspaceMemorySummary | null;
   readonly expressionDockVisible?: boolean;
   readonly memoryRailOpen?: boolean;
   readonly memoryRailMode?: 'inline' | 'overlay';
+  readonly activeRailTab?: WorkspaceRailTab;
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
@@ -75,13 +82,16 @@ type LoadedWorkspaceFrameProps = {
   readonly speechSynthesis?: SpeechSynthesisController;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
   readonly onSegmentFocusConsumed?: (segmentId: string) => void;
-  readonly onSelectMemory: (memoryId: string) => void;
+  readonly onSelectMemory: (memoryId: string) => boolean | void;
+  readonly onRequestWidgetUpdate?: ((widget: WorkspaceWidgetProjection) => void) | undefined;
+  readonly onWidgetRuntimeMutation?: ((value: unknown) => boolean) | undefined;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly segmentFocusIntent?: string | null;
   readonly shownReviewToastSessionKey?: string | null;
   readonly workspaceSession: WorkspaceSession;
+  readonly widgetRefreshVersions?: Readonly<Record<string, number>>;
   readonly onStartRecording: () => void;
 };
 
@@ -140,6 +150,7 @@ export function LoadedWorkspaceFrame({
   expressionDockVisible = true,
   memoryRailOpen = true,
   memoryRailMode = 'inline',
+  activeRailTab = { kind: 'memories' },
   onDeleteMemory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
@@ -162,6 +173,8 @@ export function LoadedWorkspaceFrame({
   transcriptionBackfill,
   onSegmentFocusConsumed,
   onSelectMemory,
+  onRequestWidgetUpdate = () => undefined,
+  onWidgetRuntimeMutation,
   onStartNote,
   onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
@@ -169,7 +182,9 @@ export function LoadedWorkspaceFrame({
   segmentFocusIntent = null,
   shownReviewToastSessionKey,
   workspaceSession,
+  widgetRefreshVersions = {},
 }: LoadedWorkspaceFrameProps) {
+  const queryClient = useQueryClient();
   const snapshotQuery = useQuery(workspaceSnapshotQueryOptions(workspaceSession));
   const snapshot = snapshotQuery.data ?? workspaceSession.snapshot;
   const needsReviewCount = snapshot.review?.needsReviewCount ?? 0;
@@ -206,11 +221,14 @@ export function LoadedWorkspaceFrame({
   const renameSegmentSupplement = useStableEventCallback(onRenameSegmentSupplement);
   const inlineMarkdownDirtyChange = useStableOptionalEventCallback(onInlineMarkdownDirtyChange);
   const segmentFocusConsumed = useStableOptionalEventCallback(onSegmentFocusConsumed);
-  const selectMemory = useStableEventCallback(onSelectMemory);
+  const selectMemory = useStableEventCallback(
+    (memoryId: string) => onSelectMemory(memoryId) !== false
+  );
   const startNote = useStableOptionalEventCallback(onStartNote);
   const startSegmentSupplementNote = useStableOptionalEventCallback(onStartSegmentSupplementNote);
   const startSegmentSupplementRecording = useStableEventCallback(onStartSegmentSupplementRecording);
   const startRecording = useStableEventCallback(onStartRecording);
+  const requestWidgetUpdate = useStableEventCallback(onRequestWidgetUpdate);
   const hasInlineMarkdownDirtyChange = onInlineMarkdownDirtyChange !== undefined;
   const hasSegmentFocusConsumed = onSegmentFocusConsumed !== undefined;
   const hasStartNote = onStartNote !== undefined;
@@ -393,31 +411,64 @@ export function LoadedWorkspaceFrame({
     };
   }, [audioResourceCaches, workspaceSession.workspaceHandle]);
 
+  const refreshAfterWidgetRuntimeMutation = useCallback(
+    (value: unknown) => {
+      if (onWidgetRuntimeMutation?.(value)) {
+        return;
+      }
+      void queryClient.invalidateQueries({
+        queryKey: workspaceSnapshotQueryOptions(workspaceSession).queryKey,
+      });
+    },
+    [onWidgetRuntimeMutation, queryClient, workspaceSession]
+  );
+  const activeWidget =
+    memoryRailOpen && activeRailTab.kind === 'widget'
+      ? (snapshot.widgets?.find((widget) => widget.widgetId === activeRailTab.widgetId) ?? null)
+      : null;
   const memoryRail = useMemo(
-    () => (
-      <MemoryRail
-        id={WORKSPACE_MEMORY_RAIL_ID}
-        activeMemoryId={currentMemory?.memoryId ?? null}
-        memories={snapshot.memories}
-        onDeleteMemory={deleteMemory}
-        onRenameMemory={renameMemory}
-        onResetMemoryCover={resetMemoryCover}
-        onSwitchMemoryDefaultCover={switchMemoryDefaultCover}
-        onSelectMemory={selectMemory}
-        workspaceHandle={workspaceSession.workspaceHandle}
-        workspaceId={workspaceSession.workspaceId}
-      />
-    ),
+    () =>
+      activeWidget ? (
+        <WorkspaceWidgetPanel
+          currentMemory={currentMemory}
+          id={WORKSPACE_MEMORY_RAIL_ID}
+          onProductMutation={refreshAfterWidgetRuntimeMutation}
+          onRequestAgentUpdate={requestWidgetUpdate}
+          onSelectMemory={selectMemory}
+          refreshVersion={widgetRefreshVersions[activeWidget.widgetId] ?? 0}
+          widget={activeWidget}
+          workspaceSession={workspaceSession}
+        />
+      ) : (
+        <MemoryRail
+          id={WORKSPACE_MEMORY_RAIL_ID}
+          activeMemoryId={currentMemory?.memoryId ?? null}
+          memories={snapshot.memories}
+          onDeleteMemory={deleteMemory}
+          onRenameMemory={renameMemory}
+          onResetMemoryCover={resetMemoryCover}
+          onSwitchMemoryDefaultCover={switchMemoryDefaultCover}
+          onSelectMemory={selectMemory}
+          workspaceHandle={workspaceSession.workspaceHandle}
+          workspaceId={workspaceSession.workspaceId}
+        />
+      ),
     [
+      activeWidget,
       currentMemory?.memoryId,
+      currentMemory,
       deleteMemory,
       renameMemory,
       resetMemoryCover,
+      requestWidgetUpdate,
+      refreshAfterWidgetRuntimeMutation,
       selectMemory,
       snapshot.memories,
       switchMemoryDefaultCover,
+      widgetRefreshVersions,
       workspaceSession.workspaceHandle,
       workspaceSession.workspaceId,
+      workspaceSession,
     ]
   );
   const expressionDock = useMemo(

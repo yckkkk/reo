@@ -5,7 +5,7 @@
 ## 排序原则
 
 - 从 Reo 产品模型出发：作品是 Memory-bound 或 Segment-bound 产物，不是通用 HTML 文件。
-- 作品和未来组件共享 runtime 能力层；区别在挂载位置和生命周期，不在能力等级。
+- 作品和 widget 共享 runtime 能力层；区别在挂载位置和生命周期，不在能力等级。
 - Reo 是本地创作宿主，不是作品审查器；用户和用户 agent 承担作品内容、联网以及作品内部值使用风险。
 - Runtime 默认放大用户创作自由；Reo 只守宿主边界和文件真源边界。
 - 创建和更新优先保持 agent-native：Reo 复制上下文，外部 agent 写文件；M2 增加 runtime 内 agent prompt action。
@@ -45,7 +45,7 @@
 
 执行记录：`docs/archive/specs/2026-06-03-1205-shared-generative-runtime/`
 
-当前状态：M2 works consumer 已完成。真实环境 E2E 覆盖 workspace-wide runtime read、作品手动刷新和 state 写入不重挂 iframe；xhigh 审查与 `verify:quick` 已通过。M3+ 未排期。
+当前状态：M2 works consumer 已完成。真实环境 E2E 覆盖 workspace-wide runtime read、作品手动刷新和 state 写入不重挂 iframe；xhigh 审查与 `verify:quick` 已通过。
 
 交付：
 
@@ -58,21 +58,35 @@
 - Reo 不提供作品 key、token 或 hidden value store；用户和 agent 在作品文件、浏览器存储或普通 Web 能力内自行处理这些取舍。
 - 普通 Web 网络和框架/CDN 支持，不做 Reo CORS proxy。
 - agent creation skill、宽模板矩阵、scaffold/validate/inspect 脚本。
-- 组件挂载点合同级预留。
+- widget 挂载点合同级预留。
 - 三类验证样例：todo/复习表、普通 Web 状态工具、Reo 内容工具。
 
 完成门槛：用户给一个想法，agent 能快速生成可运行、可交互、可持久化的作品；runtime 能证明 state、普通 Web 网络、bridge、workspace-wide read、手动刷新和首批 product mutation 能力。
 
-### M3+ - 组件挂载与完整形态联动
+### M3 - Workspace Rail Widgets（已完成）
 
-M2 收口验证完成后再按需单独排期：
+执行记录：`docs/archive/specs/2026-06-05-0515-workspace-rail-widgets/`
 
-- Workspace/Home/Memory tab 等组件挂载 UI。
+交付：
+
+- Workspace-level widget 文件真源：`widgets/<widget-id--title>/widget.md`、`entry.html`、`runtime.json`、`state.json`、`assets/`。
+- 右侧 rail 首个 widget 挂载点：单一 `新增` 菜单创建 Memory 或 Widget；rail 展开后投影记忆列表 tab 与 widget tabs，并和折叠按钮同排协作。
+- Widget tab 支持 hover more 菜单、拖拽排序、重命名、删除/恢复、Finder/open/copy path、agent 更新 prompt 和刷新页面。
+- Widget iframe 与记忆列表同属 rail 内容区；切换 tab 或关闭 rail 时卸载 iframe，长期状态只依赖 `state.json`。
+- `reo-render://` runtime protocol 同时服务作品和 widget。
+- `window.reo.ui.selectMemory({ memoryId })` 支持 widget 切换主内容当前 Memory。
+
+完成门槛：Workspace-level widget 能通过外部 agent 文件写入进入 Reo rail，和记忆列表并列展开、切换、排序、更新、删除/恢复，并通过 `verify:quick`。
+
+### M4+ - Widget 完整形态联动
+
+M3 收口验证完成后再按需单独排期：
+
+- Home/Memory tab 等 widget 挂载 UI。
 - Gallery 走马灯。
-- Workspace-level runtime object。
 - 回顾 mechanics、复习日历、跨 Memory 工具等。
 
-它们复用 M2 Shared Generative Runtime，不重建一套能力层。
+它们复用 Shared Generative Runtime，不重建一套能力层。
 
 ## 收口
 

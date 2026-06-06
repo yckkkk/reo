@@ -5,7 +5,11 @@ import {
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
+  WORKSPACE_DELETE_WIDGET_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
@@ -17,6 +21,7 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
+  WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
@@ -30,6 +35,7 @@ import {
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
@@ -48,11 +54,14 @@ import {
   WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+  WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
   WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_TITLE_CHANNEL,
@@ -231,17 +240,21 @@ import {
   type WorkspaceRevealMemoryInFinderRequest,
   type WorkspaceRevealSegmentInFinderRequest,
   type WorkspaceRevealSegmentSupplementInFinderRequest,
+  type WorkspaceRevealWidgetInFinderRequest,
   type WorkspaceOpenMemorySpaceAgentsFileRequest,
   type WorkspaceOpenMemoryDocumentRequest,
   type WorkspaceOpenSegmentDocumentRequest,
   type WorkspaceOpenSegmentSupplementDocumentRequest,
+  type WorkspaceOpenWidgetDocumentRequest,
   type WorkspaceCopyMemorySpaceAbsolutePathRequest,
   type WorkspaceCopyMemoryAbsolutePathRequest,
   type WorkspaceCopySegmentAbsolutePathRequest,
   type WorkspaceCopySegmentSupplementAbsolutePathRequest,
+  type WorkspaceCopyWidgetAbsolutePathRequest,
   type WorkspaceCopyMemoryRelativePathRequest,
   type WorkspaceCopySegmentRelativePathRequest,
   type WorkspaceCopySegmentSupplementRelativePathRequest,
+  type WorkspaceCopyWidgetRelativePathRequest,
   type WorkspaceEntityActionResponse,
 } from '../../src/workspace-contract/workspace-contract.js';
 
@@ -250,17 +263,21 @@ type WorkspaceEntityActionRequest =
   | WorkspaceRevealMemoryInFinderRequest
   | WorkspaceRevealSegmentInFinderRequest
   | WorkspaceRevealSegmentSupplementInFinderRequest
+  | WorkspaceRevealWidgetInFinderRequest
   | WorkspaceOpenMemorySpaceAgentsFileRequest
   | WorkspaceOpenMemoryDocumentRequest
   | WorkspaceOpenSegmentDocumentRequest
   | WorkspaceOpenSegmentSupplementDocumentRequest
+  | WorkspaceOpenWidgetDocumentRequest
   | WorkspaceCopyMemorySpaceAbsolutePathRequest
   | WorkspaceCopyMemoryAbsolutePathRequest
   | WorkspaceCopySegmentAbsolutePathRequest
   | WorkspaceCopySegmentSupplementAbsolutePathRequest
+  | WorkspaceCopyWidgetAbsolutePathRequest
   | WorkspaceCopyMemoryRelativePathRequest
   | WorkspaceCopySegmentRelativePathRequest
-  | WorkspaceCopySegmentSupplementRelativePathRequest;
+  | WorkspaceCopySegmentSupplementRelativePathRequest
+  | WorkspaceCopyWidgetRelativePathRequest;
 
 function assertWorkspaceEntityActionRequest(_request: WorkspaceEntityActionRequest): void {
   void _request;
@@ -359,6 +376,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
     'workspace:restoreDeletedSegmentSupplement',
+    'workspace:deleteWidget',
+    'workspace:restoreDeletedWidget',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentSupplement',
@@ -395,6 +414,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:updateSegmentContentTitle',
     'workspace:updateSegmentSupplementTitle',
     'workspace:updateSegmentContentTabOrder',
+    'workspace:updateWidgetTitle',
+    'workspace:updateWidgetTabOrder',
     'workspace:saveTranscript',
     'workspace:saveSegmentSupplementTranscript',
     'workspace:requestSegmentTranscriptionBackfill',
@@ -420,18 +441,23 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
     'workspace:revealSegmentSupplementInFinder',
+    'workspace:revealWidgetInFinder',
     'workspace:openMemorySpaceAgentsFile',
     'workspace:openMemoryDocument',
     'workspace:openSegmentDocument',
     'workspace:openSegmentSupplementDocument',
+    'workspace:openWidgetDocument',
     'workspace:copyMemorySpaceAbsolutePath',
     'workspace:copyMemoryAbsolutePath',
     'workspace:copySegmentAbsolutePath',
     'workspace:copySegmentSupplementAbsolutePath',
+    'workspace:copyWidgetAbsolutePath',
     'workspace:copyMemoryRelativePath',
     'workspace:copySegmentRelativePath',
     'workspace:copySegmentSupplementRelativePath',
+    'workspace:copyWidgetRelativePath',
     'workspace:copyArtifactAgentPrompt',
+    'workspace:copyWidgetAgentPrompt',
     'workspace:readArtifactRuntimeState',
     'workspace:writeArtifactRuntimeState',
     'workspace:copyNeedsReviewAgentPrompt',
@@ -466,6 +492,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_RESTORE_DELETED_SEGMENT_SUPPLEMENT_CHANNEL,
       'workspace:restoreDeletedSegmentSupplement',
     ],
+    [WORKSPACE_DELETE_WIDGET_CHANNEL, 'workspace:deleteWidget'],
+    [WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL, 'workspace:restoreDeletedWidget'],
     [WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot'],
     [WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail'],
     [WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL, 'workspace:readFinalizedAudioSegment'],
@@ -488,6 +516,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL, 'workspace:updateSegmentContentTitle'],
     [WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL, 'workspace:updateSegmentSupplementTitle'],
     [WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL, 'workspace:updateSegmentContentTabOrder'],
+    [WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL, 'workspace:updateWidgetTitle'],
+    [WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL, 'workspace:updateWidgetTabOrder'],
     [WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle'],
     [
       WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -554,6 +584,11 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       'workspace:openVoiceTranscriptionProviderConsole',
     ],
     [WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL, 'workspace:openMarkdownExternalLink'],
+    [WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL, 'workspace:revealWidgetInFinder'],
+    [WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL, 'workspace:openWidgetDocument'],
+    [WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL, 'workspace:copyWidgetAbsolutePath'],
+    [WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL, 'workspace:copyWidgetRelativePath'],
+    [WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL, 'workspace:copyWidgetAgentPrompt'],
   ];
 
   for (const [actual, expected] of namedChannelContracts) {

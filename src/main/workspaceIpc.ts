@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { closeSync, constants, fstatSync, readSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import type { Session } from 'electron';
@@ -15,6 +15,9 @@ import {
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_MEMORY_RELATIVE_PATH_CHANNEL,
@@ -28,6 +31,7 @@ import {
   WORKSPACE_CREATE_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_DELETE_WIDGET_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
@@ -43,6 +47,7 @@ import {
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MEMORY_SPACE_CHANNEL,
@@ -63,6 +68,7 @@ import {
   WORKSPACE_READ_SEGMENT_SUPPLEMENT_CONTENT_CHANNEL,
   WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
+  WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
@@ -70,6 +76,7 @@ import {
   WORKSPACE_REMOVE_MEMORY_SPACE_CHANNEL,
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
@@ -94,6 +101,8 @@ import {
   WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
+  WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
@@ -139,12 +148,16 @@ import {
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
+  workspaceOpenWidgetDocumentRequestSchema,
   workspaceOpenMemoryDocumentRequestSchema,
   workspaceOpenMemorySpaceRequestSchema,
   workspaceOpenMemorySpaceAgentsFileRequestSchema,
   workspaceOpenSegmentDocumentRequestSchema,
   workspaceOpenSegmentSupplementDocumentRequestSchema,
   workspaceCopyArtifactAgentPromptRequestSchema,
+  workspaceCopyWidgetAbsolutePathRequestSchema,
+  workspaceCopyWidgetAgentPromptRequestSchema,
+  workspaceCopyWidgetRelativePathRequestSchema,
   workspaceCopyMemoryAbsolutePathRequestSchema,
   workspaceCopyMemorySpaceAbsolutePathRequestSchema,
   workspaceCopyMemoryRelativePathRequestSchema,
@@ -183,6 +196,7 @@ import {
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
+  workspaceRevealWidgetInFinderRequestSchema,
   workspaceRevealMemoryInFinderRequestSchema,
   workspaceRevealMemorySpaceInFinderRequestSchema,
   workspaceRevealSegmentInFinderRequestSchema,
@@ -195,12 +209,16 @@ import {
   workspaceResetSegmentCoverResponseSchema,
   workspaceRecordingAppendRequestSchema,
   workspaceRecordingAppendResponseSchema,
+  workspaceDeleteWidgetRequestSchema,
+  workspaceDeleteWidgetResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceRestoreMemoryCoverRequestSchema,
   workspaceRestoreMemoryCoverResponseSchema,
   workspaceRestoreSegmentCoverRequestSchema,
   workspaceRestoreSegmentCoverResponseSchema,
+  workspaceRestoreDeletedWidgetRequestSchema,
+  workspaceRestoreDeletedWidgetResponseSchema,
   workspaceSwitchMemoryDefaultCoverRequestSchema,
   workspaceSwitchMemoryDefaultCoverResponseSchema,
   workspaceSwitchSegmentDefaultCoverRequestSchema,
@@ -260,6 +278,10 @@ import {
   workspaceUpdateActiveMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleResponseSchema,
+  workspaceUpdateWidgetTabOrderRequestSchema,
+  workspaceUpdateWidgetTabOrderResponseSchema,
+  workspaceUpdateWidgetTitleRequestSchema,
+  workspaceUpdateWidgetTitleResponseSchema,
   workspaceUpdateMemoryTitleRequestSchema,
   workspaceUpdateMemoryTitleResponseSchema,
   workspaceUpdateSegmentContentTabOrderRequestSchema,
@@ -280,6 +302,7 @@ import {
   workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema,
   type WorkspaceCopyArtifactAgentPromptRequest,
+  type WorkspaceCopyWidgetAgentPromptRequest,
   type WorkspaceEntityActionResponse,
   type WorkspaceInitializeResponse,
   type WorkspaceChooseDirectoryResponse,
@@ -390,6 +413,20 @@ import {
   updateSegmentSupplementTitleFromFileTruth,
   updateSegmentTitleFromFileTruth,
 } from './memoryFiles.js';
+import {
+  assertSameDirectoryIdentitySync,
+  readSafeDirectoryIdentitySync,
+} from './directoryIdentity.js';
+import { openExistingWorkspaceFileInDirectory } from './workspaceDirectoryTransactions.js';
+import {
+  widgetDocumentPath,
+  deleteWorkspaceWidgetFromFileTruth,
+  readWorkspaceWidgetMarkdownFromDirectory,
+  resolveWorkspaceWidgetDirectoryFromFileTruth,
+  restoreDeletedWorkspaceWidgetFromFileTruth,
+  updateWorkspaceWidgetTabOrderFromFileTruth,
+  updateWorkspaceWidgetTitleFromFileTruth,
+} from './workspaceWidgets.js';
 import {
   clearAllMicrophoneIntents,
   clearMicrophoneIntent,
@@ -750,11 +787,23 @@ interface HandleCopySegmentSupplementRelativePathOptions extends HandleWorkspace
   readonly writeText?: WriteClipboardText;
 }
 
+interface HandleCopyWidgetAbsolutePathOptions extends HandleWorkspaceRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopyWidgetRelativePathOptions extends HandleWorkspaceRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
 interface HandleCopyNeedsReviewAgentPromptOptions extends HandleWorkspaceRequestOptions {
   readonly writeText?: WriteClipboardText;
 }
 
 interface HandleCopyArtifactAgentPromptOptions extends HandleWorkspaceRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
+interface HandleCopyWidgetAgentPromptOptions extends HandleWorkspaceRequestOptions {
   readonly writeText?: WriteClipboardText;
 }
 
@@ -791,6 +840,14 @@ interface HandleRevealSegmentSupplementInFinderOptions extends HandleWorkspaceRe
 interface HandleOpenSegmentSupplementDocumentOptions extends HandleWorkspaceRequestOptions {
   readonly fs?: FsProbe;
   readonly resolver?: ResolveSegmentSupplementPaths;
+  readonly openPath?: OpenPath;
+}
+
+interface HandleRevealWidgetInFinderOptions extends HandleWorkspaceRequestOptions {
+  readonly showItemInFolder?: ShowItemInFolder;
+}
+
+interface HandleOpenWidgetDocumentOptions extends HandleWorkspaceRequestOptions {
   readonly openPath?: OpenPath;
 }
 
@@ -1253,9 +1310,70 @@ export async function handleCopyArtifactAgentPromptForTest(
   return handleCopyArtifactAgentPromptCore(options);
 }
 
+function handleCopyWidgetAgentPromptCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyWidgetAgentPromptOptions): Promise<
+  WorkspaceEntityActionResponse | WorkspaceErrorEnvelope
+> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceCopyWidgetAgentPromptRequestSchema,
+    invalidMessage: 'copyWidgetAgentPrompt request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Widget prompt copy workspace does not match the active handle'
+          );
+        }
+
+        const target = await resolveWidgetAgentPromptTarget({ handle, request });
+        if (!target.ok) {
+          return target;
+        }
+
+        try {
+          writeText(
+            buildWorkspaceWidgetAgentPrompt({
+              request,
+              targetDirectoryRelative: target.targetDirectoryRelative,
+            })
+          );
+        } catch {
+          return workspaceError('ERR_CLIPBOARD_WRITE_FAILED', 'Widget prompt could not be copied');
+        }
+
+        return workspaceEntityActionResponseSchema.parse({ ok: true });
+      }),
+  });
+}
+
+export async function handleCopyWidgetAgentPrompt(
+  options: HandleCopyWidgetAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return handleCopyWidgetAgentPromptCore(options);
+}
+
+export async function handleCopyWidgetAgentPromptForTest(
+  options: HandleCopyWidgetAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse | WorkspaceErrorEnvelope> {
+  return handleCopyWidgetAgentPromptCore(options);
+}
+
 function artifactRuntimeTargetFromRequest(
   request: z.infer<typeof workspaceReadArtifactRuntimeStateRequestSchema>
 ): ArtifactRuntimeTarget {
+  if (request.targetType === 'widget') {
+    return {
+      targetType: 'widget',
+      workspaceId: request.workspaceId,
+      widgetId: request.widgetId,
+    };
+  }
   if (request.targetType === 'supplement') {
     return {
       targetType: 'supplement',
@@ -1901,6 +2019,179 @@ export async function handleOpenSegmentSupplementDocumentForTest(
   options: HandleOpenSegmentSupplementDocumentOptions
 ): Promise<WorkspaceEntityActionResponse> {
   return handleOpenSegmentSupplementDocumentCore(options);
+}
+
+function handleRevealWidgetInFinderCore({
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealWidgetInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
+    schema: workspaceRevealWidgetInFinderRequestSchema,
+    invalidMessage: 'revealWidgetInFinder request is invalid',
+    workspaceMismatchMessage: 'Widget reveal workspace does not match the active handle',
+    resolveFailureMessage: 'Widget path could not be resolved',
+    resolve: (request, handle) =>
+      resolveWidgetPaths({
+        widgetId: request.widgetId,
+        handle,
+        workspaceId: request.workspaceId,
+      }),
+    run: (paths) =>
+      revealEntityDirectory({
+        paths,
+        fs: nodeFsProbe,
+        missingCode: 'ERR_WORKSPACE_WIDGET_NOT_FOUND',
+        missingMessage: 'Widget path is missing',
+        unsafeMessage: 'Widget path is unsafe',
+        showItemInFolder,
+        failureMessage: 'Widget could not be revealed',
+      }),
+  });
+}
+
+export async function handleRevealWidgetInFinder(
+  options: HandleRevealWidgetInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealWidgetInFinderCore(options);
+}
+
+export async function handleRevealWidgetInFinderForTest(
+  options: HandleRevealWidgetInFinderOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleRevealWidgetInFinderCore(options);
+}
+
+function handleOpenWidgetDocumentCore({
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenWidgetDocumentOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
+    schema: workspaceOpenWidgetDocumentRequestSchema,
+    invalidMessage: 'openWidgetDocument request is invalid',
+    workspaceMismatchMessage: 'Widget document workspace does not match the active handle',
+    resolveFailureMessage: 'Widget document path could not be resolved',
+    resolve: (request, handle) =>
+      resolveWidgetPaths({
+        widgetId: request.widgetId,
+        handle,
+        workspaceId: request.workspaceId,
+      }),
+    run: (paths) =>
+      openEntityDocument({
+        paths,
+        fs: nodeFsProbe,
+        missingCode: 'ERR_ENTITY_DOCUMENT_MISSING',
+        missingMessage: 'Widget document is missing',
+        unsafeMessage: 'Widget document path is unsafe',
+        openPath,
+        failureMessage: 'Widget document could not be opened',
+      }),
+  });
+}
+
+export async function handleOpenWidgetDocument(
+  options: HandleOpenWidgetDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenWidgetDocumentCore(options);
+}
+
+export async function handleOpenWidgetDocumentForTest(
+  options: HandleOpenWidgetDocumentOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleOpenWidgetDocumentCore(options);
+}
+
+function handleCopyWidgetAbsolutePathCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyWidgetAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
+    schema: workspaceCopyWidgetAbsolutePathRequestSchema,
+    invalidMessage: 'copyWidgetAbsolutePath request is invalid',
+    workspaceMismatchMessage: 'Widget path copy workspace does not match the active handle',
+    resolveFailureMessage: 'Widget path could not be resolved',
+    resolve: (request, handle) =>
+      resolveWidgetPaths({
+        widgetId: request.widgetId,
+        handle,
+        workspaceId: request.workspaceId,
+      }),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: nodeFsProbe,
+        pathKind: 'absolute',
+        missingCode: 'ERR_WORKSPACE_WIDGET_NOT_FOUND',
+        missingMessage: 'Widget path is missing',
+        unsafeMessage: 'Widget path is unsafe',
+        writeText,
+        failureMessage: 'Widget path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopyWidgetAbsolutePath(
+  options: HandleCopyWidgetAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyWidgetAbsolutePathCore(options);
+}
+
+export async function handleCopyWidgetAbsolutePathForTest(
+  options: HandleCopyWidgetAbsolutePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyWidgetAbsolutePathCore(options);
+}
+
+function handleCopyWidgetRelativePathCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyWidgetRelativePathOptions): Promise<WorkspaceEntityActionResponse> {
+  return handleWorkspaceEntityActionRequest({
+    options,
+    channel: WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
+    schema: workspaceCopyWidgetRelativePathRequestSchema,
+    invalidMessage: 'copyWidgetRelativePath request is invalid',
+    workspaceMismatchMessage:
+      'Widget relative path copy workspace does not match the active handle',
+    resolveFailureMessage: 'Widget relative path could not be resolved',
+    resolve: (request, handle) =>
+      resolveWidgetPaths({
+        widgetId: request.widgetId,
+        handle,
+        workspaceId: request.workspaceId,
+      }),
+    run: (paths, handle) =>
+      copyEntityDirectoryPath({
+        paths,
+        handle,
+        fs: nodeFsProbe,
+        pathKind: 'relative',
+        missingCode: 'ERR_WORKSPACE_WIDGET_NOT_FOUND',
+        missingMessage: 'Widget relative path is missing',
+        unsafeMessage: 'Widget relative path is unsafe',
+        writeText,
+        failureMessage: 'Widget relative path could not be copied',
+      }),
+  });
+}
+
+export async function handleCopyWidgetRelativePath(
+  options: HandleCopyWidgetRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyWidgetRelativePathCore(options);
+}
+
+export async function handleCopyWidgetRelativePathForTest(
+  options: HandleCopyWidgetRelativePathOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyWidgetRelativePathCore(options);
 }
 
 async function persistMemorySpaceTitleUpdate({
@@ -3305,13 +3596,18 @@ type EntityDocumentPaths = {
   readonly documentAbsolute: string;
 };
 
+type WidgetPaths = EntityDirectoryPaths & EntityDocumentPaths;
+
 type EntityActionMissingPathCode =
   | 'ERR_WORKSPACE_ROOT_MISSING'
   | 'ERR_WORKSPACE_MEMORY_NOT_FOUND'
   | 'ERR_WORKSPACE_SEGMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND'
+  | 'ERR_WORKSPACE_WIDGET_NOT_FOUND'
   | 'ERR_MEMORY_SPACE_AGENTS_FILE_MISSING'
   | 'ERR_ENTITY_DOCUMENT_MISSING';
+
+const PROMPT_TARGET_MARKDOWN_MAX_BYTES = 1_048_576;
 
 function entityActionFsForResolver<Resolver>(
   fs: FsProbe | undefined,
@@ -3526,6 +3822,73 @@ function workspaceRelativePosixPath(handle: RequiredWorkspaceHandle, absolutePat
   return path.relative(handle.canonicalRoot, absolutePath).split(path.sep).join('/');
 }
 
+function readPromptTargetMarkdown(documentAbsolute: string): string {
+  const directory = path.dirname(documentAbsolute);
+  const directoryIdentity = readSafeDirectoryIdentitySync(
+    directory,
+    'Prompt target directory is not safe'
+  );
+  const fd = openExistingWorkspaceFileInDirectory({
+    directory,
+    directoryIdentity,
+    fileName: path.basename(documentAbsolute),
+    flags: constants.O_RDONLY | constants.O_NOFOLLOW,
+  });
+  try {
+    const stats = fstatSync(fd);
+    if (!stats.isFile()) {
+      throw new Error('Prompt target document is not safe');
+    }
+    if (stats.size > PROMPT_TARGET_MARKDOWN_MAX_BYTES) {
+      throw new Error('Prompt target document is too large');
+    }
+    const buffer = Buffer.allocUnsafe(stats.size);
+    let offset = 0;
+    while (offset < stats.size) {
+      const bytesRead = readSync(fd, buffer, offset, stats.size - offset, offset);
+      if (bytesRead <= 0) {
+        throw new Error('Prompt target document changed during read');
+      }
+      offset += bytesRead;
+    }
+    assertSameDirectoryIdentitySync(
+      directory,
+      directoryIdentity,
+      'Prompt target directory changed'
+    );
+    return buffer.toString('utf8');
+  } finally {
+    closeSync(fd);
+  }
+}
+
+async function resolveWidgetPaths({
+  widgetId,
+  handle,
+  workspaceId,
+}: {
+  readonly widgetId: string;
+  readonly handle: RequiredWorkspaceHandle;
+  readonly workspaceId: string;
+}): Promise<ResolverResult<WidgetPaths>> {
+  try {
+    const directoryAbsolute = await resolveWorkspaceWidgetDirectoryFromFileTruth({
+      rootPath: handle.canonicalRoot,
+      workspaceId,
+      widgetId,
+    });
+    return {
+      ok: true,
+      value: {
+        directoryAbsolute,
+        documentAbsolute: widgetDocumentPath(directoryAbsolute),
+      },
+    };
+  } catch {
+    return { ok: false, code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND' };
+  }
+}
+
 async function resolveArtifactPromptTargetDirectory({
   handle,
   request,
@@ -3602,7 +3965,7 @@ async function requireArtifactPromptTarget({
 }): Promise<WorkspaceErrorEnvelope | null> {
   let markdown: string;
   try {
-    markdown = await readFile(documentAbsolute, 'utf8');
+    markdown = readPromptTargetMarkdown(documentAbsolute);
   } catch {
     return workspaceError(
       'ERR_ENTITY_DOCUMENT_MISSING',
@@ -3737,6 +4100,146 @@ function buildWorkspaceArtifactAgentPrompt({
     '- 不要创建新的作品对象。',
     '- 保留 `supplement.md` 中已有 `id`，继续保持 `kind: artifact` 与 `format: html`。',
     '- 更新 runtime bundle，必要时同步 `supplement.md` 的标题或摘要字段。',
+  ].join('\n');
+}
+
+async function resolveWidgetAgentPromptTarget({
+  handle,
+  request,
+}: {
+  readonly handle: RequiredWorkspaceHandle;
+  readonly request: WorkspaceCopyWidgetAgentPromptRequest;
+}): Promise<
+  { readonly ok: true; readonly targetDirectoryRelative: string } | WorkspaceErrorEnvelope
+> {
+  if (request.action === 'create-widget') {
+    return { ok: true, targetDirectoryRelative: 'widgets' };
+  }
+
+  const resolved = await resolveWidgetPaths({
+    widgetId: request.widgetId,
+    handle,
+    workspaceId: request.workspaceId,
+  });
+  if (!resolved.ok) {
+    return workspaceError(resolved.code, 'Widget prompt target could not be resolved');
+  }
+
+  const validationError = await requireWidgetPromptTarget({
+    directoryAbsolute: resolved.value.directoryAbsolute,
+  });
+  return (
+    validationError ?? {
+      ok: true,
+      targetDirectoryRelative: workspaceRelativePosixPath(handle, resolved.value.directoryAbsolute),
+    }
+  );
+}
+
+async function requireWidgetPromptTarget({
+  directoryAbsolute,
+}: {
+  readonly directoryAbsolute: string;
+}): Promise<WorkspaceErrorEnvelope | null> {
+  let markdown: string;
+  try {
+    markdown = await readWorkspaceWidgetMarkdownFromDirectory(directoryAbsolute);
+  } catch {
+    return workspaceError(
+      'ERR_ENTITY_DOCUMENT_MISSING',
+      'Widget prompt target could not be resolved'
+    );
+  }
+
+  try {
+    parseWorkspaceMarkdownObject({ markdown, objectType: 'widget' });
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'Widget prompt target is not a workspace rail widget'
+    );
+  }
+
+  const entryState = await safeFileForAction(
+    nodeFsProbe,
+    path.join(directoryAbsolute, ARTIFACT_RUNTIME_ENTRY_FILE)
+  );
+  if (entryState === 'unsafe') {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Widget prompt target could not be resolved'
+    );
+  }
+  return null;
+}
+
+function widgetPromptIdentityLines(request: WorkspaceCopyWidgetAgentPromptRequest): string[] {
+  return [
+    `- workspaceId: ${request.workspaceId}`,
+    ...('widgetId' in request ? [`- widgetId: ${request.widgetId}`] : []),
+  ];
+}
+
+function buildWorkspaceWidgetAgentPrompt({
+  request,
+  targetDirectoryRelative,
+}: {
+  readonly request: WorkspaceCopyWidgetAgentPromptRequest;
+  readonly targetDirectoryRelative: string;
+}): string {
+  const runtimeBundleLine = `- 写入同目录 runtime bundle：\`${ARTIFACT_RUNTIME_ENTRY_FILE}\`、\`${ARTIFACT_RUNTIME_MANIFEST_FILE}\`、\`${ARTIFACT_RUNTIME_STATE_FILE}\` 和 \`${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\`；可选图标为 \`${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/icon.svg\`。`;
+  const common = [
+    '请在当前 Reo 记忆空间根目录内工作。先阅读当前 `AGENTS.md`，再阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。',
+    '',
+    '边界：',
+    '- 只使用下方 workspace-relative path，不要使用绝对路径。',
+    '- 不要编辑 `.reo/index.json`、`.reo/objects/**`、`.reo/review/**`、draft、trash 或 lock 文件。',
+    '- 不要调用 Reo IPC，不要创建录音、笔记 draft 或空 Widget 占位；直接写普通文件。',
+    '- Widget frontmatter 必须包含 `kind: widget`、`format: html`、`mount: workspace-rail`。',
+    '- `entry.html` 通过 `<script src="reo-render://vendor/reo-render/bridge.js"></script>` 加载 Reo bridge。',
+    '- 需要下次打开仍保留的 Widget 状态必须通过 `window.reo.state` 写入 `state.json`；localStorage/IndexedDB 只能作为快速 UI cache 或兼容缓存，不能作为唯一长期状态。',
+    '- Widget 可以用 `window.reo.workspace.read()` 读取 workspace、当前 widget 和 currentMemory/null hint；如需切换主内容当前记忆，只能调用 `window.reo.ui.selectMemory({ memoryId })`。',
+    '- `workspace.memories` 中每个 Memory 的主键是 `memory.memoryId`，不是 `memory.id`；Memory 列表按钮必须用 `const memoryId = memory.memoryId` 再调用 `window.reo.ui.selectMemory({ memoryId })`。',
+    '- 右侧窄 rail 内的文本必须自适应：flex/grid 文本容器设置 `min-width: 0`；单行标题使用 `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`；长 id、URL 或自由文本使用 `overflow-wrap: anywhere`，不能横向溢出。',
+    '',
+    '目标身份：',
+    ...widgetPromptIdentityLines(request),
+    '',
+  ];
+
+  if (request.action === 'create-widget') {
+    return [
+      '# 创建一个 Reo Workspace 侧栏 Widget',
+      '',
+      ...common,
+      '目标目录：',
+      `- widgets root: \`${targetDirectoryRelative}\``,
+      '',
+      '创建要求：',
+      '- 在 `widgets/` 下创建一个新的 Widget 目录，目录名使用新的 `wdg_YYYYMMDDHHMMSS_8hex--可读标题`。',
+      '- 写入 `widget.md`，frontmatter 至少包含 `id`、`title`、`kind: widget`、`format: html`、`mount: workspace-rail`。',
+      runtimeBundleLine,
+      '- 默认推荐创建 “Workspace 总览” Widget：统计 memories/segments/supplements/works/widgets/needs-review，提供可点击的 Memory 列表，并用 `window.reo.ui.selectMemory({ memoryId })` 切换主内容当前 Memory。',
+      '- Widget 是右侧 rail 的独立 tab，不要假设自己持久挂载；切 tab、折叠 rail 或切 workspace 后都可能被卸载。',
+    ].join('\n');
+  }
+
+  return [
+    '# 更新一个 Reo Workspace 侧栏 Widget',
+    '',
+    ...common,
+    '目标 Widget：',
+    `- widget directory: \`${targetDirectoryRelative}\``,
+    `- metadata: \`${targetDirectoryRelative}/widget.md\``,
+    `- entry: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_ENTRY_FILE}\``,
+    `- runtime metadata: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_MANIFEST_FILE}\``,
+    `- state: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_STATE_FILE}\``,
+    `- assets: \`${targetDirectoryRelative}/${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/\``,
+    '',
+    '更新要求：',
+    '- 不要创建新的 Widget 对象。',
+    '- 保留 `widget.md` 中已有 `id`，继续保持 `kind: widget`、`format: html`、`mount: workspace-rail`。',
+    '- 更新 runtime bundle，必要时同步 `widget.md` 的标题或摘要字段。',
   ].join('\n');
 }
 
@@ -4506,6 +5009,119 @@ export async function handleUpdateSegmentContentTabOrderForTest(
   return handleUpdateSegmentContentTabOrderCore(options);
 }
 
+function widgetMutationError(
+  fallbackCode:
+    | 'ERR_WORKSPACE_WIDGET_UPDATE_FAILED'
+    | 'ERR_WORKSPACE_WIDGET_DELETE_FAILED'
+    | 'ERR_WORKSPACE_WIDGET_RESTORE_FAILED',
+  message: string,
+  error: unknown
+): WorkspaceErrorEnvelope {
+  if (error instanceof Error && error.message === 'Workspace widget not found') {
+    return workspaceError('ERR_WORKSPACE_WIDGET_NOT_FOUND', 'Workspace widget was not found');
+  }
+  return workspaceError(fallbackCode, message, 'unknown');
+}
+
+function handleUpdateWidgetTitleCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateWidgetTitleResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceUpdateWidgetTitleRequestSchema,
+    invalidMessage: 'updateWidgetTitle request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Widget title workspace does not match the active handle'
+          );
+        }
+
+        try {
+          const result = await updateWorkspaceWidgetTitleFromFileTruth({
+            rootPath: handle.canonicalRoot,
+            workspaceId: request.workspaceId,
+            widgetId: request.widgetId,
+            title: request.title,
+            assertWorkspaceUsable: assertUsable,
+          });
+          return workspaceUpdateWidgetTitleResponseSchema.parse({ ok: true, value: result });
+        } catch (error) {
+          return widgetMutationError(
+            'ERR_WORKSPACE_WIDGET_UPDATE_FAILED',
+            'Workspace widget title could not be updated',
+            error
+          );
+        }
+      }),
+  });
+}
+
+export async function handleUpdateWidgetTitle(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateWidgetTitleResponseSchema>> {
+  return handleUpdateWidgetTitleCore(options);
+}
+
+export async function handleUpdateWidgetTitleForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateWidgetTitleResponseSchema>> {
+  return handleUpdateWidgetTitleCore(options);
+}
+
+function handleUpdateWidgetTabOrderCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateWidgetTabOrderResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceUpdateWidgetTabOrderRequestSchema,
+    invalidMessage: 'updateWidgetTabOrder request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Widget tab order workspace does not match the active handle'
+          );
+        }
+
+        try {
+          const result = await updateWorkspaceWidgetTabOrderFromFileTruth({
+            rootPath: handle.canonicalRoot,
+            workspaceId: request.workspaceId,
+            widgetTabOrder: request.widgetTabOrder,
+            assertWorkspaceUsable: assertUsable,
+          });
+          return workspaceUpdateWidgetTabOrderResponseSchema.parse({ ok: true, value: result });
+        } catch (error) {
+          return widgetMutationError(
+            'ERR_WORKSPACE_WIDGET_UPDATE_FAILED',
+            'Workspace widget tab order could not be updated',
+            error
+          );
+        }
+      }),
+  });
+}
+
+export async function handleUpdateWidgetTabOrder(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateWidgetTabOrderResponseSchema>> {
+  return handleUpdateWidgetTabOrderCore(options);
+}
+
+export async function handleUpdateWidgetTabOrderForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceUpdateWidgetTabOrderResponseSchema>> {
+  return handleUpdateWidgetTabOrderCore(options);
+}
+
 function handleUpdateSegmentSupplementTitleCore(
   options: HandleUpdateSegmentSupplementTitleOptions
 ): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
@@ -4917,6 +5533,104 @@ function handleRestoreDeletedSegmentSupplementCore(
         );
       }),
   });
+}
+
+function handleDeleteWidgetCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteWidgetResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_DELETE_WIDGET_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceDeleteWidgetRequestSchema,
+    invalidMessage: 'deleteWidget request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Widget delete workspace does not match the active handle'
+          );
+        }
+
+        try {
+          const result = await deleteWorkspaceWidgetFromFileTruth({
+            rootPath: handle.canonicalRoot,
+            workspaceId: request.workspaceId,
+            widgetId: request.widgetId,
+            assertWorkspaceUsable: assertUsable,
+          });
+          return workspaceDeleteWidgetResponseSchema.parse({ ok: true, value: result });
+        } catch (error) {
+          return widgetMutationError(
+            'ERR_WORKSPACE_WIDGET_DELETE_FAILED',
+            'Workspace widget could not be deleted',
+            error
+          );
+        }
+      }),
+  });
+}
+
+export async function handleDeleteWidget(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteWidgetResponseSchema>> {
+  return handleDeleteWidgetCore(options);
+}
+
+export async function handleDeleteWidgetForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceDeleteWidgetResponseSchema>> {
+  return handleDeleteWidgetCore(options);
+}
+
+function handleRestoreDeletedWidgetCore(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedWidgetResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceRestoreDeletedWidgetRequestSchema,
+    invalidMessage: 'restoreDeletedWidget request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Widget restore workspace does not match the active handle'
+          );
+        }
+
+        try {
+          const result = await restoreDeletedWorkspaceWidgetFromFileTruth({
+            rootPath: handle.canonicalRoot,
+            workspaceId: request.workspaceId,
+            restoreToken: request.restoreToken,
+            assertWorkspaceUsable: assertUsable,
+          });
+          return workspaceRestoreDeletedWidgetResponseSchema.parse({ ok: true, value: result });
+        } catch (error) {
+          return widgetMutationError(
+            'ERR_WORKSPACE_WIDGET_RESTORE_FAILED',
+            'Workspace widget could not be restored',
+            error
+          );
+        }
+      }),
+  });
+}
+
+export async function handleRestoreDeletedWidget(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedWidgetResponseSchema>> {
+  return handleRestoreDeletedWidgetCore(options);
+}
+
+export async function handleRestoreDeletedWidgetForTest(
+  options: HandleWorkspaceRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedWidgetResponseSchema>> {
+  return handleRestoreDeletedWidgetCore(options);
 }
 
 function handleCreateRecordingDraftCore({
@@ -7443,6 +8157,56 @@ export function registerWorkspaceIpc({
         handleStore,
       })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL, (event, input) =>
+    handleRevealWidgetInFinder({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL, (event, input) =>
+    handleOpenWidgetDocument({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL, (event, input) =>
+    handleCopyWidgetAbsolutePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL, (event, input) =>
+    handleCopyWidgetRelativePath({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL, (event, input) =>
+    handleCopyWidgetAgentPrompt({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemorySpaceTitle({
       event,
@@ -7761,6 +8525,26 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL, (event, input) =>
+    handleUpdateWidgetTitle({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL, (event, input) =>
+    handleUpdateWidgetTabOrder({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
     handleCreateMemory({
       event,
@@ -7892,6 +8676,26 @@ export function registerWorkspaceIpc({
         isTrustedUrl,
         handleStore,
       })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_DELETE_WIDGET_CHANNEL, (event, input) =>
+    handleDeleteWidget({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL, (event, input) =>
+    handleRestoreDeletedWidget({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+    })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>
     handleReadMemoryDetail({

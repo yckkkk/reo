@@ -2,6 +2,8 @@ export const ARTIFACT_RUNTIME_ENTRY_FILE = 'entry.html';
 export const ARTIFACT_RUNTIME_MANIFEST_FILE = 'runtime.json';
 export const ARTIFACT_RUNTIME_STATE_FILE = 'state.json';
 export const ARTIFACT_RUNTIME_ASSETS_DIRECTORY = 'assets';
+export const RENDER_SCHEME = 'reo-render';
+export const RENDER_VENDOR_PACKAGE = 'reo-render';
 
 function runtimeHostPart(value: string): string {
   const bytes = new TextEncoder().encode(value);
@@ -24,6 +26,10 @@ export function artifactSupplementRuntimeHost(
   )}`;
 }
 
+export function workspaceWidgetRuntimeHost(workspaceId: string, widgetId: string): string {
+  return `widget-${runtimeHostPart(workspaceId)}-${runtimeHostPart(widgetId)}`;
+}
+
 export function artifactSegmentRuntimeUrl({
   previewVersion,
   segmentId,
@@ -33,7 +39,7 @@ export function artifactSegmentRuntimeUrl({
   readonly segmentId: string;
   readonly workspaceId: string;
 }): string {
-  return `reo-artifact://${artifactSegmentRuntimeHost(
+  return `${RENDER_SCHEME}://${artifactSegmentRuntimeHost(
     workspaceId,
     segmentId
   )}/workspaces/${encodeURIComponent(workspaceId)}/segments/${encodeURIComponent(
@@ -52,7 +58,7 @@ export function artifactSupplementRuntimeUrl({
   readonly supplementId: string;
   readonly workspaceId: string;
 }): string {
-  return `reo-artifact://${artifactSupplementRuntimeHost(
+  return `${RENDER_SCHEME}://${artifactSupplementRuntimeHost(
     workspaceId,
     segmentId,
     supplementId
@@ -61,4 +67,21 @@ export function artifactSupplementRuntimeUrl({
   )}/supplements/${encodeURIComponent(supplementId)}/${ARTIFACT_RUNTIME_ENTRY_FILE}?v=${encodeURIComponent(
     previewVersion
   )}`;
+}
+
+export function workspaceWidgetRuntimeUrl({
+  widgetId,
+  previewVersion,
+  workspaceId,
+}: {
+  readonly widgetId: string;
+  readonly previewVersion: string;
+  readonly workspaceId: string;
+}): string {
+  return `${RENDER_SCHEME}://${workspaceWidgetRuntimeHost(
+    workspaceId,
+    widgetId
+  )}/workspaces/${encodeURIComponent(workspaceId)}/widgets/${encodeURIComponent(
+    widgetId
+  )}/${ARTIFACT_RUNTIME_ENTRY_FILE}?v=${encodeURIComponent(previewVersion)}`;
 }

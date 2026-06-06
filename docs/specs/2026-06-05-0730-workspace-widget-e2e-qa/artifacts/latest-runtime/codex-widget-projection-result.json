@@ -1,0 +1,90 @@
+{
+  "stateMachine": [
+    "S1 workspace projects the Codex CLI file creation through file truth",
+    "S2 Codex-created widget tab appears with custom icon",
+    "S3 selecting the tab mounts that widget iframe",
+    "S4 widget runtime fits the right rail and exposes memory buttons",
+    "S5 clicking a memory button writes state.json and switches the host Memory"
+  ],
+  "invariants": [
+    "The Codex-created widget is projected from file truth, not manually injected.",
+    "The widget uses a custom icon without fallback overlap.",
+    "The mounted iframe src contains the new widget id.",
+    "The runtime text layout has no horizontal overflow in the rail.",
+    "The widget uses memory.memoryId for host selection and durable state."
+  ],
+  "widgetId": "wdg_20260605095155_99c581bf",
+  "tabProjection": {
+    "label": "今日记忆小面板 Widget",
+    "selected": "false",
+    "hasCustom": true,
+    "customNaturalWidth": 150,
+    "customOpacity": "1",
+    "hasFallback": true,
+    "fallbackOpacity": "0",
+    "rect": {
+      "left": 1118,
+      "top": 3,
+      "width": 30,
+      "height": 30
+    }
+  },
+  "mountedProjection": {
+    "selected": "true",
+    "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353039353135355f3939633538316266/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605095155_99c581bf/entry.html?v=9bad3ba51e0976ce7877b7c472305830893d5017c3ea52a41dbd9711b7a81b3a"
+  },
+  "widgetTextProjection": {
+    "viewportWidth": 239,
+    "documentScrollWidth": 239,
+    "bodyScrollWidth": 239,
+    "memoryButtonCount": 5,
+    "main": {
+      "minWidth": "0px",
+      "overflow": "hidden"
+    },
+    "title": {
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    },
+    "meta": {
+      "textOverflow": "ellipsis"
+    },
+    "status": {
+      "overflowWrap": "anywhere"
+    }
+  },
+  "stateBeforeSelect": {
+    "schemaVersion": 1,
+    "stores": {
+      "data": {},
+      "progress": {},
+      "draft": {},
+      "ui": {
+        "lastSelectedMemoryId": "mem_20260517063940_89533fee",
+        "query": ""
+      }
+    }
+  },
+  "memoryChoice": {
+    "memoryId": "mem_e2e_auto_1779846740550",
+    "title": "E2E 自动记忆 已重命名 1779846740550",
+    "previousMemoryId": "mem_20260517063940_89533fee"
+  },
+  "stateAfterSelect": {
+    "schemaVersion": 1,
+    "stores": {
+      "data": {},
+      "progress": {},
+      "draft": {},
+      "ui": {
+        "lastSelectedMemoryId": "mem_e2e_auto_1779846740550",
+        "query": ""
+      }
+    }
+  },
+  "bridgeProjection": {
+    "titlebarText": "测试E2E 自动记忆 已重命名 1779846740550",
+    "selected": "true",
+    "frameMounted": true
+  }
+}

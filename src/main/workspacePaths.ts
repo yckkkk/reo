@@ -295,11 +295,24 @@ export async function checkWorkspaceMemoriesDirectory(
   return checkWorkspaceDirectoryPath(path.join(canonicalRoot, 'memories'));
 }
 
+export async function checkWorkspaceWidgetsDirectory(
+  canonicalRoot: string
+): Promise<string | WorkspaceErrorEnvelope> {
+  return checkWorkspaceDirectoryPath(path.join(canonicalRoot, 'widgets'));
+}
+
 export async function ensureWorkspaceMemoriesDirectory(
   canonicalRoot: string,
   assertUsable?: AssertWorkspacePathUsable
 ): Promise<string | WorkspaceErrorEnvelope> {
   return ensureWorkspaceRootChildDirectory(canonicalRoot, 'memories', assertUsable);
+}
+
+export async function ensureWorkspaceWidgetsDirectory(
+  canonicalRoot: string,
+  assertUsable?: AssertWorkspacePathUsable
+): Promise<string | WorkspaceErrorEnvelope> {
+  return ensureWorkspaceRootChildDirectory(canonicalRoot, 'widgets', assertUsable);
 }
 
 export function createSafeSegmentId(segmentId: string): string {

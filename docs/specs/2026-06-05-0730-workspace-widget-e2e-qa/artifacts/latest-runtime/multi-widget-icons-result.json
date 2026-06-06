@@ -1,0 +1,146 @@
+{
+  "stateMachine": [
+    "S1 expanded rail projects at least two widget tabs",
+    "S2 every widget tab loads its custom icon while fallback stays invisible",
+    "S3 hovering each widget tab reveals only its embedded More action",
+    "S4 selecting different widget tabs swaps the mounted iframe"
+  ],
+  "invariants": [
+    "Custom icons are loaded by the app shell as images from reo-render.",
+    "No widget tab renders custom icon and fallback icon visibly at the same time.",
+    "Each widget tab owns its own More reveal target.",
+    "Only the selected widget iframe is mounted."
+  ],
+  "tabs": [
+    {
+      "label": "第二个 Widget Widget",
+      "hasCustom": true,
+      "hasFallback": true,
+      "customComplete": true,
+      "customNaturalWidth": 150,
+      "customOpacity": "1",
+      "fallbackOpacity": "0",
+      "moreAriaHidden": "true",
+      "moreTabIndex": "-1",
+      "rect": {
+        "left": 994,
+        "top": 3,
+        "width": 30,
+        "height": 30
+      }
+    },
+    {
+      "label": "今日记忆小面板 Widget",
+      "hasCustom": true,
+      "hasFallback": true,
+      "customComplete": true,
+      "customNaturalWidth": 150,
+      "customOpacity": "1",
+      "fallbackOpacity": "0",
+      "moreAriaHidden": "true",
+      "moreTabIndex": "-1",
+      "rect": {
+        "left": 1028,
+        "top": 3,
+        "width": 30,
+        "height": 30
+      }
+    },
+    {
+      "label": "Workspace 总览 Widget",
+      "hasCustom": true,
+      "hasFallback": true,
+      "customComplete": true,
+      "customNaturalWidth": 150,
+      "customOpacity": "1",
+      "fallbackOpacity": "0",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "rect": {
+        "left": 1062,
+        "top": 3,
+        "width": 52,
+        "height": 30
+      }
+    },
+    {
+      "label": "待处理提醒 Widget",
+      "hasCustom": true,
+      "hasFallback": true,
+      "customComplete": true,
+      "customNaturalWidth": 150,
+      "customOpacity": "1",
+      "fallbackOpacity": "0",
+      "moreAriaHidden": "true",
+      "moreTabIndex": "-1",
+      "rect": {
+        "left": 1118,
+        "top": 3,
+        "width": 30,
+        "height": 30
+      }
+    }
+  ],
+  "hoverProjections": [
+    {
+      "label": "第二个 Widget Widget",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "moreOpacity": "0.972973",
+      "moreRect": {
+        "left": 1025.0859375,
+        "top": 8,
+        "width": 19.453125,
+        "height": 20
+      }
+    },
+    {
+      "label": "今日记忆小面板 Widget",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "moreOpacity": "0.954622",
+      "moreRect": {
+        "left": 1060.9140625,
+        "top": 8,
+        "width": 19.0859375,
+        "height": 20
+      }
+    },
+    {
+      "label": "Workspace 总览 Widget",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "moreOpacity": "0.953469",
+      "moreRect": {
+        "left": 1094.9375,
+        "top": 8,
+        "width": 19.0625,
+        "height": 20
+      }
+    },
+    {
+      "label": "待处理提醒 Widget",
+      "moreAriaHidden": null,
+      "moreTabIndex": "0",
+      "moreOpacity": "0.982242",
+      "moreRect": {
+        "left": 1128.359375,
+        "top": 8,
+        "width": 19.640625,
+        "height": 20
+      }
+    }
+  ],
+  "switchProjections": [
+    {
+      "label": "今日记忆小面板 Widget",
+      "selected": "true",
+      "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353039353135355f3939633538316266/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605095155_99c581bf/entry.html?v=9bad3ba51e0976ce7877b7c472305830893d5017c3ea52a41dbd9711b7a81b3a"
+    },
+    {
+      "label": "第二个 Widget Widget",
+      "selected": "true",
+      "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353039333430305f6237633364396531/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605093400_b7c3d9e1/entry.html?v=b0b778b6e5a2559c64de7ce187bf3be5e3f5b6669dfb15a11a2fea4f35fb5bc4"
+    }
+  ]
+}

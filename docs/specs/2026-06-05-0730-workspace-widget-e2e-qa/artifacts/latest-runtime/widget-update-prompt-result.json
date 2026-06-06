@@ -1,0 +1,12 @@
+{
+  "widgetTabLabel": "Workspace 总览 Widget",
+  "clipboardLength": 2018,
+  "clipboardFirstLine": "# 更新一个 Reo Workspace 侧栏 Widget",
+  "containsUpdateHeading": true,
+  "containsAgentsReadRule": true,
+  "containsWidgetDirectory": true,
+  "containsMemoryIdRule": true,
+  "containsResponsiveTextRule": true,
+  "containsAbsolutePath": false,
+  "containsComponentTerm": false
+}

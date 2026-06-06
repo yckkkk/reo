@@ -641,7 +641,13 @@ test('workspace init creates stable root files and Reo agent skill entry', async
       memories: [],
     },
   });
-  assert.deepEqual((await readdir(root)).sort(), ['.reo', 'AGENTS.md', 'memories', 'skills']);
+  assert.deepEqual((await readdir(root)).sort(), [
+    '.reo',
+    'AGENTS.md',
+    'memories',
+    'skills',
+    'widgets',
+  ]);
   const agentsText = await readFile(path.join(root, 'AGENTS.md'), 'utf8');
   assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
   assert.match(agentsText, /Codex/);
@@ -653,6 +659,9 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(agentsText, /skills\/reo-works\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-generative-runtime\/scripts\//);
+  assert.match(agentsText, /widgets\//);
+  assert.match(agentsText, /widget\.md/);
+  assert.match(agentsText, /mount: workspace-rail/);
   assert.match(agentsText, /skills\/reo-works\/references\//);
   assert.match(agentsText, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(agentsText, /skills\/reo-works-design\/references\//);
@@ -1007,6 +1016,10 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /entry\.html/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /runtime\.json/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /state\.json/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /workspace rail widgets/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /widgets\/<widget-directory>/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /widget\.md/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /mount: workspace-rail/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /window\.reo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /bridge\.js/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /they do not reload the host iframe/);
@@ -1019,6 +1032,17 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /todo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /spaced review/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /state\.json/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /text-overflow: ellipsis/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /overflow-wrap: anywhere/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /min-width: 0/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'],
+    /white-space: nowrap/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'],
+    /horizontal text overflow/
+  );
   assert.doesNotMatch(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'],
     /localStorage persistence/
@@ -1040,9 +1064,22 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
     /all Memory summaries/
   );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /ui\.selectMemory/);
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
     /readMemoryDetail\(\{ memoryId \}\)/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
+    /Memory summaries expose `memoryId`, not `id`/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /const memoryId = memory\.memoryId/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /Do not use `memory\.id`/
   );
   assert.doesNotMatch(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
@@ -1061,10 +1098,18 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
     /Artifact works cannot write arbitrary note bodies/
   );
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bundle-contract.md'], /bridge\.js/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bundle-contract.md'],
+    /kind: widget/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bundle-contract.md'],
+    /mount: workspace-rail/
+  );
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'], /can run/);
   assert.doesNotMatch(
     DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
-    /M2\.1|should not assume a Reo write bridge/
+    /M2\.1|future widgets|should not assume a Reo write bridge/
   );
   for (const text of [
     DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
@@ -1100,7 +1145,7 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.equal(scaffoldOk.status, 0, scaffoldOk.stderr || scaffoldOk.stdout);
   const scaffoldedEntry = await readFile(path.join(root, 'work', 'entry.html'), 'utf8');
   assert.match(scaffoldedEntry, /window\.reo/);
-  assert.match(scaffoldedEntry, /reo-artifact:\/\/vendor\/reo-runtime\/bridge\.js/);
+  assert.match(scaffoldedEntry, /reo-render:\/\/vendor\/reo-render\/bridge\.js/);
   assert.match(scaffoldedEntry, /data-template="todo"/);
   assert.equal(scaffoldedEntry.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS), true);
   assert.match(scaffoldedEntry, /--color-background-primary:/);

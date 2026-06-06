@@ -242,11 +242,27 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
     workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
     segments: [audioSegment, noteSegment],
   };
+  const workspaceWidget = {
+    workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+    widgetId: 'wdg_dev_overview',
+    type: 'widget' as const,
+    format: 'html' as const,
+    mount: 'workspace-rail' as const,
+    title: 'Workspace 总览',
+    createdAt: CREATED_AT,
+    updatedAt: UPDATED_AT,
+    icon: { source: 'default' as const },
+    runtimeFault: {
+      reason: 'missing-entry' as const,
+      diagnostic: 'Dev scenario 使用故障态 Widget 验证右侧 rail 挂载和操作面。',
+    },
+  };
   const snapshot: WorkspaceSnapshot = {
     workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
     title: 'Reo UI 调试空间',
     description: '用于浏览器调试的开发场景',
     memories: [memory],
+    widgets: [workspaceWidget],
   };
 
   return {
@@ -335,6 +351,8 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
       error: { code: 'ERR_WORKSPACE_OPEN_FAILED', message },
     });
   const entityOk = () => ok({});
+  const widgets = () => scenario.session.snapshot.widgets ?? [];
+  const firstWidget = () => widgets()[0];
 
   return {
     chooseDirectory: () => ok({ status: 'canceled' as const }),
@@ -350,25 +368,50 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     revealMemoryInFinder: entityOk,
     revealSegmentInFinder: entityOk,
     revealSegmentSupplementInFinder: entityOk,
+    revealWidgetInFinder: entityOk,
     openMemorySpaceAgentsFile: entityOk,
     openMemoryDocument: entityOk,
     openSegmentDocument: entityOk,
     openSegmentSupplementDocument: entityOk,
+    openWidgetDocument: entityOk,
     copyMemorySpaceAbsolutePath: entityOk,
     copyMemoryAbsolutePath: entityOk,
     copySegmentAbsolutePath: entityOk,
     copySegmentSupplementAbsolutePath: entityOk,
+    copyWidgetAbsolutePath: entityOk,
     copyMemoryRelativePath: entityOk,
     copySegmentRelativePath: entityOk,
     copySegmentSupplementRelativePath: entityOk,
+    copyWidgetRelativePath: entityOk,
     copyArtifactAgentPrompt: entityOk,
+    copyWidgetAgentPrompt: entityOk,
     copyNeedsReviewAgentPrompt: entityOk,
+    readArtifactRuntimeState: (
+      payload: Parameters<ReoWorkspaceBridge['readArtifactRuntimeState']>[0]
+    ) =>
+      ok({
+        requestId: payload.requestId,
+        source: 'missing' as const,
+        state: { schemaVersion: 1, stores: {} },
+        version: BASELINE_HASH,
+      }),
+    writeArtifactRuntimeState: (
+      payload: Parameters<ReoWorkspaceBridge['writeArtifactRuntimeState']>[0]
+    ) =>
+      ok({
+        status: 'saved' as const,
+        requestId: payload.requestId,
+        state: payload.state,
+        version: BASELINE_HASH,
+      }),
     updateMemorySpaceTitle: () => ok(scenario.session.snapshot),
     closeWorkspace: () => ok({ closed: true }),
     readWorkspaceSnapshot: () => ok(scenario.session.snapshot),
     createMemory: () => unsupported(),
     deleteMemory: () => unsupported(),
     restoreDeletedMemory: () => unsupported(),
+    deleteWidget: () => unsupported(),
+    restoreDeletedWidget: () => unsupported(),
     resetMemoryCover: () => unsupported(),
     restoreMemoryCover: () => unsupported(),
     switchMemoryDefaultCover: () => unsupported(),
@@ -461,6 +504,8 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
       ok({ memory: scenario.detail, segment: scenario.detail.segments[0] }),
     updateSegmentContentTabOrder: () =>
       ok({ memory: scenario.detail, segment: scenario.detail.segments[0] }),
+    updateWidgetTitle: () => ok({ widget: firstWidget(), widgets: widgets() }),
+    updateWidgetTabOrder: () => ok({ widgets: widgets() }),
     saveTranscript: () =>
       ok({
         baselineTranscriptHash: BASELINE_HASH,

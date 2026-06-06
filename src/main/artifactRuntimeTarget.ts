@@ -2,6 +2,7 @@ import {
   resolveFinalizedArtifactSegmentDirectoryFromManifest,
   resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest,
 } from './memoryFiles.js';
+import { resolveWorkspaceWidgetDirectoryFromFileTruth } from './workspaceWidgets.js';
 
 export type ArtifactRuntimeTarget =
   | {
@@ -16,6 +17,11 @@ export type ArtifactRuntimeTarget =
       readonly memoryId: string;
       readonly segmentId: string;
       readonly supplementId: string;
+    }
+  | {
+      readonly targetType: 'widget';
+      readonly workspaceId: string;
+      readonly widgetId: string;
     };
 
 export async function resolveArtifactRuntimeTargetDirectory({
@@ -35,6 +41,14 @@ export async function resolveArtifactRuntimeTargetDirectory({
       throw new Error('Artifact segment runtime target does not match memory');
     }
     return resolved.segmentDirectory;
+  }
+
+  if (target.targetType === 'widget') {
+    return resolveWorkspaceWidgetDirectoryFromFileTruth({
+      rootPath,
+      workspaceId: target.workspaceId,
+      widgetId: target.widgetId,
+    });
   }
 
   const resolved = await resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest({

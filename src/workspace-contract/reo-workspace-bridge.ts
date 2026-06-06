@@ -6,6 +6,9 @@ import type {
   WorkspaceCloseRequest,
   WorkspaceCloseResponse,
   WorkspaceCopyArtifactAgentPromptRequest,
+  WorkspaceCopyWidgetAbsolutePathRequest,
+  WorkspaceCopyWidgetAgentPromptRequest,
+  WorkspaceCopyWidgetRelativePathRequest,
   WorkspaceCopyMemoryAbsolutePathRequest,
   WorkspaceCopyMemoryRelativePathRequest,
   WorkspaceCopyMemorySpaceAbsolutePathRequest,
@@ -18,6 +21,8 @@ import type {
   WorkspaceCreateMemoryResponse,
   WorkspaceCreateNoteSegmentDraftRequest,
   WorkspaceCreateNoteSegmentDraftResponse,
+  WorkspaceDeleteWidgetRequest,
+  WorkspaceDeleteWidgetResponse,
   WorkspaceDeleteMemoryRequest,
   WorkspaceDeleteMemoryResponse,
   WorkspaceDeleteSegmentSupplementRequest,
@@ -47,6 +52,7 @@ import type {
   WorkspaceOpenMarkdownExternalLinkRequest,
   WorkspaceOpenMarkdownExternalLinkResponse,
   WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
+  WorkspaceOpenWidgetDocumentRequest,
   WorkspaceOpenMemoryDocumentRequest,
   WorkspaceOpenMemorySpaceAgentsFileRequest,
   WorkspaceOpenRequest,
@@ -86,6 +92,8 @@ import type {
   WorkspaceResetMemoryCoverResponse,
   WorkspaceResetSegmentCoverRequest,
   WorkspaceResetSegmentCoverResponse,
+  WorkspaceRestoreDeletedWidgetRequest,
+  WorkspaceRestoreDeletedWidgetResponse,
   WorkspaceRestoreDeletedMemoryRequest,
   WorkspaceRestoreDeletedMemoryResponse,
   WorkspaceRestoreMemoryCoverRequest,
@@ -115,6 +123,7 @@ import type {
   WorkspaceRecordingTranscriptionEvent,
   WorkspaceFileTruthChangedEvent,
   WorkspaceRecordingTranscriptionStartRequest,
+  WorkspaceRevealWidgetInFinderRequest,
   WorkspaceRevealMemoryInFinderRequest,
   WorkspaceRevealMemorySpaceInFinderRequest,
   WorkspaceRevealSegmentInFinderRequest,
@@ -143,6 +152,10 @@ import type {
   WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
   WorkspaceSetVoiceTranscriptionEnabledRequest,
   WorkspaceSetVoiceTranscriptionEnabledResponse,
+  WorkspaceUpdateWidgetTabOrderRequest,
+  WorkspaceUpdateWidgetTabOrderResponse,
+  WorkspaceUpdateWidgetTitleRequest,
+  WorkspaceUpdateWidgetTitleResponse,
   WorkspaceUpdateMemorySpaceTitleRequest,
   WorkspaceUpdateMemorySpaceTitleResponse,
   WorkspaceUpdateMemoryTitleRequest,
@@ -194,6 +207,9 @@ export interface ReoWorkspaceBridge {
   readonly revealSegmentSupplementInFinder: (
     payload: WorkspaceRevealSegmentSupplementInFinderRequest
   ) => Promise<WorkspaceEntityActionResponse>;
+  readonly revealWidgetInFinder: (
+    payload: WorkspaceRevealWidgetInFinderRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
   readonly openMemorySpaceAgentsFile: (
     payload: WorkspaceOpenMemorySpaceAgentsFileRequest
   ) => Promise<WorkspaceEntityActionResponse>;
@@ -205,6 +221,9 @@ export interface ReoWorkspaceBridge {
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly openSegmentSupplementDocument: (
     payload: WorkspaceOpenSegmentSupplementDocumentRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly openWidgetDocument: (
+    payload: WorkspaceOpenWidgetDocumentRequest
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyMemorySpaceAbsolutePath: (
     payload: WorkspaceCopyMemorySpaceAbsolutePathRequest
@@ -218,6 +237,9 @@ export interface ReoWorkspaceBridge {
   readonly copySegmentSupplementAbsolutePath: (
     payload: WorkspaceCopySegmentSupplementAbsolutePathRequest
   ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyWidgetAbsolutePath: (
+    payload: WorkspaceCopyWidgetAbsolutePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyMemoryRelativePath: (
     payload: WorkspaceCopyMemoryRelativePathRequest
   ) => Promise<WorkspaceEntityActionResponse>;
@@ -227,8 +249,14 @@ export interface ReoWorkspaceBridge {
   readonly copySegmentSupplementRelativePath: (
     payload: WorkspaceCopySegmentSupplementRelativePathRequest
   ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyWidgetRelativePath: (
+    payload: WorkspaceCopyWidgetRelativePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyArtifactAgentPrompt: (
     payload: WorkspaceCopyArtifactAgentPromptRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyWidgetAgentPrompt: (
+    payload: WorkspaceCopyWidgetAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly readArtifactRuntimeState: (
     payload: WorkspaceReadArtifactRuntimeStateRequest
@@ -285,6 +313,12 @@ export interface ReoWorkspaceBridge {
   readonly restoreDeletedSegmentSupplement: (
     payload: WorkspaceRestoreDeletedSegmentSupplementRequest
   ) => Promise<WorkspaceRestoreDeletedSegmentSupplementResponse>;
+  readonly deleteWidget: (
+    payload: WorkspaceDeleteWidgetRequest
+  ) => Promise<WorkspaceDeleteWidgetResponse>;
+  readonly restoreDeletedWidget: (
+    payload: WorkspaceRestoreDeletedWidgetRequest
+  ) => Promise<WorkspaceRestoreDeletedWidgetResponse>;
   readonly readMemoryDetail: (
     payload: WorkspaceReadMemoryDetailRequest
   ) => Promise<WorkspaceReadMemoryDetailResponse>;
@@ -393,6 +427,12 @@ export interface ReoWorkspaceBridge {
   readonly updateSegmentContentTabOrder: (
     payload: WorkspaceUpdateSegmentContentTabOrderRequest
   ) => Promise<WorkspaceUpdateSegmentContentTabOrderResponse>;
+  readonly updateWidgetTitle: (
+    payload: WorkspaceUpdateWidgetTitleRequest
+  ) => Promise<WorkspaceUpdateWidgetTitleResponse>;
+  readonly updateWidgetTabOrder: (
+    payload: WorkspaceUpdateWidgetTabOrderRequest
+  ) => Promise<WorkspaceUpdateWidgetTabOrderResponse>;
   readonly saveTranscript: (
     payload: WorkspaceRecordingMarkdownSaveRequest
   ) => Promise<WorkspaceRecordingMarkdownSaveResponse>;

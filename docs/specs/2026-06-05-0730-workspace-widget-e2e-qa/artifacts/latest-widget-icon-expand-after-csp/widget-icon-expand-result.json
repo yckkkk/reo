@@ -1,0 +1,245 @@
+{
+  "stateMachine": [
+    "S1 right rail is collapsed",
+    "S2 clicking expand mounts the widget tab strip",
+    "S3 widget icon samples never contain custom img and fallback icon together"
+  ],
+  "invariants": [
+    "Widget tab icon space may be empty while a custom icon decodes.",
+    "Fallback AppWindow appears only when the widget has no custom icon or the custom icon fails."
+  ],
+  "sampleCount": 21,
+  "samples": [
+    {
+      "time": 658,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "0",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-0",
+      "fallbackClassName": null
+    },
+    {
+      "time": 662,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "0",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-0",
+      "fallbackClassName": null
+    },
+    {
+      "time": 697,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "0",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-0",
+      "fallbackClassName": null
+    },
+    {
+      "time": 716,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 721,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 729,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 738,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 752,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 760,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 807,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 811,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 813,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 821,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 913,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 917,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 921,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 929,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 938,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 947,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 954,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    },
+    {
+      "time": 1150,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "1",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-100",
+      "fallbackClassName": null
+    }
+  ]
+}

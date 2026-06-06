@@ -1,6 +1,9 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { artifactSegmentRuntimeUrl } from '../../../workspace-contract/artifact-runtime-url';
+import {
+  artifactSegmentRuntimeUrl,
+  workspaceWidgetRuntimeUrl,
+} from '../../../workspace-contract/artifact-runtime-url';
 import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
 import {
   createArtifactRuntimeMessageHandler,
@@ -48,6 +51,22 @@ function session(): WorkspaceSession {
           hasAudioTranscript: true,
           hasAnyNote: true,
           supplementCount: 2,
+        },
+      ],
+      widgets: [
+        {
+          workspaceId: 'ws_bridge',
+          widgetId: 'wdg_bridge',
+          type: 'widget',
+          format: 'html',
+          mount: 'workspace-rail',
+          title: 'Bridge widget',
+          createdAt: '2026-06-05T09:00:00.000Z',
+          updatedAt: '2026-06-05T09:00:00.000Z',
+          icon: { source: 'default' },
+          entryByteLength: 128,
+          entryHash: 'f'.repeat(64),
+          previewVersion: 'widget-v1',
         },
       ],
     },
@@ -158,6 +177,7 @@ function bridgeHandlerOptions({
   iframeRef,
   memory,
   onProductMutation,
+  onSelectMemory,
   readMemoryDetail = async () => {
     throw new Error('readMemoryDetail test default unavailable');
   },
@@ -173,6 +193,7 @@ function bridgeHandlerOptions({
       api,
       memory,
       onProductMutation,
+      onSelectMemory,
       readMemoryDetail,
       onRequestFullscreen,
       target,
@@ -238,7 +259,7 @@ describe('artifact runtime bridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-rerender',
           method: 'state.read',
@@ -317,7 +338,7 @@ describe('artifact runtime bridge', () => {
     window.dispatchEvent(
       new MessageEvent('message', {
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-other-memory',
           method: 'content.readMemoryDetail',
@@ -386,7 +407,7 @@ describe('artifact runtime bridge', () => {
     handler(
       messageEvent({
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-1',
           method: 'state.read',
@@ -398,7 +419,7 @@ describe('artifact runtime bridge', () => {
     handler(
       messageEvent({
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-1',
           method: 'state.read',
@@ -414,7 +435,7 @@ describe('artifact runtime bridge', () => {
     handler(
       messageEvent({
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-1',
           method: 'state.read',
@@ -555,7 +576,7 @@ describe('artifact runtime bridge', () => {
       handler(
         messageEvent({
           data: {
-            source: 'reo-runtime',
+            source: 'reo-render',
             type: 'request',
             ...request,
           },
@@ -647,6 +668,193 @@ describe('artifact runtime bridge', () => {
     );
   });
 
+  it('routes workspace widget bridge calls without changing the active rail tab', async () => {
+    const src = workspaceWidgetRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      widgetId: 'wdg_bridge',
+      previewVersion: 'widget-v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const copyWidgetAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    const updateWidgetTitle = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { widget: session().snapshot.widgets?.[0], widgets: session().snapshot.widgets },
+    });
+    const readArtifactRuntimeState = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'req-widget-state',
+        source: 'file',
+        state: { schemaVersion: 1, stores: { ui: { selected: 'mem_bridge' } } },
+        version: 'd'.repeat(64),
+      },
+    });
+    const onProductMutation = vi.fn();
+    const onSelectMemory = vi.fn(() => true);
+
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          copyWidgetAgentPrompt,
+          readArtifactRuntimeState,
+          updateWidgetTitle,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation,
+        onRequestFullscreen: vi.fn(),
+        onSelectMemory,
+        src,
+        target: {
+          targetType: 'widget',
+          workspaceId: 'ws_bridge',
+          widgetId: 'wdg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    for (const request of [
+      { requestId: 'req-widget-state', method: 'state.read' },
+      { requestId: 'req-widget-workspace', method: 'workspace.read' },
+      { requestId: 'req-widget-current', method: 'content.readCurrentObject' },
+      {
+        requestId: 'req-widget-title',
+        method: 'mutations.updateTitle',
+        payload: { title: 'Updated widget' },
+      },
+      { requestId: 'req-widget-agent', method: 'agent.copyPrompt' },
+      {
+        requestId: 'req-widget-select-memory',
+        method: 'ui.selectMemory',
+        payload: { memoryId: 'mem_other' },
+      },
+    ]) {
+      handler(
+        messageEvent({
+          data: {
+            source: 'reo-render',
+            type: 'request',
+            ...request,
+          },
+          origin,
+          source: runtimeWindow,
+        })
+      );
+    }
+    await flushBridge();
+
+    expect(readArtifactRuntimeState).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_bridge',
+      workspaceId: 'ws_bridge',
+      targetType: 'widget',
+      widgetId: 'wdg_bridge',
+      requestId: 'req-widget-state',
+    });
+    expect(updateWidgetTitle).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_bridge',
+      workspaceId: 'ws_bridge',
+      widgetId: 'wdg_bridge',
+      title: 'Updated widget',
+    });
+    expect(copyWidgetAgentPrompt).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_bridge',
+      workspaceId: 'ws_bridge',
+      widgetId: 'wdg_bridge',
+      action: 'update-widget',
+    });
+    expect(onProductMutation).toHaveBeenCalledWith({
+      widget: session().snapshot.widgets?.[0],
+      widgets: session().snapshot.widgets,
+    });
+    expect(onSelectMemory).toHaveBeenCalledWith('mem_other');
+
+    const responses = (runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([payload]) => payload
+    );
+    expect(responses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: 'req-widget-workspace',
+          ok: true,
+          value: expect.objectContaining({
+            target: expect.objectContaining({ targetType: 'widget', widgetId: 'wdg_bridge' }),
+            currentObject: expect.objectContaining({ widgetId: 'wdg_bridge' }),
+            currentMemory: expect.objectContaining({ memoryId: 'mem_bridge' }),
+            memory: null,
+          }),
+        }),
+        expect.objectContaining({
+          requestId: 'req-widget-current',
+          ok: true,
+          value: expect.objectContaining({ widgetId: 'wdg_bridge' }),
+        }),
+        expect.objectContaining({
+          requestId: 'req-widget-select-memory',
+          ok: true,
+          value: { selected: true },
+        }),
+      ])
+    );
+  });
+
+  it('reports blocked workspace widget memory selection without changing host state', async () => {
+    const src = workspaceWidgetRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      widgetId: 'wdg_bridge',
+      previewVersion: 'widget-v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const onSelectMemory = vi.fn(() => false);
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {},
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: null,
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        onSelectMemory,
+        src,
+        target: {
+          targetType: 'widget',
+          workspaceId: 'ws_bridge',
+          widgetId: 'wdg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    handler(
+      messageEvent({
+        data: {
+          source: 'reo-render',
+          type: 'request',
+          requestId: 'req-widget-select-blocked',
+          method: 'ui.selectMemory',
+          payload: { memoryId: 'mem_other' },
+        },
+        origin,
+        source: runtimeWindow,
+      })
+    );
+    await flushBridge();
+
+    expect(onSelectMemory).toHaveBeenCalledWith('mem_other');
+    expect((runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        requestId: 'req-widget-select-blocked',
+        ok: true,
+        value: { selected: false },
+      })
+    );
+  });
+
   it('lets runtime read any memory detail from the current workspace through the existing read model', async () => {
     const src = artifactSegmentRuntimeUrl({
       workspaceId: 'ws_bridge',
@@ -681,7 +889,7 @@ describe('artifact runtime bridge', () => {
     handler(
       messageEvent({
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-current-memory',
           method: 'content.readMemoryDetail',
@@ -693,7 +901,7 @@ describe('artifact runtime bridge', () => {
     handler(
       messageEvent({
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-other-memory',
           method: 'content.readMemoryDetail',
@@ -772,7 +980,7 @@ describe('artifact runtime bridge', () => {
       handler(
         messageEvent({
           data: {
-            source: 'reo-runtime',
+            source: 'reo-render',
             type: 'request',
             requestId: `req-${index}`,
             method: 'state.read',
@@ -837,7 +1045,7 @@ describe('artifact runtime bridge', () => {
     handler(
       messageEvent({
         data: {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: 'req-agent-oversized',
           method: 'agent.copyPrompt',

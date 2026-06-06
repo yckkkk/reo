@@ -11,11 +11,13 @@
 - M2 Shared Generative Runtime - works consumer 已完成：
   `docs/archive/specs/2026-06-03-1205-shared-generative-runtime/`
   - workspace-wide runtime read、作品手动刷新、state 写入不重挂 iframe、真实环境 E2E、xhigh 审查和 `verify:quick` 已覆盖。
-- M3+ 组件挂载与完整形态联动 - 未排期
+- M3 Workspace Rail Widgets - 已完成：
+  `docs/archive/specs/2026-06-05-0515-workspace-rail-widgets/`
+  - Workspace-level widget 文件真源、右侧 rail tab 挂载、widget iframe lifecycle、`reo-render://` 复用、`ui.selectMemory`、runtime 视觉验证和 `verify:quick` 已覆盖。
 
 ## 下一步
 
-M3+ 组件挂载与完整形态联动未排期。M3+ 继续复用 M2 Shared Generative Runtime，不重建组件专用 runtime。
+M4+ Widget 完整形态联动未排期。后续 Home/Memory tab、Gallery、回顾 mechanics、复习日历和跨 Memory 工具继续复用 Shared Generative Runtime，不重建 widget 专用 runtime。
 
 ## 已融合草稿
 

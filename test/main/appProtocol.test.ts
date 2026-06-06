@@ -151,7 +151,7 @@ function readObjectArgumentPropertiesForCall(
   return properties;
 }
 
-test('privileged schemes register reo-app, reo-attachment, and reo-artifact before app ready', () => {
+test('privileged schemes register reo-app, reo-attachment, and reo-render before app ready', () => {
   const indexSource = readFileSync('src/main/index.ts', 'utf8');
   const schemeRegistrationIndex = indexSource.indexOf('registerAppShellScheme();');
   const readyIndex = indexSource.indexOf('whenReady()');
@@ -161,7 +161,7 @@ test('privileged schemes register reo-app, reo-attachment, and reo-artifact befo
   assert.ok(schemeRegistrationIndex < readyIndex);
 
   const schemes = readPrivilegedSchemes();
-  assert.deepEqual([...schemes.keys()].sort(), ['reo-app', 'reo-artifact', 'reo-attachment']);
+  assert.deepEqual([...schemes.keys()].sort(), ['reo-app', 'reo-attachment', 'reo-render']);
 
   const appScheme = schemes.get('reo-app');
   assert.equal(appScheme?.privileges.get('secure'), true);
@@ -173,7 +173,7 @@ test('privileged schemes register reo-app, reo-attachment, and reo-artifact befo
   assert.equal(attachmentScheme?.privileges.get('corsEnabled'), true);
   assert.equal(attachmentScheme?.privileges.get('stream'), true);
 
-  const artifactScheme = schemes.get('reo-artifact');
+  const artifactScheme = schemes.get('reo-render');
   assert.equal(artifactScheme?.privileges.get('secure'), true);
   assert.equal(artifactScheme?.privileges.get('standard'), true);
   assert.equal(artifactScheme?.privileges.get('supportFetchAPI'), true);
@@ -255,5 +255,5 @@ test('artifact protocol handler is isolated from attachment protocol and returns
   assert.match(sourceText, /'Cache-Control': resolved\.cacheControl/);
   assert.match(sourceText, /'Content-Security-Policy': resolved\.contentSecurityPolicy/);
   assert.match(sourceText, /'Content-Type': resolved\.mimeType/);
-  assert.equal(sourceText.includes('connect-src reo-artifact'), false);
+  assert.equal(sourceText.includes('connect-src reo-render'), false);
 });

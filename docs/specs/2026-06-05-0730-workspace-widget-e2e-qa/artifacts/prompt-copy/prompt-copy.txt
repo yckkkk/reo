@@ -1,0 +1,25 @@
+# 创建一个 Reo Workspace 侧栏 Widget
+
+请在当前 Reo 记忆空间根目录内工作。先阅读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`；涉及视觉、信息布局、交互或数据表达时同时阅读 `skills/reo-works-design/SKILL.md` 及 `skills/reo-works-design/references/`。
+
+边界：
+- 只使用下方 workspace-relative path，不要使用绝对路径。
+- 不要编辑 `.reo/index.json`、`.reo/objects/**`、`.reo/review/**`、draft、trash 或 lock 文件。
+- 不要调用 Reo IPC，不要创建录音、笔记 draft 或空 Widget 占位；直接写普通文件。
+- Widget frontmatter 必须包含 `kind: widget`、`format: html`、`mount: workspace-rail`。
+- `entry.html` 通过 `<script src="reo-render://vendor/reo-render/bridge.js"></script>` 加载 Reo bridge。
+- 需要下次打开仍保留的 Widget 状态必须通过 `window.reo.state` 写入 `state.json`；localStorage/IndexedDB 只能作为快速 UI cache 或兼容缓存，不能作为唯一长期状态。
+- Widget 可以用 `window.reo.workspace.read()` 读取 workspace、当前 widget 和 currentMemory/null hint；如需切换主内容当前记忆，只能调用 `window.reo.ui.selectMemory({ memoryId })`。
+
+目标身份：
+- workspaceId: ws_85cd8e5b-e0fb-4a4f-a0b8-22ef7a32746d
+
+目标目录：
+- widgets root: `widgets`
+
+创建要求：
+- 在 `widgets/` 下创建一个新的 Widget 目录，目录名使用新的 `wdg_YYYYMMDDHHMMSS_8hex--可读标题`。
+- 写入 `widget.md`，frontmatter 至少包含 `id`、`title`、`kind: widget`、`format: html`、`mount: workspace-rail`。
+- 写入同目录 runtime bundle：`entry.html`、`runtime.json`、`state.json` 和 `assets/`；可选图标为 `assets/icon.svg`。
+- 默认推荐创建 “Workspace 总览” Widget：统计 memories/segments/supplements/works/widgets/needs-review，提供可点击的 Memory 列表，并用 `window.reo.ui.selectMemory({ memoryId })` 切换主内容当前 Memory。
+- Widget 是右侧 rail 的独立 tab，不要假设自己持久挂载；切 tab、折叠 rail 或切 workspace 后都可能被卸载。

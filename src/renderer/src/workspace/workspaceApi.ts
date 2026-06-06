@@ -50,6 +50,12 @@ export function revealSegmentSupplementInFinder(
   return window.reoWorkspace.revealSegmentSupplementInFinder(payload);
 }
 
+export function revealWidgetInFinder(
+  payload: Parameters<Window['reoWorkspace']['revealWidgetInFinder']>[0]
+) {
+  return window.reoWorkspace.revealWidgetInFinder(payload);
+}
+
 export function openMemorySpaceAgentsFile(
   payload: Parameters<Window['reoWorkspace']['openMemorySpaceAgentsFile']>[0]
 ) {
@@ -84,6 +90,12 @@ export function openSegmentSupplementDocument(
   return window.reoWorkspace.openSegmentSupplementDocument(payload);
 }
 
+export function openWidgetDocument(
+  payload: Parameters<Window['reoWorkspace']['openWidgetDocument']>[0]
+) {
+  return window.reoWorkspace.openWidgetDocument(payload);
+}
+
 export function copyMemorySpaceAbsolutePath(
   payload: Parameters<Window['reoWorkspace']['copyMemorySpaceAbsolutePath']>[0]
 ) {
@@ -108,6 +120,12 @@ export function copySegmentSupplementAbsolutePath(
   return window.reoWorkspace.copySegmentSupplementAbsolutePath(payload);
 }
 
+export function copyWidgetAbsolutePath(
+  payload: Parameters<Window['reoWorkspace']['copyWidgetAbsolutePath']>[0]
+) {
+  return window.reoWorkspace.copyWidgetAbsolutePath(payload);
+}
+
 export function copyMemoryRelativePath(
   payload: Parameters<Window['reoWorkspace']['copyMemoryRelativePath']>[0]
 ) {
@@ -126,10 +144,22 @@ export function copySegmentSupplementRelativePath(
   return window.reoWorkspace.copySegmentSupplementRelativePath(payload);
 }
 
+export function copyWidgetRelativePath(
+  payload: Parameters<Window['reoWorkspace']['copyWidgetRelativePath']>[0]
+) {
+  return window.reoWorkspace.copyWidgetRelativePath(payload);
+}
+
 export function copyArtifactAgentPrompt(
   payload: Parameters<Window['reoWorkspace']['copyArtifactAgentPrompt']>[0]
 ) {
   return window.reoWorkspace.copyArtifactAgentPrompt(payload);
+}
+
+export function copyWidgetAgentPrompt(
+  payload: Parameters<Window['reoWorkspace']['copyWidgetAgentPrompt']>[0]
+) {
+  return window.reoWorkspace.copyWidgetAgentPrompt(payload);
 }
 
 export function readArtifactRuntimeState(
@@ -168,6 +198,28 @@ export function readWorkspaceSnapshot(
 
 export function createMemory(payload: Parameters<Window['reoWorkspace']['createMemory']>[0]) {
   return window.reoWorkspace.createMemory(payload);
+}
+
+export function updateWidgetTitle(
+  payload: Parameters<Window['reoWorkspace']['updateWidgetTitle']>[0]
+) {
+  return window.reoWorkspace.updateWidgetTitle(payload);
+}
+
+export function updateWidgetTabOrder(
+  payload: Parameters<Window['reoWorkspace']['updateWidgetTabOrder']>[0]
+) {
+  return window.reoWorkspace.updateWidgetTabOrder(payload);
+}
+
+export function deleteWidget(payload: Parameters<Window['reoWorkspace']['deleteWidget']>[0]) {
+  return window.reoWorkspace.deleteWidget(payload);
+}
+
+export function restoreDeletedWidget(
+  payload: Parameters<Window['reoWorkspace']['restoreDeletedWidget']>[0]
+) {
+  return window.reoWorkspace.restoreDeletedWidget(payload);
 }
 
 export function deleteMemory(payload: Parameters<Window['reoWorkspace']['deleteMemory']>[0]) {
@@ -621,6 +673,7 @@ export type WorkspaceMemorySpace = Extract<
   { readonly ok: true }
 >['value']['memorySpaces'][number];
 export type WorkspaceMemorySummary = WorkspaceSnapshot['memories'][number];
+export type WorkspaceWidgetProjection = NonNullable<WorkspaceSnapshot['widgets']>[number];
 export type WorkspaceMemoryDetail = Extract<
   Awaited<ReturnType<typeof readMemoryDetail>>,
   { readonly ok: true }

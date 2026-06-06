@@ -6,6 +6,7 @@ import {
   ARTIFACT_RUNTIME_STATE_FILE,
   artifactSegmentRuntimeHost,
   artifactSupplementRuntimeHost,
+  workspaceWidgetRuntimeHost,
 } from '../workspace-contract/artifact-runtime-url.js';
 import { ARTIFACT_SCHEME } from './appShellConstants.js';
 
@@ -17,6 +18,7 @@ export {
   ARTIFACT_RUNTIME_STATE_FILE,
   artifactSegmentRuntimeHost,
   artifactSupplementRuntimeHost,
+  workspaceWidgetRuntimeHost,
 } from '../workspace-contract/artifact-runtime-url.js';
 
 const ARTIFACT_MIME_BY_EXTENSION = new Map<string, string>([
@@ -51,6 +53,14 @@ export type ArtifactRequestTarget =
       readonly fileName: string;
       readonly segmentId: string;
       readonly supplementId: string;
+      readonly workspaceId: string;
+    }
+  | {
+      readonly kind: 'widget';
+      readonly entry: boolean;
+      readonly fileScope: 'root' | 'asset';
+      readonly fileName: string;
+      readonly widgetId: string;
       readonly workspaceId: string;
     }
   | {
@@ -161,10 +171,24 @@ export function parseArtifactRequestTarget(parsed: URL): ArtifactRequestTarget |
   const requestWorkspaceId = segments[1] ?? '';
   if (
     !isSafeSinglePathSegment(requestWorkspaceId) ||
-    segments[2] !== 'segments' ||
+    (segments[2] !== 'segments' && segments[2] !== 'widgets') ||
     !isSafeSinglePathSegment(segments[3] ?? '')
   ) {
     return null;
+  }
+
+  if (segments[2] === 'widgets') {
+    const widgetId = segments[3] ?? '';
+    const file = parseArtifactRuntimeFile(segments, 4);
+    if (!file || parsed.hostname !== workspaceWidgetRuntimeHost(requestWorkspaceId, widgetId)) {
+      return null;
+    }
+    return {
+      kind: 'widget',
+      workspaceId: requestWorkspaceId,
+      widgetId,
+      ...file,
+    };
   }
 
   if (segments[4] !== 'supplements') {
@@ -204,7 +228,7 @@ export function parseArtifactRequestTarget(parsed: URL): ArtifactRequestTarget |
 export function isArtifactWorkspaceEntryUrl(url: URL): boolean {
   const target = parseArtifactRequestTarget(url);
   return (
-    (target?.kind === 'segment' || target?.kind === 'supplement') &&
+    (target?.kind === 'segment' || target?.kind === 'supplement' || target?.kind === 'widget') &&
     target.entry &&
     target.workspaceId.length > 0
   );

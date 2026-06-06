@@ -1,0 +1,256 @@
+{
+  "stateMachine": [
+    "S1 right rail is collapsed",
+    "S2 clicking expand mounts the widget tab strip",
+    "S3 widget icon samples never contain custom img and fallback icon together"
+  ],
+  "invariants": [
+    "Widget tab icon space may be empty while a custom icon decodes.",
+    "Fallback AppWindow appears only when the widget has no custom icon or the custom icon fails."
+  ],
+  "sampleCount": 22,
+  "samples": [
+    {
+      "time": 704,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "0",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-0",
+      "fallbackClassName": null
+    },
+    {
+      "time": 708,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": true,
+      "hasFallback": false,
+      "customOpacity": "0",
+      "fallbackOpacity": null,
+      "customClassName": "relative size-16 rounded-[3px] object-contain opacity-0",
+      "fallbackClassName": null
+    },
+    {
+      "time": 743,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 751,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 759,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 770,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 779,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 787,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 800,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 818,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 825,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 832,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 838,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 885,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 890,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 896,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 985,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 989,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 996,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 1004,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 1012,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    },
+    {
+      "time": 1210,
+      "hasTabStrip": true,
+      "hasWidgetTab": true,
+      "hasCustom": false,
+      "hasFallback": true,
+      "customOpacity": null,
+      "fallbackOpacity": "1",
+      "customClassName": null,
+      "fallbackClassName": "[object SVGAnimatedString]"
+    }
+  ]
+}

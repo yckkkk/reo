@@ -15,12 +15,13 @@ import {
   resolveFinalizedArtifactSegmentDirectoryFromManifest,
   resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest,
 } from './memoryFiles.js';
+import { resolveWorkspaceWidgetDirectoryFromFileTruth } from './workspaceWidgets.js';
 import { openExistingWorkspaceFileInDirectory } from './workspaceDirectoryTransactions.js';
 
 export const ARTIFACT_PROTOCOL_CACHE_CONTROL = 'no-store';
 export const ARTIFACT_VENDOR_PROTOCOL_CACHE_CONTROL = 'max-age=31536000, immutable';
 export const ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY =
-  "default-src 'self' https: http: data: blob: reo-artifact:; script-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob: reo-artifact:; style-src 'self' https: http: 'unsafe-inline' reo-artifact:; img-src 'self' https: http: data: blob: reo-artifact:; font-src 'self' https: http: data: reo-artifact:; media-src 'self' https: http: data: blob: reo-artifact:; connect-src 'self' https: http: ws: wss:; frame-src 'self' https: http:; worker-src 'self' https: http: blob: reo-artifact:; object-src 'none'; base-uri 'self'; form-action https: http:";
+  "default-src 'self' https: http: data: blob: reo-render:; script-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob: reo-render:; style-src 'self' https: http: 'unsafe-inline' reo-render:; img-src 'self' https: http: data: blob: reo-render:; font-src 'self' https: http: data: reo-render:; media-src 'self' https: http: data: blob: reo-render:; connect-src 'self' https: http: ws: wss:; frame-src 'self' https: http:; worker-src 'self' https: http: blob: reo-render:; object-src 'none'; base-uri 'self'; form-action https: http:";
 
 export type ArtifactRootResolution =
   | {
@@ -173,6 +174,21 @@ export async function resolveArtifactProtocolRequest(
       return readArtifactFile({
         cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
         directory: segmentDirectory,
+        fileScope: target.fileScope,
+        fileName: target.fileName,
+        maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
+      });
+    }
+
+    if (target.kind === 'widget') {
+      const widgetDirectory = await resolveWorkspaceWidgetDirectoryFromFileTruth({
+        rootPath: root.canonicalRoot,
+        workspaceId: target.workspaceId,
+        widgetId: target.widgetId,
+      });
+      return readArtifactFile({
+        cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
+        directory: widgetDirectory,
         fileScope: target.fileScope,
         fileName: target.fileName,
         maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,

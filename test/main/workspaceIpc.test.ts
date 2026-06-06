@@ -67,6 +67,7 @@ import {
   handleCopyMemorySpaceAbsolutePathForTest,
   handleCopyMemoryRelativePathForTest,
   handleCopyArtifactAgentPromptForTest,
+  handleCopyWidgetAgentPromptForTest,
   handleCopyNeedsReviewAgentPromptForTest,
   handleCopySegmentAbsolutePathForTest,
   handleCopySegmentRelativePathForTest,
@@ -1093,6 +1094,7 @@ test('initializeWorkspace creates a named workspace directory under the selected
     'AGENTS.md',
     'memories',
     'skills',
+    'widgets',
   ]);
   const agentsText = await readFile(path.join(workspaceRoot, 'AGENTS.md'), 'utf8');
   assert.equal(agentsText, DEFAULT_WORKSPACE_AGENTS_MD);
@@ -7266,6 +7268,189 @@ test('copyArtifactAgentPrompt writes a create segment prompt without creating fi
   await assert.rejects(stat(path.join(memoryDirectory, 'segments')));
 });
 
+test('copyWidgetAgentPrompt writes a create prompt with managed entry and Widget terminology', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-widget-prompt-create-'));
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyWidgetAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'create-widget',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  const prompt = copiedText[0] ?? '';
+  assert.match(prompt, /创建一个 Reo Workspace 侧栏 Widget/);
+  assert.match(prompt, /AGENTS\.md/);
+  assert.match(prompt, /skills\/reo-generative-runtime\/SKILL\.md/);
+  assert.match(prompt, /skills\/reo-generative-runtime\/references\//);
+  assert.match(prompt, /skills\/reo-generative-runtime\/scripts\//);
+  assert.match(prompt, /skills\/reo-works-design\/SKILL\.md/);
+  assert.match(prompt, /widgets root: `widgets`/);
+  assert.match(prompt, /kind: widget/);
+  assert.match(prompt, /format: html/);
+  assert.match(prompt, /mount: workspace-rail/);
+  assert.match(prompt, /entry\.html/);
+  assert.match(prompt, /runtime\.json/);
+  assert.match(prompt, /state\.json/);
+  assert.match(prompt, /assets\/icon\.svg/);
+  assert.match(prompt, /text-overflow: ellipsis/);
+  assert.match(prompt, /memory\.memoryId/);
+  assert.match(prompt, /window\.reo\.ui\.selectMemory/);
+  assert.doesNotMatch(prompt, /component/i);
+  assert.doesNotMatch(prompt, /组件/);
+  assert.equal(prompt.includes(root), false);
+  assert.equal(prompt.includes('wh_ipc'), false);
+});
+
+test('copyWidgetAgentPrompt writes an update prompt scoped to an existing Widget', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-widget-prompt-update-'));
+  const widgetDirectory = path.join(root, 'widgets', 'wdg_prompt--Daily');
+  await mkdir(path.join(widgetDirectory, 'assets'), { recursive: true });
+  await writeFile(
+    path.join(widgetDirectory, 'widget.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'widget',
+      data: {
+        id: 'wdg_prompt',
+        title: 'Daily',
+        kind: 'widget',
+        format: 'html',
+        mount: 'workspace-rail',
+      },
+      content: '# Daily\n',
+    })
+  );
+  await writeFile(path.join(widgetDirectory, 'entry.html'), '<!doctype html><p>Daily</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyWidgetAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-widget',
+      widgetId: 'wdg_prompt',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  const prompt = copiedText[0] ?? '';
+  assert.match(prompt, /更新一个 Reo Workspace 侧栏 Widget/);
+  assert.match(prompt, /widget directory: `widgets\/wdg_prompt--Daily`/);
+  assert.match(prompt, /metadata: `widgets\/wdg_prompt--Daily\/widget\.md`/);
+  assert.match(prompt, /widgetId: wdg_prompt/);
+  assert.equal(prompt.includes(root), false);
+  assert.equal(prompt.includes('wh_ipc'), false);
+});
+
+test('copyWidgetAgentPrompt rejects unsafe Widget markdown before clipboard write', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-widget-prompt-unsafe-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-widget-prompt-outside-'));
+  await writeFile(
+    path.join(outside, 'widget.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'widget',
+      data: {
+        id: 'wdg_prompt_unsafe',
+        title: 'Unsafe',
+        kind: 'widget',
+        format: 'html',
+        mount: 'workspace-rail',
+      },
+      content: '# Unsafe\n',
+    })
+  );
+  const widgetDirectory = path.join(root, 'widgets', 'wdg_prompt_unsafe--Unsafe');
+  await mkdir(widgetDirectory, { recursive: true });
+  await symlink(path.join(outside, 'widget.md'), path.join(widgetDirectory, 'widget.md'));
+  await writeFile(path.join(widgetDirectory, 'entry.html'), '<!doctype html><p>Unsafe</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyWidgetAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-widget',
+      widgetId: 'wdg_prompt_unsafe',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_WIDGET_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyWidgetAgentPrompt rejects oversized Widget markdown before clipboard write', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-widget-prompt-oversized-'));
+  const widgetDirectory = path.join(root, 'widgets', 'wdg_prompt_big--Big');
+  await mkdir(widgetDirectory, { recursive: true });
+  await writeFile(
+    path.join(widgetDirectory, 'widget.md'),
+    `---\nid: wdg_prompt_big\ntitle: Big\nkind: widget\nformat: html\nmount: workspace-rail\n---\n${'x'.repeat(
+      300_000
+    )}`
+  );
+  await writeFile(path.join(widgetDirectory, 'entry.html'), '<!doctype html><p>Big</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyWidgetAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-widget',
+      widgetId: 'wdg_prompt_big',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.error.code, 'ERR_WORKSPACE_WIDGET_NOT_FOUND');
+  }
+  assert.deepEqual(copiedText, []);
+});
+
 test('copyArtifactAgentPrompt rejects runtime-supplied prompt context before clipboard write', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-untrusted-context-'));
   const memoryDirectory = path.join(root, 'memories', 'mem_prompt--产品复盘');
@@ -7553,6 +7738,94 @@ test('copyArtifactAgentPrompt writes an update segment prompt for a damaged work
   assert.match(copiedText[0] ?? '', /entry\.html/);
   assert.equal((copiedText[0] ?? '').includes(root), false);
   assert.equal((copiedText[0] ?? '').includes('wh_ipc'), false);
+});
+
+test('copyArtifactAgentPrompt rejects oversized update segment markdown before clipboard write', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-oversized-markdown-'));
+  const segmentDirectory = path.join(root, 'memories', 'mem_prompt', 'segments', 'seg_artifact');
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    [
+      '---',
+      'id: seg_artifact',
+      'title: 复习表',
+      'kind: artifact',
+      'format: html',
+      '---',
+      'x'.repeat(1_100_000),
+      '',
+    ].join('\n')
+  );
+  await writeFile(path.join(segmentDirectory, 'entry.html'), '<!doctype html><p>Old</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyArtifactAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-segment',
+      memoryId: 'mem_prompt',
+      segmentId: 'seg_artifact',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(copiedText, []);
+});
+
+test('copyArtifactAgentPrompt rejects symlinked update segment markdown before clipboard write', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-symlink-markdown-'));
+  const outside = await mkdtemp(path.join(os.tmpdir(), 'reo-artifact-prompt-outside-'));
+  const segmentDirectory = path.join(root, 'memories', 'mem_prompt', 'segments', 'seg_artifact');
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(
+    path.join(outside, 'segment.md'),
+    [
+      '---',
+      'id: seg_artifact',
+      'title: 复习表',
+      'kind: artifact',
+      'format: html',
+      '---',
+      '# 复习表',
+      '',
+    ].join('\n')
+  );
+  await symlink(path.join(outside, 'segment.md'), path.join(segmentDirectory, 'segment.md'));
+  await writeFile(path.join(segmentDirectory, 'entry.html'), '<!doctype html><p>Old</p>');
+  const handleStore = createRegisteredHandleStore(await realpath(root));
+  const copiedText: string[] = [];
+
+  const result = await handleCopyArtifactAgentPromptForTest({
+    event,
+    input: {
+      workspaceHandle: 'wh_ipc',
+      workspaceId: 'ws_ipc',
+      action: 'update-segment',
+      memoryId: 'mem_prompt',
+      segmentId: 'seg_artifact',
+    },
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    handleStore,
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(copiedText, []);
 });
 
 test('copyArtifactAgentPrompt rejects update segment prompts for non-artifact targets', async () => {

@@ -2,6 +2,7 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import {
+  WIDGET_ID_PATTERN,
   MEMORY_ID_PATTERN,
   SEGMENT_ID_PATTERN,
   SUPPLEMENT_ID_PATTERN,
@@ -49,6 +50,13 @@ export const workspaceSupplementMarkdownDataSchema =
     language: z.string().optional(),
   });
 
+export const workspaceWidgetMarkdownDataSchema = workspaceMarkdownSharedSemanticDataSchema.extend({
+  id: z.string().regex(WIDGET_ID_PATTERN).optional(),
+  kind: z.literal('widget'),
+  format: z.literal('html'),
+  mount: z.literal('workspace-rail'),
+});
+
 const workspaceMemoryMarkdownCandidateDataSchema = workspaceMemoryMarkdownDataSchema
   .partial()
   .strip();
@@ -58,16 +66,21 @@ const workspaceSegmentMarkdownCandidateDataSchema = workspaceSegmentMarkdownData
 const workspaceSupplementMarkdownCandidateDataSchema = workspaceSupplementMarkdownDataSchema
   .partial()
   .strip();
+const workspaceWidgetMarkdownCandidateDataSchema = workspaceWidgetMarkdownDataSchema
+  .partial()
+  .strip();
 
-export type WorkspaceMarkdownObjectType = 'memory' | 'segment' | 'supplement';
+export type WorkspaceMarkdownObjectType = 'memory' | 'segment' | 'supplement' | 'widget';
 export type WorkspaceMarkdownObjectData =
   | z.infer<typeof workspaceMemoryMarkdownDataSchema>
   | z.infer<typeof workspaceSegmentMarkdownDataSchema>
-  | z.infer<typeof workspaceSupplementMarkdownDataSchema>;
+  | z.infer<typeof workspaceSupplementMarkdownDataSchema>
+  | z.infer<typeof workspaceWidgetMarkdownDataSchema>;
 export type WorkspaceMarkdownObjectCandidateData =
   | z.infer<typeof workspaceMemoryMarkdownCandidateDataSchema>
   | z.infer<typeof workspaceSegmentMarkdownCandidateDataSchema>
-  | z.infer<typeof workspaceSupplementMarkdownCandidateDataSchema>;
+  | z.infer<typeof workspaceSupplementMarkdownCandidateDataSchema>
+  | z.infer<typeof workspaceWidgetMarkdownCandidateDataSchema>;
 
 export interface ParsedWorkspaceMarkdownObject {
   readonly data: WorkspaceMarkdownObjectData;
@@ -111,6 +124,8 @@ function semanticSchemaForObject(objectType: WorkspaceMarkdownObjectType) {
       return workspaceSegmentMarkdownDataSchema;
     case 'supplement':
       return workspaceSupplementMarkdownDataSchema;
+    case 'widget':
+      return workspaceWidgetMarkdownDataSchema;
   }
 }
 
@@ -122,6 +137,8 @@ function candidateSchemaForObject(objectType: WorkspaceMarkdownObjectType) {
       return workspaceSegmentMarkdownCandidateDataSchema;
     case 'supplement':
       return workspaceSupplementMarkdownCandidateDataSchema;
+    case 'widget':
+      return workspaceWidgetMarkdownCandidateDataSchema;
   }
 }
 

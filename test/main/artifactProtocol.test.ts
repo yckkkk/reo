@@ -35,7 +35,7 @@ function rootResolver(rootPath: string) {
 
 test('artifact vendor bridge accepts host responses only from the parent window', async () => {
   const source = await readFile(
-    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-runtime', 'bridge.js'),
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-render', 'bridge.js'),
     'utf8'
   );
   const listeners: ((event: { data: unknown; source: unknown }) => void)[] = [];
@@ -80,7 +80,7 @@ test('artifact vendor bridge accepts host responses only from the parent window'
   assert.ok(listener);
 
   const readPromise = fakeWindow.reo.state.read();
-  assert.equal(outbound?.['source'], 'reo-runtime');
+  assert.equal(outbound?.['source'], 'reo-render');
   assert.equal(outbound?.['type'], 'request');
   const requestId = outbound?.['requestId'];
   assert.equal(typeof requestId, 'string');
@@ -111,7 +111,7 @@ test('artifact vendor bridge accepts host responses only from the parent window'
 
 test('artifact vendor bridge bounds pending host requests and times out unanswered calls', async () => {
   const source = await readFile(
-    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-runtime', 'bridge.js'),
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-render', 'bridge.js'),
     'utf8'
   );
   let timeoutId = 0;
@@ -318,7 +318,7 @@ test('artifact protocol resolves segment runtime bundle files with isolated-orig
   const runtimeHost = artifactSegmentRuntimeHost('ws_artifact', 'seg_artifact_protocol');
 
   const entry = await resolveArtifactProtocolRequest(
-    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/entry.html?v=${entryHash}`,
+    `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/entry.html?v=${entryHash}`,
     rootResolver(rootPath)
   );
   assert.equal(entry.ok, true);
@@ -334,7 +334,7 @@ test('artifact protocol resolves segment runtime bundle files with isolated-orig
   assert.equal(entry.mimeType, 'text/html');
 
   const asset = await resolveArtifactProtocolRequest(
-    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/style.css?v=${entryHash}`,
+    `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/style.css?v=${entryHash}`,
     rootResolver(rootPath)
   );
   assert.equal(asset.ok, true);
@@ -344,7 +344,7 @@ test('artifact protocol resolves segment runtime bundle files with isolated-orig
   }
 
   const runtimeManifest = await resolveArtifactProtocolRequest(
-    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/runtime.json?v=${entryHash}`,
+    `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/runtime.json?v=${entryHash}`,
     rootResolver(rootPath)
   );
   assert.equal(runtimeManifest.ok, true);
@@ -354,7 +354,7 @@ test('artifact protocol resolves segment runtime bundle files with isolated-orig
   }
 
   const runtimeState = await resolveArtifactProtocolRequest(
-    `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/state.json?v=${entryHash}`,
+    `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/state.json?v=${entryHash}`,
     rootResolver(rootPath)
   );
   assert.equal(runtimeState.ok, true);
@@ -395,7 +395,7 @@ test('artifact protocol resolves versioned Reo vendor assets with immutable cach
   await writeFile(path.join(vendorRoot, 'chartjs', 'chart.umd.js'), 'window.Chart = {};\n');
 
   const vendor = await resolveArtifactProtocolRequest(
-    'reo-artifact://vendor/chartjs/chart.umd.js?v=app',
+    'reo-render://vendor/chartjs/chart.umd.js?v=app',
     rootResolver(rootPath),
     { vendorRoot }
   );
@@ -412,7 +412,7 @@ test('artifact protocol resolves the bundled Reo runtime bridge vendor asset', a
   const rootPath = await workspaceRoot();
 
   const vendor = await resolveArtifactProtocolRequest(
-    'reo-artifact://vendor/reo-runtime/bridge.js?v=app',
+    'reo-render://vendor/reo-render/bridge.js?v=app',
     rootResolver(rootPath),
     { vendorRoot: path.join(process.cwd(), 'resources', 'artifact-vendor') }
   );
@@ -444,56 +444,56 @@ test('artifact protocol rejects inactive workspaces, traversal, symlinks, unsupp
 
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_other/segments/seg_artifact_protocol/entry.html?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_other/segments/seg_artifact_protocol/entry.html?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/%2e%2e/secret.png?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/%2e%2e/secret.png?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/linked.png?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/linked.png?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/notes.txt?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/notes.txt?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/payload.html?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/payload.html?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/nested/style.css?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/nested/style.css?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://workspace/ws_artifact/segments/seg_artifact_protocol/segment.html?v=${entryHash}`,
+      `reo-render://workspace/ws_artifact/segments/seg_artifact_protocol/segment.html?v=${entryHash}`,
       rootResolver(rootPath)
     ),
     { ok: false }
   );
   assert.deepEqual(
     await resolveArtifactProtocolRequest(
-      `reo-artifact://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/style.css?v=${entryHash}`,
+      `reo-render://${runtimeHost}/workspaces/ws_artifact/segments/seg_artifact_protocol/assets/style.css?v=${entryHash}`,
       rootResolver(rootPath),
       { maxAssetBytes: 2 }
     ),

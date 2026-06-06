@@ -3,9 +3,12 @@ import type {
   WorkspaceMemorySpaceEntityActionRequest,
   WorkspaceSegmentEntityActionRequest,
   WorkspaceSegmentSupplementEntityActionRequest,
+  WorkspaceWidgetEntityActionRequest,
 } from '../../../workspace-contract/workspace-contract';
 import type { EntityActionMenuProps } from './entityActionMenu';
 import {
+  copyWidgetAbsolutePath,
+  copyWidgetRelativePath,
   copyMemoryAbsolutePath,
   copyMemoryRelativePath,
   copyMemorySpaceAbsolutePath,
@@ -15,8 +18,10 @@ import {
   copySegmentSupplementRelativePath,
   openMemoryDocument,
   openMemorySpaceAgentsFile,
+  openWidgetDocument,
   openSegmentDocument,
   openSegmentSupplementDocument,
+  revealWidgetInFinder,
   revealMemoryInFinder,
   revealMemorySpaceInFinder,
   revealSegmentInFinder,
@@ -68,5 +73,16 @@ export function bindSegmentSupplementEntityActions(
     onCopyRelativePath: () => copySegmentSupplementRelativePath(actionIdentity),
     onOpenDefault: () => openSegmentSupplementDocument(actionIdentity),
     onRevealInFinder: () => revealSegmentSupplementInFinder(actionIdentity),
+  };
+}
+
+export function bindWidgetEntityActions(
+  actionIdentity: WorkspaceWidgetEntityActionRequest
+): EntityActionBindings {
+  return {
+    onCopyAbsolutePath: () => copyWidgetAbsolutePath(actionIdentity),
+    onCopyRelativePath: () => copyWidgetRelativePath(actionIdentity),
+    onOpenDefault: () => openWidgetDocument(actionIdentity),
+    onRevealInFinder: () => revealWidgetInFinder(actionIdentity),
   };
 }

@@ -1,0 +1,176 @@
+{
+  "stateMachine": [
+    "S1 expanded rail shows the global create menu, memory tab, and widget tabs",
+    "S2 hover widget tab reveals embedded More without a strip background",
+    "S3 selecting widget mounts its runtime iframe inside the right rail",
+    "S4 widget bridge can select a memory while widget rail remains active",
+    "S5 selecting memory tab unmounts widget iframe; selecting widget tab remounts it"
+  ],
+  "invariants": [
+    "The rail tab strip itself is transparent; active/hover fill belongs to individual tab items.",
+    "Widget More is a child of the widget tab item and is hidden from tab order until visible/open.",
+    "Widget panel width and height converge with the right rail shell.",
+    "Widget runtime state persists the selected memory id in state.json.",
+    "Widget runtime text columns shrink and ellipsize inside the narrow rail.",
+    "Widget runtime cannot escape the right rail into document-level horizontal overflow."
+  ],
+  "widgetFiles": [
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/entry.html",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/runtime.json",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/state.json",
+    "widgets/wdg_20260605081953_a60052a6--Workspace-总览/widget.md"
+  ],
+  "initialProjection": {
+    "widgetTabLabel": "Workspace 总览 Widget",
+    "widgetId": null,
+    "tabStripClassName": "edge-fade-x flex min-w-0 max-w-[min(42vw,360px)] items-center gap-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+    "tabStripBackgroundColor": "rgba(0, 0, 0, 0)",
+    "moreAriaHidden": "true",
+    "moreTabIndex": "-1",
+    "moreClassName": "inline-flex items-center justify-center overflow-hidden transition-[max-width,margin-left,opacity,transform] duration-150 ease-out motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background pointer-events-none ml-0 max-w-0 scale-75 opacity-0 group-hover/widget-tab:pointer-events-auto group-hover/widget-tab:ml-[2px] group-hover/widget-tab:max-w-20 group-hover/widget-tab:scale-100 group-hover/widget-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[2px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:ml-[2px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100",
+    "moreRect": {
+      "left": 1148,
+      "top": 12.375,
+      "width": 0,
+      "height": 11.25
+    },
+    "moreOpacity": "0",
+    "iconSlots": {
+      "hasCustom": false,
+      "hasFallback": true,
+      "rect": {
+        "left": 1125,
+        "top": 10,
+        "width": 16,
+        "height": 16
+      }
+    },
+    "widgetTabRect": {
+      "left": 1118,
+      "top": 3,
+      "width": 30,
+      "height": 30
+    }
+  },
+  "hoverProjection": {
+    "moreAriaHidden": null,
+    "moreTabIndex": "0",
+    "moreOpacity": "0.934068",
+    "moreRect": {
+      "left": 1129.4742431640625,
+      "top": 8.164831161499023,
+      "width": 18.371826171875,
+      "height": 19.670337677001953
+    },
+    "tabBackgroundColor": "rgb(39, 39, 42)"
+  },
+  "mountedProjection": {
+    "selected": "true",
+    "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353038313935335f6136303035326136/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605081953_a60052a6/entry.html?v=c5139e78f901ff78ad1d4446b159d43722903d6c58cb90e5c8d0408c03c95d13",
+    "panelRect": {
+      "left": 961,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 239,
+      "height": 752
+    },
+    "frameRect": {
+      "left": 961,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 239,
+      "height": 752
+    },
+    "railRect": {
+      "left": 960,
+      "top": 48,
+      "right": 1200,
+      "bottom": 800,
+      "width": 240,
+      "height": 752
+    },
+    "viewport": {
+      "width": 1200,
+      "height": 800
+    },
+    "overflow": {
+      "documentScrollWidth": 1200,
+      "bodyScrollWidth": 1200
+    }
+  },
+  "widgetTextProjection": {
+    "viewportWidth": 239,
+    "documentScrollWidth": 239,
+    "bodyScrollWidth": 239,
+    "main": {
+      "minWidth": "0px",
+      "overflow": "hidden"
+    },
+    "title": {
+      "display": "block",
+      "minWidth": "0px",
+      "overflow": "hidden",
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    },
+    "meta": {
+      "display": "block",
+      "minWidth": "0px",
+      "overflow": "hidden",
+      "textOverflow": "ellipsis",
+      "whiteSpace": "nowrap"
+    },
+    "status": {
+      "overflowWrap": "anywhere"
+    }
+  },
+  "widgetId": "wdg_20260605081953_a60052a6",
+  "memoryChoice": {
+    "memoryId": "mem_20260519032914_666583be",
+    "title": "碎片记录",
+    "activeBefore": false,
+    "count": 5,
+    "previousMemoryId": "mem_20260517063940_89533fee"
+  },
+  "stateBeforeSelect": {
+    "schemaVersion": 1,
+    "stores": {
+      "data": {},
+      "progress": {},
+      "draft": {},
+      "ui": {
+        "query": "",
+        "lastSelectedMemoryId": "mem_20260517063940_89533fee"
+      }
+    }
+  },
+  "stateAfterSelect": {
+    "schemaVersion": 1,
+    "stores": {
+      "data": {},
+      "progress": {},
+      "draft": {},
+      "ui": {
+        "query": "",
+        "lastSelectedMemoryId": "mem_20260519032914_666583be"
+      }
+    }
+  },
+  "bridgeProjection": {
+    "titlebarText": "测试碎片记录",
+    "widgetSelected": "true",
+    "frameMounted": true
+  },
+  "memoryTabProjection": {
+    "memorySelected": "true",
+    "frameMounted": false,
+    "memoryCardCount": 5
+  },
+  "remountProjection": {
+    "widgetSelected": "true",
+    "frameMounted": true,
+    "frameSrc": "reo-render://widget-39-77735f39633366383361382d636235312d346333352d393233662d306236386265343735336565-27-7764675f32303236303630353038313935335f6136303035326136/workspaces/ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee/widgets/wdg_20260605081953_a60052a6/entry.html?v=c5139e78f901ff78ad1d4446b159d43722903d6c58cb90e5c8d0408c03c95d13"
+  }
+}

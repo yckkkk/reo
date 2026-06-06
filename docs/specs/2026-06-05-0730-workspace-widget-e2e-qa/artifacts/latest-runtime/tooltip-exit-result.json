@@ -1,0 +1,30 @@
+{
+  "stateMachine": [
+    "S1 pointer enters rail toggle and tooltip appears",
+    "S2 pointer leaves the trigger area and tooltip unmounts without hoverable-content delay"
+  ],
+  "invariants": [
+    "Tooltip content does not remain interactive after the pointer leaves the trigger.",
+    "Close latency stays under 600ms, so it does not block repeated titlebar interactions."
+  ],
+  "target": {
+    "label": "展开记忆列表",
+    "rect": {
+      "left": 1156,
+      "top": 2,
+      "width": 32,
+      "height": 32
+    }
+  },
+  "shown": {
+    "label": "展开记忆列表",
+    "text": "展开记忆列表展开记忆列表",
+    "state": "delayed-open"
+  },
+  "closedProjection": {
+    "visible": false,
+    "text": "",
+    "state": null
+  },
+  "elapsedMs": 160
+}

@@ -67,7 +67,7 @@
       pending.set(requestId, { resolve: resolve, reject: reject, timeoutId: timeoutId });
       window.parent.postMessage(
         {
-          source: 'reo-runtime',
+          source: 'reo-render',
           type: 'request',
           requestId: requestId,
           method: method,
@@ -113,6 +113,11 @@
     ui: {
       requestFullscreen: function () {
         return call('ui.requestFullscreen');
+      },
+      selectMemory: function (input) {
+        return call('ui.selectMemory', {
+          memoryId: input && input.memoryId,
+        });
       },
     },
     agent: {

@@ -1,0 +1,12 @@
+已修好目标 Widget：
+
+- 点击记忆现在使用 `memory.memoryId` 调用 `window.reo.ui.selectMemory({ memoryId })`，不再用错误的 `memory.id`。
+- 增加了状态兜底和空列表提示，workspace 未加载、没有记忆、状态结构异常时不会直接空白。
+- 保留了原 `widget.md` 的 `id`、`kind: widget`、`format: html`、`mount: workspace-rail`。
+
+修改文件：[entry.html](/Users/yck/Downloads/PM/技术线/reo文件区/reo测试工作区/测试/widgets/wdg_20260605081953_a60052a6--Workspace-总览/entry.html)
+
+验证已通过：
+- `validate-runtime`: ok，无 issues
+- `inspect-runtime`: ok，确认使用 bridge
+- 抽取内联脚本语法检查通过
