@@ -16,17 +16,17 @@ export function WidgetDeleteDialog({
   open,
   widget,
 }: WidgetDeleteDialogProps) {
-  const widgetTitle = widget?.title ?? '这个 Widget';
+  const widgetTitle = widget?.title ?? '这个组件';
 
   return (
     <WorkspaceDangerConfirmDialog
-      confirmLabel="删除 Widget"
-      description={`删除“${widgetTitle}”？Reo 会把这个 Widget 移入回收区，可从提示中恢复。`}
+      confirmLabel="删除组件"
+      description={`删除“${widgetTitle}”？Reo 会把这个组件移入回收区，可从提示中恢复。`}
       disabled={disabled}
       onConfirm={onConfirm}
       onOpenChange={onOpenChange}
       open={open}
-      title="删除 Widget"
+      title="删除组件"
     />
   );
 }

@@ -1,4 +1,5 @@
 import { createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { WorkspaceTitlebar } from './WorkspaceTitlebar';
@@ -50,7 +51,7 @@ const customIconWidget: WorkspaceWidgetProjection = {
 const secondWidget: WorkspaceWidgetProjection = {
   ...workspaceWidget,
   widgetId: 'wdg_second',
-  title: '第二个 Widget',
+  title: '第二个组件',
 };
 
 const thirdWidget: WorkspaceWidgetProjection = {
@@ -152,7 +153,7 @@ function renderWorkspaceTitlebar({
 }
 
 describe('WorkspaceTitlebar', () => {
-  it('shows one global create menu for new Memory and new Widget actions', () => {
+  it('shows one global create menu for new Memory and component actions', () => {
     const onCreateMemory = vi.fn();
     const onCreateWidget = vi.fn();
     const { rerender } = renderWorkspaceTitlebar({
@@ -221,7 +222,7 @@ describe('WorkspaceTitlebar', () => {
     ).not.toBeInTheDocument();
     expect(currentMemoryActions).toContainElement(railButton);
     openCreateMenu(nextCreateButton);
-    fireEvent.click(screen.getByRole('menuitem', { name: '新建 Widget' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '新增组件' }));
     expect(onCreateMemory).toHaveBeenCalledOnce();
     expect(onCreateWidget).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: '碎片记录 记忆操作' })).toBeInTheDocument();
@@ -260,7 +261,7 @@ describe('WorkspaceTitlebar', () => {
     );
 
     expect(screen.getByRole('button', { name: '新增' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '新建 Widget' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '新增组件' })).not.toBeInTheDocument();
     expect(document.querySelector('[data-slot="workspace-rail-tab-strip"]')).toBeNull();
 
     rerender(
@@ -295,7 +296,7 @@ describe('WorkspaceTitlebar', () => {
     expect(document.querySelector('[data-slot="workspace-rail-tab-strip"]')).toBeInstanceOf(
       HTMLElement
     );
-    fireEvent.click(screen.getByRole('tab', { name: 'Workspace 总览 Widget' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Workspace 总览 组件' }));
     expect(onSelectRailTab).toHaveBeenCalledWith({
       kind: 'widget',
       widgetId: 'wdg_overview',
@@ -303,10 +304,10 @@ describe('WorkspaceTitlebar', () => {
     expect(
       document
         .querySelector('[data-slot="workspace-rail-tab-strip"]')
-        ?.querySelector('[aria-label="新建 Widget"]')
+        ?.querySelector('[aria-label="新增组件"]')
     ).toBeNull();
     openCreateMenu(screen.getByRole('button', { name: '新增' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '新建 Widget' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '新增组件' }));
     expect(onCreateWidget).toHaveBeenCalledOnce();
   });
 
@@ -365,7 +366,7 @@ describe('WorkspaceTitlebar', () => {
     expect(memoryTabButton).toHaveClass('hover:bg-transparent');
 
     const tabButton = within(widgetTab as HTMLElement).getByRole('tab', {
-      name: 'Workspace 总览 Widget',
+      name: 'Workspace 总览 组件',
     });
     expect(tabButton).toHaveClass('bg-transparent');
     expect(tabButton).toHaveClass('text-inherit');
@@ -383,6 +384,60 @@ describe('WorkspaceTitlebar', () => {
     expect(moreButton).toHaveClass('group-hover/rail-tab:ml-[2px]');
     expect(moreButton).not.toHaveClass('size-[30px]');
     expect(moreButton).not.toHaveClass('hover:bg-secondary');
+  });
+
+  it('groups Widget update prompts under Agent actions in the Widget tab menu', async () => {
+    const user = userEvent.setup();
+    const onRequestWidgetUpdate = vi.fn();
+    render(
+      <TooltipProvider>
+        <WorkspaceTitlebar
+          activeRailTab={{ kind: 'widget', widgetId: workspaceWidget.widgetId }}
+          currentMemory={currentMemory}
+          memoryRailOpen
+          onCreateMemory={vi.fn()}
+          onCreateWidget={vi.fn()}
+          onDeleteMemory={vi.fn()}
+          onDeleteWidget={vi.fn()}
+          onRenameMemory={vi.fn()}
+          onRenameWidget={vi.fn()}
+          onRequestWidgetRefresh={vi.fn()}
+          onRequestWidgetUpdate={onRequestWidgetUpdate}
+          onResetMemoryCover={vi.fn()}
+          onReorderWidgets={vi.fn()}
+          onSelectRailTab={vi.fn()}
+          onSwitchMemoryDefaultCover={vi.fn()}
+          onRenameMemorySpace={vi.fn()}
+          onRemoveMemorySpace={vi.fn()}
+          onToggleMemoryRail={vi.fn()}
+          title="测试"
+          widgets={[workspaceWidget]}
+          workspaceHandle="workspace-handle-secret"
+          workspaceId="ws_1"
+        />
+      </TooltipProvider>
+    );
+
+    const widgetTab = document.querySelector('[data-slot="workspace-widget-tab"]');
+    expect(widgetTab).toBeInstanceOf(HTMLElement);
+    fireEvent.pointerEnter(widgetTab as HTMLElement);
+
+    const moreButton = (widgetTab as HTMLElement).querySelector(
+      '[data-slot="workspace-widget-tab-more-anchor"]'
+    );
+    expect(moreButton).toBeInstanceOf(HTMLButtonElement);
+    await waitFor(() => expect(moreButton).not.toHaveAttribute('aria-hidden'));
+
+    await user.click(moreButton as HTMLButtonElement);
+    const menu = await screen.findByRole('menu', { name: 'Workspace 总览 更多操作' });
+    expect(
+      within(menu).queryByRole('menuitem', { name: '让 Agent 更新组件' })
+    ).not.toBeInTheDocument();
+
+    await user.click(within(menu).getByRole('menuitem', { name: 'Agent 操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新组件' }));
+
+    expect(onRequestWidgetUpdate).toHaveBeenCalledWith(workspaceWidget);
   });
 
   it('shows the fallback icon while custom widget icons are loading', () => {
@@ -486,20 +541,20 @@ describe('WorkspaceTitlebar', () => {
     const widgetTabNames = () =>
       within(tabStrip as HTMLElement)
         .getAllByRole('tab')
-        .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' Widget'))
+        .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' 组件'))
         .map((tab) => tab.getAttribute('aria-label'));
 
     expect(widgetTabNames()).toEqual([
-      'Workspace 总览 Widget',
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
+      'Workspace 总览 组件',
+      '第二个组件 组件',
+      '今日空间总览 组件',
     ]);
 
     const overviewItem = within(tabStrip as HTMLElement)
-      .getByRole('tab', { name: 'Workspace 总览 Widget' })
+      .getByRole('tab', { name: 'Workspace 总览 组件' })
       .closest('[data-slot="workspace-widget-tab"]') as HTMLElement;
     const todayItem = within(tabStrip as HTMLElement)
-      .getByRole('tab', { name: '今日空间总览 Widget' })
+      .getByRole('tab', { name: '今日空间总览 组件' })
       .closest('[data-slot="workspace-widget-tab"]') as HTMLElement;
     mockTabRect(overviewItem);
     const dataTransfer = createDragDataTransfer();
@@ -510,9 +565,9 @@ describe('WorkspaceTitlebar', () => {
 
     await waitFor(() =>
       expect(widgetTabNames()).toEqual([
-        '今日空间总览 Widget',
-        'Workspace 总览 Widget',
-        '第二个 Widget Widget',
+        '今日空间总览 组件',
+        'Workspace 总览 组件',
+        '第二个组件 组件',
       ])
     );
     expect(onReorderWidgets).not.toHaveBeenCalled();
@@ -531,10 +586,10 @@ describe('WorkspaceTitlebar', () => {
     const tabStrip = document.querySelector('[data-slot="workspace-rail-tab-strip"]');
     expect(tabStrip).toBeInstanceOf(HTMLElement);
     const overviewItem = within(tabStrip as HTMLElement)
-      .getByRole('tab', { name: 'Workspace 总览 Widget' })
+      .getByRole('tab', { name: 'Workspace 总览 组件' })
       .closest('[data-slot="workspace-widget-tab"]') as HTMLElement;
     const todayItem = within(tabStrip as HTMLElement)
-      .getByRole('tab', { name: '今日空间总览 Widget' })
+      .getByRole('tab', { name: '今日空间总览 组件' })
       .closest('[data-slot="workspace-widget-tab"]') as HTMLElement;
     mockTabRect(overviewItem);
     const dataTransfer = createDragDataTransfer();
@@ -545,9 +600,9 @@ describe('WorkspaceTitlebar', () => {
       expect(
         within(tabStrip as HTMLElement)
           .getAllByRole('tab')
-          .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' Widget'))
+          .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' 组件'))
           .map((tab) => tab.getAttribute('aria-label'))
-      ).toEqual(['今日空间总览 Widget', 'Workspace 总览 Widget', '第二个 Widget Widget'])
+      ).toEqual(['今日空间总览 组件', 'Workspace 总览 组件', '第二个组件 组件'])
     );
 
     fireEvent.dragEnd(todayItem, { dataTransfer });

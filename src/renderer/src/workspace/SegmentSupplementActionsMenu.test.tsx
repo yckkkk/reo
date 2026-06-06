@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from '@/components/ui/toaster';
@@ -213,18 +213,22 @@ describe('SegmentSupplementActionsMenu', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
-  it('shows artifact refresh and agent update actions for artifact supplements', async () => {
+  it('groups artifact update prompts under Agent actions for artifact supplements', async () => {
     const onRequestArtifactRefresh = vi.fn();
     const onRequestArtifactUpdate = vi.fn();
     renderMenu({ onRequestArtifactRefresh, onRequestArtifactUpdate });
 
-    const { user } = await openEntityActionMenu('My Supplement 更多操作');
+    const { menu, user } = await openEntityActionMenu('My Supplement 更多操作');
+    expect(
+      within(menu).queryByRole('menuitem', { name: '让 Agent 更新作品' })
+    ).not.toBeInTheDocument();
     await user.click(screen.getByRole('menuitem', { name: '刷新页面' }));
     expect(onRequestArtifactRefresh).toHaveBeenCalledOnce();
     expect(onRequestArtifactUpdate).not.toHaveBeenCalled();
 
     await openEntityActionMenu('My Supplement 更多操作');
-    await user.click(screen.getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Agent 操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新作品' }));
     expect(onRequestArtifactUpdate).toHaveBeenCalledOnce();
   });
 

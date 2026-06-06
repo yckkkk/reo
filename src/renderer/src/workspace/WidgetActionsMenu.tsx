@@ -44,8 +44,9 @@ export function WidgetActionsMenu({
     },
     {
       icon: AppWindow,
-      label: '让 Agent 更新 Widget',
-      onSelect: onRequestAgentUpdate,
+      items: [{ label: '更新组件', onSelect: onRequestAgentUpdate }],
+      kind: 'submenu' as const,
+      label: 'Agent 操作',
     },
   ];
 

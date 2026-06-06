@@ -2263,7 +2263,11 @@ describe('LoadedWorkspaceFrame', () => {
       await within(workTabItem as HTMLElement).findByRole('button', { name: '作品 更多操作' })
     );
     const workTabMenu = await screen.findByRole('menu', { name: '作品 更多操作' });
-    await user.click(within(workTabMenu).getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    expect(
+      within(workTabMenu).queryByRole('menuitem', { name: '让 Agent 更新作品' })
+    ).not.toBeInTheDocument();
+    await user.click(within(workTabMenu).getByRole('menuitem', { name: 'Agent 操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新作品' }));
     await waitFor(() =>
       expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({
         workspaceHandle: 'workspace-handle-secret',
@@ -4878,7 +4882,11 @@ describe('LoadedWorkspaceFrame', () => {
     await screen.findByRole('region', { name: 'Memory Studio' });
     await user.click(await screen.findByRole('button', { name: '片段 间隔复习表 更多操作' }));
     const menu = await screen.findByRole('menu', { name: '片段 间隔复习表 更多操作' });
-    await user.click(within(menu).getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    expect(
+      within(menu).queryByRole('menuitem', { name: '让 Agent 更新作品' })
+    ).not.toBeInTheDocument();
+    await user.click(within(menu).getByRole('menuitem', { name: 'Agent 操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新作品' }));
 
     await waitFor(() =>
       expect(copyArtifactAgentPrompt).toHaveBeenCalledWith({

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   installWorkspaceBridgeForEntityActionTests,
@@ -110,12 +110,12 @@ describe('SegmentContentActionsMenu', () => {
     expect(screen.queryByRole('menuitem', { name: '清空转录' })).not.toBeInTheDocument();
   });
 
-  it('shows artifact refresh and agent update actions for a primary artifact tab', async () => {
+  it('groups artifact update prompts under Agent actions for a primary artifact tab', async () => {
     const onRequestArtifactRefresh = vi.fn();
     const onRequestArtifactUpdate = vi.fn();
     renderMenu({ contentKind: 'artifact', onRequestArtifactRefresh, onRequestArtifactUpdate });
 
-    const { user } = await openEntityActionMenu('转录 更多操作');
+    const { menu, user } = await openEntityActionMenu('转录 更多操作');
 
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       '用默认应用打开',
@@ -123,15 +123,19 @@ describe('SegmentContentActionsMenu', () => {
       '复制相对路径',
       '复制绝对路径',
       '刷新页面',
-      '让 Agent 更新作品',
+      'Agent 操作',
     ]);
+    expect(
+      within(menu).queryByRole('menuitem', { name: '让 Agent 更新作品' })
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('menuitem', { name: '刷新页面' }));
     expect(onRequestArtifactRefresh).toHaveBeenCalledOnce();
     expect(onRequestArtifactUpdate).not.toHaveBeenCalled();
 
     await openEntityActionMenu('转录 更多操作');
-    await user.click(screen.getByRole('menuitem', { name: '让 Agent 更新作品' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Agent 操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新作品' }));
     expect(onRequestArtifactUpdate).toHaveBeenCalledOnce();
   });
 

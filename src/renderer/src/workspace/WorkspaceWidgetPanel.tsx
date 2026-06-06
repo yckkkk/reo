@@ -43,9 +43,9 @@ function WorkspaceWidgetFaultPanel({
   return (
     <div className="flex h-full min-h-0 flex-col justify-center gap-12 px-16 py-20">
       <div>
-        <p className="text-ui-md font-semibold leading-ui-md text-foreground">Widget 无法加载</p>
+        <p className="text-ui-md font-semibold leading-ui-md text-foreground">组件无法加载</p>
         <p className="mt-6 text-ui-sm leading-ui-sm text-muted-foreground">
-          {fault?.diagnostic ?? '这个 Widget 的运行文件需要检查。'}
+          {fault?.diagnostic ?? '这个组件的运行文件需要检查。'}
         </p>
       </div>
       <Button
@@ -55,7 +55,7 @@ function WorkspaceWidgetFaultPanel({
         className="w-fit gap-6"
         onClick={onRequestAgentUpdate}
       >
-        <AppWindow className="size-[14px]" aria-hidden="true" />让 Agent 更新 Widget
+        <AppWindow className="size-[14px]" aria-hidden="true" />让 Agent 更新组件
       </Button>
     </div>
   );
@@ -123,7 +123,7 @@ export function WorkspaceWidgetPanel({
   if (widget.runtimeFault || src === null) {
     return (
       <section
-        aria-label={`${widget.title} Widget`}
+        aria-label={`${widget.title} 组件`}
         className="flex h-full min-h-0 w-full flex-col bg-background"
         data-slot="workspace-widget-panel"
         id={id}
@@ -138,14 +138,14 @@ export function WorkspaceWidgetPanel({
 
   return (
     <section
-      aria-label={`${widget.title} Widget`}
+      aria-label={`${widget.title} 组件`}
       className="flex h-full min-h-0 w-full flex-col bg-background"
       data-slot="workspace-widget-panel"
       id={id}
     >
       <iframe
         key={`${src}:${refreshVersion}`}
-        title={`Widget：${widget.title}`}
+        title={`组件：${widget.title}`}
         sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
         src={src}
         className="h-full w-full border-0 bg-background"

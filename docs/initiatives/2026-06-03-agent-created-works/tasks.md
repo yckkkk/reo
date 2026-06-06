@@ -17,10 +17,16 @@
 - Works / Widget 技能升级：explorable 能力、设计系统融合与信息架构 - 已完成：
   `docs/archive/specs/2026-06-05-2037-works-explorable-and-design-cohesion/`
   - `reo-works-design` 现在包含 source->derive->render 参考、5 个可运行黄金范例、Reo app theme.css 投影 token、Widget 窄栏范例和跨 skill 入口链接。
+- Widget object navigation 与 orphan diagnostics - 已完成：
+  `docs/archive/specs/2026-06-05-2233-widget-object-navigation-and-orphan-diagnostics/`
+  - Workspace Widget runtime 可请求聚焦 active Memory / Segment / SegmentSupplement；`reo-doctor` 可报告孤立 `.reo/objects/**` mirror。
+- Prompt-bridge Agent 操作菜单收敛 - 已完成：
+  `docs/archive/specs/2026-06-06-0231-agent-actions-menu-convergence/`
+  - 作品与 Workspace Widget 的已有 update prompt 已从顶层 More 菜单收敛到 `Agent 操作` 子菜单；创建入口保持原位置。
 
 ## 下一步
 
-M4+ Widget 完整形态联动未排期。后续 Home/Memory tab、Gallery、回顾 mechanics、复习日历、跨 Memory 工具和更高野心的 explorable 作品继续复用 Shared Generative Runtime，不重建 widget 专用 runtime。
+M4+ Widget 完整形态联动未排期；后续 Home/Memory tab、Gallery、回顾 mechanics、复习日历、跨 Memory 工具和更高野心的 explorable 作品继续复用 Shared Generative Runtime，不重建 widget 专用 runtime。
 
 ## 已融合草稿
 

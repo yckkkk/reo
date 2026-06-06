@@ -16,15 +16,15 @@ export function WidgetRenameDialog({
 }: WidgetRenameDialogProps) {
   return (
     <MemoryTitleDialog
-      description="Widget 名称会写回 widget.md。"
+      description="组件名称会写回 widget.md。"
       initialTitle={widget?.title ?? ''}
-      fieldLabel="Widget 名称"
+      fieldLabel="组件名称"
       onOpenChange={onOpenChange}
       onSubmitTitle={(title) => (widget ? onSave(widget, title) : Promise.resolve(null))}
       open={open}
-      saveErrorTitle="无法重命名 Widget"
+      saveErrorTitle="无法重命名组件"
       submitLabel="保存"
-      title="重命名 Widget"
+      title="重命名组件"
     />
   );
 }

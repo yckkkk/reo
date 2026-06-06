@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from '@/components/ui/toaster';
@@ -50,6 +50,7 @@ function renderMenu(
     onDelete?: () => void;
     onResetCover?: () => void;
     onRename?: () => void;
+    onRequestArtifactUpdate?: () => void;
     onRequestSpeechSynthesis?: (speaker: VoiceSpeechSynthesisSpeaker) => void;
     onRequestTranscriptionBackfill?: () => void;
     cover?: Parameters<typeof SegmentActionsMenu>[0]['cover'];
@@ -64,6 +65,7 @@ function renderMenu(
       actionIdentity={segmentActionPayload}
       cover={props.cover}
       onDelete={props.onDelete ?? vi.fn()}
+      onRequestArtifactUpdate={props.onRequestArtifactUpdate}
       onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
       onResetCover={props.onResetCover ?? vi.fn()}
@@ -281,6 +283,21 @@ describe('SegmentActionsMenu', () => {
 
     expect(onRequestTranscriptionBackfill).toHaveBeenCalledOnce();
     expect(screen.queryByRole('menuitem', { name: '生成转录' })).not.toBeInTheDocument();
+  });
+
+  it('groups artifact update prompts under Agent actions without keeping the old top-level label', async () => {
+    const onRequestArtifactUpdate = vi.fn();
+    renderMenu({ onRequestArtifactUpdate });
+
+    const { menu, user } = await openEntityActionMenu('My Segment 更多操作');
+
+    expect(
+      within(menu).queryByRole('menuitem', { name: '让 Agent 更新作品' })
+    ).not.toBeInTheDocument();
+    await user.click(within(menu).getByRole('menuitem', { name: 'Agent 操作' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新作品' }));
+
+    expect(onRequestArtifactUpdate).toHaveBeenCalledOnce();
   });
 
   it('disables the transcript action with tooltip copy when backfill is unavailable', async () => {

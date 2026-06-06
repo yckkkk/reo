@@ -8,6 +8,9 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { VoiceSpeechSynthesisSpeaker } from '../voiceSpeechSynthesisSpeakers';
@@ -44,6 +47,24 @@ function SegmentContentActionIcon({ icon: Icon }: { readonly icon: LucideIcon })
 
 function disabledReasonExists(reason: string | null | undefined) {
   return reason !== null && reason !== undefined;
+}
+
+function SegmentContentAgentActionsSubmenu({
+  onRequestArtifactUpdate,
+}: {
+  readonly onRequestArtifactUpdate: () => void;
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger>
+        <SegmentContentActionIcon icon={AppWindow} />
+        Agent 操作
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        <DropdownMenuItem onSelect={onRequestArtifactUpdate}>更新作品</DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
 }
 
 export function SegmentContentActionsMenu({
@@ -112,9 +133,9 @@ export function SegmentContentActionsMenu({
                 </DropdownMenuItem>
               ) : null}
               {showArtifactUpdate ? (
-                <DropdownMenuItem onSelect={onRequestArtifactUpdate}>
-                  <SegmentContentActionIcon icon={AppWindow} />让 Agent 更新作品
-                </DropdownMenuItem>
+                <SegmentContentAgentActionsSubmenu
+                  onRequestArtifactUpdate={onRequestArtifactUpdate}
+                />
               ) : null}
               {showSpeechSynthesis ? (
                 <SpeechSynthesisSpeakerSubmenu

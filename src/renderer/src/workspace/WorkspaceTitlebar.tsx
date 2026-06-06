@@ -221,7 +221,7 @@ function WorkspaceCreateMenu({
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={onCreateWidget}>
           <AppWindow className="size-16 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span>新建 Widget</span>
+          <span>新增组件</span>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -460,7 +460,7 @@ function WorkspaceRailTabStrip({
           >
             <WorkspaceRailTabButton
               active={active}
-              ariaLabel={`${widget.title} Widget`}
+              ariaLabel={`${widget.title} 组件`}
               onClick={() => onSelectRailTab({ kind: 'widget', widgetId: widget.widgetId })}
               tooltipLabel={widget.title}
             >

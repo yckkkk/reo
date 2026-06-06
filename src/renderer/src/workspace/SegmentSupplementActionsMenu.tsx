@@ -64,8 +64,9 @@ export function SegmentSupplementActionsMenu({
       ? [
           {
             icon: AppWindow,
-            label: '让 Agent 更新作品',
-            onSelect: onRequestArtifactUpdate,
+            items: [{ label: '更新作品', onSelect: onRequestArtifactUpdate }],
+            kind: 'submenu' as const,
+            label: 'Agent 操作',
           },
         ]
       : []),
