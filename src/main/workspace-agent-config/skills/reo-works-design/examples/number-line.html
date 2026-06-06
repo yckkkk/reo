@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>目标分档</title>
+<style>
+  :root{
+    --color-background-primary:#ffffff;--color-background-secondary:#f4f4f5;
+    --color-text-primary:#18181b;--color-text-secondary:#3f3f46;--color-text-tertiary:#71717a;
+    --color-border-tertiary:rgba(24,24,27,0.08);--color-border-secondary:rgba(24,24,27,0.14);
+    --border-radius-lg:16px;
+    --shadow-card:0 1px 2px rgba(17,24,39,0.04),0 2px 8px rgba(17,24,39,0.05);
+    --font-sans:"Waldenburg","Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --coral-100:#F5C4B3;--coral-600:#D85A30;--coral-800:#712B13;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --color-background-primary:#09090b;--color-background-secondary:#18181b;
+    --color-text-primary:#fafafa;--color-text-secondary:#d4d4d8;--color-text-tertiary:#a1a1aa;
+    --color-border-tertiary:rgba(255,255,255,0.10);--color-border-secondary:rgba(255,255,255,0.16);
+    --shadow-card:0 1px 2px rgba(0,0,0,0.4),0 2px 10px rgba(0,0,0,0.34);
+    --coral-100:#4A1B0C;--coral-600:#F0997B;--coral-800:#F5C4B3;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--color-text-primary);background:var(--color-background-primary)}
+  .work{max-width:600px;margin:0 auto;padding:24px 20px;min-width:0}
+  h1{font-size:20px;font-weight:500;margin:0 0 4px}
+  .caption{margin:0 0 16px;font-size:13px;color:var(--color-text-tertiary)}
+  .card{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-card);padding:14px 14px 8px}
+  svg{width:100%;height:auto;display:block;touch-action:none}
+  svg:focus{outline:none}
+  svg:focus-visible .cursor{stroke:var(--coral-800);stroke-width:2}
+  .axis{stroke:var(--color-border-secondary);stroke-width:1.5}
+  .bucket{stroke:var(--color-border-secondary);stroke-width:1}
+  .bucket.near{stroke:var(--coral-600);stroke-width:2}
+  .blabel{fill:var(--color-text-tertiary);font-size:11px;font-family:var(--font-sans);text-anchor:middle}
+  .blabel.near{fill:var(--coral-800);font-weight:500}
+  .scalecap{fill:var(--color-text-tertiary);font-size:11px;font-family:var(--font-sans);text-anchor:start}
+  .link{stroke:var(--coral-600);stroke-width:1.5;stroke-dasharray:3 3}
+  .cursor{fill:var(--coral-600);cursor:grab}
+  .cursor:active{cursor:grabbing}
+  .read{display:flex;justify-content:space-between;align-items:baseline;margin-top:10px}
+  .read .big{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+  .hint{font-size:12px;color:var(--color-text-tertiary)}
+</style>
+</head>
+<body>
+<main class="work">
+  <h1>目标分档</h1>
+  <p class="caption">把一个连续目标值映射到最近的里程碑档位。拖动圆点，或聚焦后用左右方向键。</p>
+  <div class="card">
+    <svg id="svg" viewBox="0 0 600 150" role="slider" tabindex="0" aria-label="目标值 0 到 100" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62">
+      <text class="scalecap" x="40" y="26">目标</text>
+      <line class="axis" x1="40" y1="46" x2="560" y2="46" />
+      <line id="link" class="link" x1="0" y1="46" x2="0" y2="104" />
+      <circle id="cursor" class="cursor" cx="0" cy="46" r="8" />
+      <text class="scalecap" x="40" y="92">档位</text>
+      <line class="axis" x1="40" y1="104" x2="560" y2="104" />
+      <g id="buckets"></g>
+    </svg>
+    <div class="read"><span class="big" id="r-target">62</span><span class="hint">最接近：<span id="r-bucket">熟练</span></span></div>
+  </div>
+</main>
+<script>
+  var BUCKETS=[{v:0,name:'起步'},{v:25,name:'入门'},{v:50,name:'熟练'},{v:75,name:'精通'},{v:100,name:'大师'}];
+  var X0=40,X1=560;
+  var state={target:62};
+  function x(v){return X0+v/100*(X1-X0);}
+  // 派生：最近档位
+  function derive(s){
+    var best=BUCKETS[0];
+    for(var i=1;i<BUCKETS.length;i++){if(Math.abs(BUCKETS[i].v-s.target)<Math.abs(best.v-s.target))best=BUCKETS[i];}
+    return {nearest:best};
+  }
+  function id(x){return document.getElementById(x);}
+  function render(){
+    var d=derive(state),cx=x(state.target);
+    id('cursor').setAttribute('cx',cx.toFixed(1));
+    id('link').setAttribute('x1',cx.toFixed(1));
+    id('link').setAttribute('x2',x(d.nearest.v).toFixed(1));
+    id('r-target').textContent=Math.round(state.target);
+    id('r-bucket').textContent=d.nearest.name;
+    var svg=id('svg');
+    svg.setAttribute('aria-valuenow',String(Math.round(state.target)));
+    svg.setAttribute('aria-valuetext',Math.round(state.target)+'，最接近'+d.nearest.name);
+    var g=id('buckets');g.textContent='';
+    var svgns='http://www.w3.org/2000/svg';
+    BUCKETS.forEach(function(b){
+      var bx=x(b.v),near=b===d.nearest;
+      var tick=document.createElementNS(svgns,'line');
+      tick.setAttribute('class','bucket'+(near?' near':''));
+      tick.setAttribute('x1',bx.toFixed(1));tick.setAttribute('x2',bx.toFixed(1));
+      tick.setAttribute('y1','98');tick.setAttribute('y2','110');
+      g.appendChild(tick);
+      var lab=document.createElementNS(svgns,'text');
+      lab.setAttribute('class','blabel'+(near?' near':''));
+      lab.setAttribute('x',bx.toFixed(1));lab.setAttribute('y','128');
+      lab.textContent=b.name;
+      g.appendChild(lab);
+    });
+  }
+  function setTarget(v){state.target=Math.max(0,Math.min(100,v));render();}
+  function fromClientX(clientX){
+    var svg=id('svg'),rect=svg.getBoundingClientRect();
+    var px=(clientX-rect.left)/rect.width*600;
+    return (px-X0)/(X1-X0)*100;
+  }
+  var dragging=false,svg=id('svg');
+  svg.addEventListener('pointerdown',function(e){dragging=true;svg.setPointerCapture(e.pointerId);setTarget(fromClientX(e.clientX));});
+  svg.addEventListener('pointermove',function(e){if(dragging)setTarget(fromClientX(e.clientX));});
+  svg.addEventListener('pointerup',function(){dragging=false;});
+  svg.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'){setTarget(state.target+(e.shiftKey?10:1));e.preventDefault();}
+    else if(e.key==='ArrowLeft'){setTarget(state.target-(e.shiftKey?10:1));e.preventDefault();}
+  });
+  render();
+</script>
+</body>
+</html>

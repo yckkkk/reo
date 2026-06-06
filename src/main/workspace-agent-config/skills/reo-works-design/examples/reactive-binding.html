@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>复习强度</title>
+<style>
+  :root{
+    --color-background-primary:#ffffff;--color-background-secondary:#f4f4f5;
+    --color-text-primary:#18181b;--color-text-secondary:#3f3f46;--color-text-tertiary:#71717a;
+    --color-border-tertiary:rgba(24,24,27,0.08);--color-border-secondary:rgba(24,24,27,0.14);
+    --border-radius-sm:8px;--border-radius-lg:16px;
+    --shadow-card:0 1px 2px rgba(17,24,39,0.04),0 2px 8px rgba(17,24,39,0.05);
+    --font-sans:"Waldenburg","Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --teal-100:#9FE1CB;--teal-600:#1D9E75;--teal-800:#085041;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --color-background-primary:#09090b;--color-background-secondary:#18181b;
+    --color-text-primary:#fafafa;--color-text-secondary:#d4d4d8;--color-text-tertiary:#a1a1aa;
+    --color-border-tertiary:rgba(255,255,255,0.10);--color-border-secondary:rgba(255,255,255,0.16);
+    --shadow-card:0 1px 2px rgba(0,0,0,0.4),0 2px 10px rgba(0,0,0,0.34);
+    --teal-100:#04342C;--teal-600:#5DCAA5;--teal-800:#9FE1CB;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--color-text-primary);background:var(--color-background-primary)}
+  .work{max-width:560px;margin:0 auto;padding:24px 20px;min-width:0}
+  h1{font-size:20px;font-weight:500;margin:0 0 4px}
+  .caption{margin:0 0 20px;font-size:13px;color:var(--color-text-tertiary)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .stepper{display:inline-flex;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-sm);overflow:hidden}
+  .stepper button{border:0;background:var(--color-background-secondary);color:var(--color-text-primary);font-size:16px;width:34px;height:34px;cursor:pointer}
+  input[type=range]{flex:1;min-width:0;accent-color:var(--teal-600)}
+  .val{font-variant-numeric:tabular-nums;font-weight:500;min-width:34px;text-align:right}
+  .chips{display:flex;gap:8px;margin-bottom:18px}
+  .chip{border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);border-radius:var(--border-radius-sm);padding:6px 12px;font-size:13px;cursor:pointer}
+  .chip[aria-pressed=true]{background:var(--teal-100);color:var(--teal-800);border-color:transparent}
+  .card{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-card);padding:16px}
+  .bar{height:10px;border-radius:999px;background:var(--color-border-tertiary);overflow:hidden;margin:2px 0 12px}
+  .bar>span{display:block;height:100%;background:var(--teal-600);border-radius:999px;transition:width .15s ease}
+  .out{display:flex;justify-content:space-between;align-items:baseline}
+  .out .big{font-size:24px;font-weight:500;font-variant-numeric:tabular-nums}
+  .status{font-size:13px;color:var(--color-text-secondary)}
+</style>
+</head>
+<body>
+<main class="work">
+  <h1>复习强度</h1>
+  <p class="caption">同一个掌握度，用滑块、加减或预设都能调；进度、状态和建议间隔都是它的投影。</p>
+  <div class="row">
+    <div class="stepper"><button id="dec" type="button" aria-label="减少">−</button><button id="inc" type="button" aria-label="增加">+</button></div>
+    <input id="range" type="range" min="0" max="100" step="1" value="50" aria-label="掌握度" />
+    <span class="val" id="val">50</span>
+  </div>
+  <div class="chips" role="group" aria-label="预设">
+    <button class="chip" type="button" data-v="20">生疏</button>
+    <button class="chip" type="button" data-v="50">熟悉</button>
+    <button class="chip" type="button" data-v="80">牢固</button>
+  </div>
+  <div class="card">
+    <div class="bar"><span id="fill"></span></div>
+    <div class="out"><span class="status" id="status">熟悉</span><span class="big"><span id="days">7</span> 天后复习</span></div>
+  </div>
+</main>
+<script>
+  // 源状态：唯一真值
+  var state={strength:50};
+  // 派生：纯函数，从源算出间隔与状态
+  function derive(s){
+    return {
+      interval: Math.round(1 + s.strength / 100 * 13),
+      status: s.strength < 34 ? '生疏' : s.strength < 67 ? '熟悉' : '牢固'
+    };
+  }
+  // 渲染：把源 + 派生投影到每个控件与读数
+  function id(x){return document.getElementById(x);}
+  function render(){
+    var d=derive(state);
+    id('range').value=state.strength;
+    id('val').textContent=state.strength;
+    id('fill').style.width=state.strength+'%';
+    id('status').textContent=d.status;
+    id('days').textContent=d.interval;
+    var chips=document.querySelectorAll('.chip');
+    for(var i=0;i<chips.length;i++){chips[i].setAttribute('aria-pressed',String(Number(chips[i].dataset.v)===state.strength));}
+  }
+  // 事件：每个入口只改源，再重渲染（双向绑定）
+  function setStrength(v){state.strength=Math.max(0,Math.min(100,Math.round(v)));render();}
+  id('range').addEventListener('input',function(e){setStrength(Number(e.target.value));});
+  id('inc').addEventListener('click',function(){setStrength(state.strength+5);});
+  id('dec').addEventListener('click',function(){setStrength(state.strength-5);});
+  var chips=document.querySelectorAll('.chip');
+  for(var i=0;i<chips.length;i++){chips[i].addEventListener('click',function(e){setStrength(Number(e.currentTarget.dataset.v));});}
+  render();
+</script>
+</body>
+</html>

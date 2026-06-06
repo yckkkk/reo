@@ -1,4 +1,5 @@
 .agents/skills/
 .claude/skills/
+src/main/workspace-agent-config/
 out/
 node_modules/

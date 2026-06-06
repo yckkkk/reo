@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>复习偏差</title>
+<style>
+  :root{
+    --color-background-primary:#ffffff;--color-background-secondary:#f4f4f5;
+    --color-text-primary:#18181b;--color-text-secondary:#3f3f46;--color-text-tertiary:#71717a;
+    --color-border-tertiary:rgba(24,24,27,0.08);--color-border-secondary:rgba(24,24,27,0.14);
+    --border-radius-md:12px;--border-radius-lg:16px;
+    --shadow-card:0 1px 2px rgba(17,24,39,0.04),0 2px 8px rgba(17,24,39,0.05);
+    --font-sans:"Waldenburg","Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --teal-600:#1D9E75;--coral-600:#D85A30;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --color-background-primary:#09090b;--color-background-secondary:#18181b;
+    --color-text-primary:#fafafa;--color-text-secondary:#d4d4d8;--color-text-tertiary:#a1a1aa;
+    --color-border-tertiary:rgba(255,255,255,0.10);--color-border-secondary:rgba(255,255,255,0.16);
+    --shadow-card:0 1px 2px rgba(0,0,0,0.4),0 2px 10px rgba(0,0,0,0.34);
+    --teal-600:#5DCAA5;--coral-600:#F0997B;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--color-text-primary);background:var(--color-background-primary)}
+  .work{max-width:600px;margin:0 auto;padding:24px 20px;min-width:0}
+  h1{font-size:20px;font-weight:500;margin:0 0 4px}
+  .caption{margin:0 0 16px;font-size:13px;color:var(--color-text-tertiary)}
+  .bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:14px}
+  .zoom{display:inline-flex;border:0.5px solid var(--color-border-secondary);border-radius:8px;overflow:hidden}
+  .zoom button{border:0;background:var(--color-background-secondary);color:var(--color-text-secondary);padding:6px 12px;font-size:13px;cursor:pointer}
+  .zoom button[aria-pressed=true]{background:var(--teal-600);color:#fff}
+  .shift{display:flex;align-items:center;gap:8px;flex:1;min-width:160px}
+  .shift input{flex:1;min-width:0;accent-color:var(--coral-600)}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--color-text-secondary);margin-bottom:6px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  .plot{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);box-shadow:var(--shadow-card);padding:12px}
+  svg{width:100%;height:auto;display:block}
+  .zero{stroke:var(--color-border-secondary);stroke-width:1;stroke-dasharray:4 4}
+  .zerolabel{fill:var(--color-text-tertiary);font-size:11px;font-family:var(--font-sans);text-anchor:end}
+  .dev{fill:none;stroke:var(--color-text-secondary);stroke-width:2;stroke-linejoin:round}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  .metric{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);box-shadow:var(--shadow-card);padding:12px 14px}
+  .metric .l{font-size:12px;color:var(--color-text-tertiary);margin-bottom:4px}
+  .metric .v{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+  .metric .v .u{font-size:13px;color:var(--color-text-secondary);margin-left:2px}
+</style>
+</head>
+<body>
+<main class="work">
+  <h1>复习偏差</h1>
+  <p class="caption">每天实际比计划多或少多少张。多数日子贴近 0，放大纵轴才能看清；拖动平移做整体 what-if。</p>
+  <div class="bar">
+    <div class="zoom" role="group" aria-label="纵向放大">
+      <button type="button" data-z="1" aria-pressed="true">1×</button>
+      <button type="button" data-z="4" aria-pressed="false">4×</button>
+      <button type="button" data-z="16" aria-pressed="false">16×</button>
+    </div>
+    <label class="shift">平移<input id="shift" type="range" min="-2" max="2" step="0.25" value="0" aria-label="整体平移" /><span id="o-shift" style="font-variant-numeric:tabular-nums;min-width:40px;text-align:right">+0.0</span></label>
+  </div>
+  <div class="plot">
+    <div class="legend"><span><i style="background:var(--teal-600)"></i>超前</span><span><i style="background:var(--coral-600)"></i>落后</span></div>
+    <svg viewBox="0 0 600 220" role="img" aria-label="每天复习相对计划的偏差">
+      <line class="zero" x1="36" y1="106" x2="588" y2="106" />
+      <text class="zerolabel" x="34" y="110">0</text>
+      <path id="dev" class="dev" d="" />
+      <g id="dots"></g>
+    </svg>
+  </div>
+  <div class="metrics">
+    <div class="metric"><div class="l">平均偏差</div><div class="v"><span id="m-dev">0.00</span><span class="u">张/天</span></div></div>
+    <div class="metric"><div class="l">净偏差</div><div class="v"><span id="m-net">+0.0</span><span class="u">张</span></div></div>
+  </div>
+</main>
+<script>
+  // 每天实际−计划的偏差，多数贴近 0：1× 看整体，放大才看清近 0 的日子
+  var DIFF=[0.2,-0.4,0.9,-0.1,-0.8,1.4,-0.3,0.15,1.1,-1.3,0.4,0.95,-0.2,0.5];
+  var N=DIFF.length,L=36,R=588,T=16,B=196,MID=106;
+  var maxBase=2; for(var i=0;i<N;i++){maxBase=Math.max(maxBase,Math.abs(DIFF[i]));}
+  maxBase+=2; // 给平移留出范围，保证 1× 不裁切
+  var basePx=((B-MID)-8)/maxBase;
+  var state={zoom:1,shift:0};
+  function X(i){return L+i/(N-1)*(R-L);}
+  // 坐标变换：缩放围绕 0 基线放大纵向偏差，并裁切到画布内
+  function Y(d){return Math.max(T,Math.min(B,MID-d*basePx*state.zoom));}
+  // 派生：平移后的偏差序列 + 度量
+  function derive(s){
+    var series=DIFF.map(function(v){return v+s.shift;});
+    var sumAbs=0,net=0;
+    for(var i=0;i<N;i++){sumAbs+=Math.abs(series[i]);net+=series[i];}
+    return {series:series,meanAbs:sumAbs/N,net:net};
+  }
+  function pathFor(a){var d='';for(var i=0;i<N;i++){d+=(i===0?'M':'L')+X(i).toFixed(1)+' '+Y(a[i]).toFixed(1)+' ';}return d.trim();}
+  function id(x){return document.getElementById(x);}
+  function render(){
+    var d=derive(state),a=d.series;
+    id('dev').setAttribute('d',pathFor(a));
+    var dots=id('dots');dots.textContent='';var ns='http://www.w3.org/2000/svg';
+    for(var i=0;i<N;i++){
+      var c=document.createElementNS(ns,'circle');
+      c.setAttribute('cx',X(i).toFixed(1));c.setAttribute('cy',Y(a[i]).toFixed(1));c.setAttribute('r','2.5');
+      c.setAttribute('fill',a[i]>=0?'var(--teal-600)':'var(--coral-600)');
+      dots.appendChild(c);
+    }
+    id('o-shift').textContent=(state.shift>=0?'+':'')+state.shift.toFixed(1);
+    id('m-dev').textContent=d.meanAbs.toFixed(2);
+    id('m-net').textContent=(d.net>=0?'+':'')+d.net.toFixed(1);
+  }
+  var zb=document.querySelectorAll('.zoom button');
+  for(var i=0;i<zb.length;i++){zb[i].addEventListener('click',function(e){
+    state.zoom=Number(e.currentTarget.dataset.z);
+    for(var j=0;j<zb.length;j++){zb[j].setAttribute('aria-pressed',String(zb[j]===e.currentTarget));}
+    render();
+  });}
+  id('shift').addEventListener('input',function(e){state.shift=Number(e.target.value);render();});
+  render();
+</script>
+</body>
+</html>

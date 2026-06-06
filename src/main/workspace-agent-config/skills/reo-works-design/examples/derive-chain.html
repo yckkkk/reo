@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>复习计划测算</title>
+<style>
+  :root{
+    --color-background-primary:#ffffff;--color-background-secondary:#f4f4f5;
+    --color-text-primary:#18181b;--color-text-secondary:#3f3f46;--color-text-tertiary:#71717a;
+    --color-border-tertiary:rgba(24,24,27,0.08);
+    --border-radius-md:12px;--border-radius-lg:16px;
+    --shadow-card:0 1px 2px rgba(17,24,39,0.04),0 2px 8px rgba(17,24,39,0.05);
+    --font-sans:"Waldenburg","Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --purple-600:#534AB7;--purple-800:#3C3489;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --color-background-primary:#09090b;--color-background-secondary:#18181b;
+    --color-text-primary:#fafafa;--color-text-secondary:#d4d4d8;--color-text-tertiary:#a1a1aa;
+    --color-border-tertiary:rgba(255,255,255,0.10);
+    --shadow-card:0 1px 2px rgba(0,0,0,0.4),0 2px 10px rgba(0,0,0,0.34);
+    --purple-600:#7F77DD;--purple-800:#CECBF6;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-sans);font-size:14px;line-height:1.6;color:var(--color-text-primary);background:var(--color-background-primary)}
+  .work{max-width:600px;margin:0 auto;padding:24px 20px;min-width:0}
+  h1{font-size:20px;font-weight:500;margin:0 0 4px}
+  .caption{margin:0 0 18px;font-size:13px;color:var(--color-text-tertiary)}
+  .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px 24px;margin-bottom:18px}
+  .control{min-width:0}
+  .clab{display:flex;justify-content:space-between;font-size:13px;color:var(--color-text-secondary);margin-bottom:4px}
+  .clab b{color:var(--color-text-primary);font-variant-numeric:tabular-nums}
+  input[type=range]{width:100%;accent-color:var(--purple-600)}
+  .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:16px}
+  .metric{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);box-shadow:var(--shadow-card);padding:12px 14px;min-width:0}
+  .metric .l{font-size:12px;color:var(--color-text-tertiary);margin-bottom:4px}
+  .metric .v{font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+  .metric .v .u{font-size:13px;color:var(--color-text-secondary);margin-left:2px}
+  svg{width:100%;height:auto;display:block}
+  .track{stroke:var(--color-border-tertiary);stroke-width:6;stroke-linecap:round}
+  .fill{stroke:var(--purple-600);stroke-width:6;stroke-linecap:round}
+  .tick{fill:var(--purple-800)}
+  .ticklabel{fill:var(--color-text-tertiary);font-size:11px;font-family:var(--font-sans);text-anchor:middle}
+</style>
+</head>
+<body>
+<main class="work">
+  <h1>复习计划测算</h1>
+  <p class="caption">每天投入多少、要复习多少张卡，决定完成天数与里程碑——都是这两个源变量的派生。</p>
+  <div class="controls">
+    <div class="control">
+      <div class="clab"><span>每天投入</span><b id="o-min">40 分钟</b></div>
+      <input id="min" type="range" min="10" max="120" step="5" value="40" aria-label="每天投入分钟" />
+    </div>
+    <div class="control">
+      <div class="clab"><span>卡片总量</span><b id="o-total">240 张</b></div>
+      <input id="total" type="range" min="60" max="600" step="20" value="240" aria-label="卡片总量" />
+    </div>
+  </div>
+  <div class="metrics">
+    <div class="metric"><div class="l">每天可复习</div><div class="v"><span id="m-per">20</span><span class="u">张</span></div></div>
+    <div class="metric"><div class="l">预计完成</div><div class="v"><span id="m-days">12</span><span class="u">天</span></div></div>
+    <div class="metric"><div class="l">约</div><div class="v"><span id="m-weeks">1.7</span><span class="u">周</span></div></div>
+  </div>
+  <svg viewBox="0 0 600 70" role="img" aria-label="里程碑时间轴">
+    <line class="track" x1="20" y1="30" x2="580" y2="30" />
+    <line class="fill" x1="20" y1="30" x2="580" y2="30" />
+    <g id="ticks"></g>
+  </svg>
+</main>
+<script>
+  var MIN_PER_CARD=2;
+  var state={dailyMin:40,total:240};
+  // 派生链：源 -> 每天张数 -> 天数 -> 周数 -> 里程碑天
+  function derive(s){
+    var perDay=Math.max(1,Math.floor(s.dailyMin/MIN_PER_CARD));
+    var days=Math.ceil(s.total/perDay);
+    var marks=[0.25,0.5,0.75,1].map(function(p){return {p:p,day:Math.ceil(s.total*p/perDay)};});
+    return {perDay:perDay,days:days,weeks:days/7,marks:marks};
+  }
+  function id(x){return document.getElementById(x);}
+  function render(){
+    var d=derive(state);
+    id('o-min').textContent=state.dailyMin+' 分钟';
+    id('o-total').textContent=state.total+' 张';
+    id('m-per').textContent=d.perDay;
+    id('m-days').textContent=d.days;
+    id('m-weeks').textContent=d.weeks.toFixed(1);
+    var x=function(day){return 20+(day/d.days)*560;};
+    var g=id('ticks');g.textContent='';
+    var svgns='http://www.w3.org/2000/svg';
+    d.marks.forEach(function(m){
+      var cx=x(m.day),last=m.p>=1;
+      var c=document.createElementNS(svgns,'circle');
+      c.setAttribute('class','tick');c.setAttribute('cx',cx.toFixed(1));c.setAttribute('cy','30');c.setAttribute('r','4');
+      g.appendChild(c);
+      var t=document.createElementNS(svgns,'text');
+      t.setAttribute('class','ticklabel');
+      t.setAttribute('x',(last?Math.min(cx,582):cx).toFixed(1));
+      t.setAttribute('y','54');
+      if(last)t.setAttribute('style','text-anchor:end');
+      t.textContent=Math.round(m.p*100)+'% · 第'+m.day+'天';
+      g.appendChild(t);
+    });
+  }
+  id('min').addEventListener('input',function(e){state.dailyMin=Number(e.target.value);render();});
+  id('total').addEventListener('input',function(e){state.total=Number(e.target.value);render();});
+  render();
+</script>
+</body>
+</html>

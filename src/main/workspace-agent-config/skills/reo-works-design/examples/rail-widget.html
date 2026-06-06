@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>今日复习</title>
+<style>
+  :root{
+    --color-background-primary:#ffffff;--color-background-secondary:#f4f4f5;
+    --color-text-primary:#18181b;--color-text-secondary:#3f3f46;--color-text-tertiary:#71717a;
+    --color-border-tertiary:rgba(24,24,27,0.08);--color-border-secondary:rgba(24,24,27,0.14);
+    --border-radius-md:12px;
+    --shadow-card:0 1px 2px rgba(17,24,39,0.04),0 2px 8px rgba(17,24,39,0.05);
+    --font-sans:"Waldenburg","Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --teal-600:#1D9E75;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --color-background-primary:#09090b;--color-background-secondary:#18181b;
+    --color-text-primary:#fafafa;--color-text-secondary:#d4d4d8;--color-text-tertiary:#a1a1aa;
+    --color-border-tertiary:rgba(255,255,255,0.10);--color-border-secondary:rgba(255,255,255,0.16);
+    --shadow-card:0 1px 2px rgba(0,0,0,0.4),0 2px 10px rgba(0,0,0,0.34);
+    --teal-600:#5DCAA5;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font-sans);font-size:14px;line-height:1.5;color:var(--color-text-primary);background:transparent}
+  /* 窄栏常驻：min-width:0 + 自适应，保证 240px 不溢出 */
+  .widget{padding:14px;min-width:0}
+  .title{font-size:13px;font-weight:500;color:var(--color-text-secondary);margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .source{font-size:11px;color:var(--color-text-tertiary);margin:0 0 12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ring{display:block;width:100%;max-width:140px;height:auto;margin:0 auto}
+  .ring-bg{fill:none;stroke:var(--color-border-tertiary);stroke-width:10}
+  .ring-fg{fill:none;stroke:var(--teal-600);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .2s ease}
+  .pct{fill:var(--color-text-primary);font-size:22px;font-weight:500;text-anchor:middle;font-family:var(--font-sans)}
+  .sub{fill:var(--color-text-tertiary);font-size:9px;text-anchor:middle;font-family:var(--font-sans)}
+  .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;min-width:0}
+  .foot span{font-size:12px;color:var(--color-text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .foot button{border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);color:var(--color-text-primary);border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .foot button:disabled{opacity:.5;cursor:default}
+</style>
+</head>
+<body>
+<main class="widget">
+  <p class="title">今日复习</p>
+  <p class="source">本记忆空间 · 间隔复习</p>
+  <svg class="ring" viewBox="0 0 120 120" role="img" aria-label="今日复习进度">
+    <circle class="ring-bg" cx="60" cy="60" r="50" />
+    <circle id="fg" class="ring-fg" cx="60" cy="60" r="50" transform="rotate(-90 60 60)" stroke-dasharray="314.16" stroke-dashoffset="314.16" />
+    <text id="pct" class="pct" x="60" y="62">0%</text>
+    <text id="sub" class="sub" x="60" y="78">0 / 24</text>
+  </svg>
+  <div class="foot"><span id="left">还剩 24 张</span><button id="plus" type="button">复习一张</button></div>
+</main>
+<script>
+  var C=2*Math.PI*50; // 周长
+  var state={done:0,total:24};
+  function derive(s){return {ratio:s.total?s.done/s.total:0,left:Math.max(0,s.total-s.done)};}
+  function id(x){return document.getElementById(x);}
+  function render(){
+    var d=derive(state);
+    id('fg').setAttribute('stroke-dashoffset',(C*(1-d.ratio)).toFixed(2));
+    id('pct').textContent=Math.round(d.ratio*100)+'%';
+    id('sub').textContent=state.done+' / '+state.total;
+    id('left').textContent=d.left===0?'今天完成了':'还剩 '+d.left+' 张';
+    id('plus').disabled=d.left===0;
+  }
+  id('plus').addEventListener('click',function(){state.done=Math.min(state.total,state.done+1);render();});
+  render();
+</script>
+</body>
+</html>
