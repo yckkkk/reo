@@ -1,12 +1,12 @@
-import { AppWindow, Camera, FileText, Mic, PenLine, type LucideIcon } from 'lucide-react';
+import { AppWindow, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { homeActionIconSource } from './homeActionIcons/homeActionIcons';
 
 type HomeAction = {
   readonly description: string;
   readonly disabled?: boolean;
-  readonly Icon: LucideIcon;
+  readonly iconSrc: { readonly light: string; readonly dark: string };
   readonly id: 'write' | 'record' | 'create' | 'capture';
-  readonly iconClassName: string;
   readonly label: string;
   readonly onSelect?: (() => void) | undefined;
 };
@@ -89,13 +89,26 @@ function HomeActionTile({ action }: { readonly action: HomeAction }) {
       onClick={action.onSelect}
     >
       <span
-        className="reo-squircle grid aspect-[1.08] w-full max-w-[152px] place-items-center overflow-hidden rounded-[22px] bg-secondary/55 transition-colors duration-200 ease-out group-hover:bg-secondary/75"
+        className="reo-squircle relative block aspect-square w-full max-w-[152px] overflow-hidden rounded-[34px] bg-secondary"
         data-slot={`home-action-icon-slot-${action.id}`}
       >
-        <action.Icon
+        <img
+          src={action.iconSrc.light}
+          alt=""
           aria-hidden="true"
-          className={cn('size-[40px]', action.iconClassName)}
-          strokeWidth={1.8}
+          draggable={false}
+          className="absolute inset-0 h-full w-full object-cover dark:hidden"
+        />
+        <img
+          src={action.iconSrc.dark}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="absolute inset-0 hidden h-full w-full object-cover dark:block"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 bg-foreground/0 transition-colors duration-200 ease-out group-hover:bg-foreground/[0.05]"
         />
       </span>
       <span className="mt-12 block min-w-0 text-body font-bold leading-body text-foreground">
@@ -193,24 +206,21 @@ export function WorkspaceStarterHome({
   const actions: readonly HomeAction[] = [
     {
       description: '记录你的想法与文字',
-      Icon: PenLine,
-      iconClassName: 'text-primary',
+      iconSrc: homeActionIconSource('write'),
       id: 'write',
       label: '写下来',
       onSelect: onStartNote,
     },
     {
       description: '录制语音与声音片段',
-      Icon: Mic,
-      iconClassName: 'text-brand-ember',
+      iconSrc: homeActionIconSource('record'),
       id: 'record',
       label: '录下来',
       onSelect: onStartRecording,
     },
     {
       description: '创建作品与内容片段',
-      Icon: AppWindow,
-      iconClassName: 'text-brand-magenta',
+      iconSrc: homeActionIconSource('create'),
       id: 'create',
       label: '造出来',
       onSelect: onStartArtifact,
@@ -218,8 +228,7 @@ export function WorkspaceStarterHome({
     {
       description: '敬请期待',
       disabled: true,
-      Icon: Camera,
-      iconClassName: 'text-muted-foreground',
+      iconSrc: homeActionIconSource('capture'),
       id: 'capture',
       label: '拍下来',
       onSelect: onStartCapture,
