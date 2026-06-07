@@ -47,6 +47,22 @@ describe('WorkspaceStarterHome', () => {
     expect(onOpenRecentExpression).toHaveBeenCalledWith(recentExpression);
   });
 
+  it('keeps recent expression hover surface inset from row content', () => {
+    render(
+      <WorkspaceStarterHome
+        recentExpressions={[recentExpression]}
+        recentExpressionsStatus="ready"
+      />
+    );
+
+    const row = screen.getByRole('button', { name: '打开近期表达 产品判断笔记' });
+
+    expect(row).toHaveClass('px-16');
+    expect(row).not.toHaveClass('pl-0', 'pr-0');
+    expect(row).toHaveClass('py-8');
+    expect(row).not.toHaveClass('py-10');
+  });
+
   it('renders Home actions without an outer card wrapped around each icon tile', () => {
     render(<WorkspaceStarterHome recentExpressionsStatus="ready" />);
 

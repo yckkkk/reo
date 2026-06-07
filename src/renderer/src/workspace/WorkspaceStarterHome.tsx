@@ -160,7 +160,7 @@ function RecentExpressionRow({
       <button
         type="button"
         aria-label={`打开近期表达 ${expression.title}`}
-        className="grid min-h-[58px] w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-[14px] rounded-lg py-8 pl-0 pr-0 text-left outline-none transition-colors duration-150 ease-out hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="grid min-h-[58px] w-full min-w-0 grid-cols-[34px_minmax(0,1fr)_auto] items-center gap-[14px] rounded-lg px-16 py-8 text-left outline-none transition-colors duration-150 ease-out hover:bg-secondary/35 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         onClick={() => onOpenRecentExpression?.(expression)}
       >
         <RecentExpressionTypeIcon expression={expression} />
