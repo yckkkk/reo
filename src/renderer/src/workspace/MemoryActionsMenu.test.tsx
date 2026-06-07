@@ -166,6 +166,29 @@ describe('MemoryActionsMenu', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
+  it('hides rename and delete for protected memories while keeping file actions', async () => {
+    render(
+      <MemoryActionsMenu
+        actionIdentity={memoryActionPayload}
+        canDelete={false}
+        canRename={false}
+        memoryTitle="草稿"
+        onDelete={vi.fn()}
+        onRename={vi.fn()}
+        onResetCover={vi.fn()}
+        onSwitchDefaultCover={vi.fn()}
+      />
+    );
+
+    await openEntityActionMenu('草稿 更多操作');
+
+    expect(screen.getByRole('menuitem', { name: '用默认应用打开' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '在访达中显示' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: '复制绝对路径' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '重命名' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
+  });
+
   it('invokes switch-random-default cover action for default covers', async () => {
     const onSwitchDefaultCover = vi.fn();
     renderMenu({

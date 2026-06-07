@@ -21,8 +21,10 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
+  WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+  WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -33,6 +35,7 @@ import {
   WORKSPACE_SAVE_SEGMENT_SUPPLEMENT_TRANSCRIPT_CHANNEL,
   WORKSPACE_SAVE_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+  WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
@@ -77,8 +80,11 @@ import {
   workspaceDeleteSegmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceReadRecentExpressionsResponseSchema,
+  workspaceReadSystemDraftWorkspaceResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
+  workspaceOpenSystemDraftWorkspaceResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceRestoreDeletedSegmentSupplementRequestSchema,
@@ -208,6 +214,7 @@ import {
   workspaceSetVoiceSpeechSynthesisSpeakerRequestSchema,
   workspaceSetVoiceSpeechSynthesisSpeakerResponseSchema,
   workspaceSnapshotSchema,
+  workspaceSystemDraftProjectionSchema,
   workspaceValidateVoiceTranscriptionCredentialsRequestSchema,
   workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
   voiceSpeechSynthesisSpeakerSchema,
@@ -437,6 +444,9 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:validateVoiceTranscriptionCredentials',
     'workspace:openVoiceTranscriptionProviderConsole',
     'workspace:openMarkdownExternalLink',
+    'workspace:readSystemDraftWorkspace',
+    'workspace:openSystemDraftWorkspace',
+    'workspace:readRecentExpressions',
     'workspace:revealMemorySpaceInFinder',
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
@@ -477,6 +487,9 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, 'workspace:readArtifactRuntimeState'],
     [WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, 'workspace:writeArtifactRuntimeState'],
     [WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL, 'workspace:copyNeedsReviewAgentPrompt'],
+    [WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL, 'workspace:readSystemDraftWorkspace'],
+    [WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL, 'workspace:openSystemDraftWorkspace'],
+    [WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, 'workspace:readRecentExpressions'],
     [WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory'],
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
     [WORKSPACE_RESET_MEMORY_COVER_CHANNEL, 'workspace:resetMemoryCover'],
@@ -2698,6 +2711,173 @@ test('workspace memory space registry contract exposes memory space metadata but
     workspaceRemoveMemorySpaceRequestSchema.parse({
       workspaceId: 'ws_1',
       rootPath: '/Users/example/Runtime validated memory',
+    })
+  );
+});
+
+test('system Draft contract exposes protected projection without raw path authority', () => {
+  const draft = workspaceSystemDraftProjectionSchema.parse({
+    workspaceId: 'ws_system_draft',
+    title: '草稿',
+    systemRole: 'draft-space',
+    defaultMemoryId: 'mem_system_draft',
+    capabilities: {
+      canRename: false,
+      canRemove: false,
+      canCreateMemory: true,
+    },
+  });
+
+  assert.deepEqual(draft, {
+    workspaceId: 'ws_system_draft',
+    title: '草稿',
+    systemRole: 'draft-space',
+    defaultMemoryId: 'mem_system_draft',
+    capabilities: {
+      canRename: false,
+      canRemove: false,
+      canCreateMemory: true,
+    },
+  });
+
+  const defaultMemory = workspaceMemorySummarySchema.parse({
+    memoryId: 'mem_system_draft',
+    title: '草稿',
+    systemRole: 'draft-default-memory',
+    capabilities: {
+      canRename: false,
+      canDelete: false,
+    },
+    createdAt: '2026-06-06T20:45:00.000-07:00',
+    updatedAt: '2026-06-06T20:45:00.000-07:00',
+    segmentCount: 0,
+    audioSegmentCount: 0,
+    noteSegmentCount: 0,
+    artifactSegmentCount: 0,
+    audioDurationMs: 0,
+    audioByteLength: 0,
+    hasAudioTranscript: false,
+    hasAnyNote: false,
+    supplementCount: 0,
+  });
+
+  assert.equal(defaultMemory.systemRole, 'draft-default-memory');
+  assert.deepEqual(defaultMemory.capabilities, {
+    canRename: false,
+    canDelete: false,
+  });
+
+  const readResponse = workspaceReadSystemDraftWorkspaceResponseSchema.parse({
+    ok: true,
+    value: {
+      draft,
+    },
+  });
+  assert.equal(readResponse.ok, true);
+  if (readResponse.ok) {
+    assert.deepEqual(readResponse.value.draft, draft);
+  }
+
+  const openResponse = workspaceOpenSystemDraftWorkspaceResponseSchema.parse({
+    ok: true,
+    value: {
+      workspaceHandle: 'wh_draft',
+      workspaceId: 'ws_system_draft',
+      defaultMemoryId: 'mem_system_draft',
+      draft,
+      snapshot: {
+        workspaceId: 'ws_system_draft',
+        title: '草稿',
+        description: '',
+        memories: [defaultMemory],
+      },
+    },
+  });
+
+  assert.equal(openResponse.ok, true);
+  if (openResponse.ok) {
+    assert.equal('rootPath' in openResponse.value, false);
+    assert.equal('rootPath' in openResponse.value.draft, false);
+    assert.equal(openResponse.value.defaultMemoryId, 'mem_system_draft');
+  }
+
+  assert.throws(() =>
+    workspaceSystemDraftProjectionSchema.parse({
+      ...draft,
+      rootPath: '/Users/example/Library/Application Support/Reo/system-memory-spaces/草稿',
+    })
+  );
+});
+
+test('recent expression feed contract carries cross-space object identity and redacted skips', () => {
+  const response = workspaceReadRecentExpressionsResponseSchema.parse({
+    ok: true,
+    value: {
+      items: [
+        {
+          id: 'recent_ws_1_seg_1',
+          workspaceId: 'ws_1',
+          workspaceTitle: '灵感库',
+          memoryId: 'mem_1',
+          memoryTitle: '产品想法',
+          segmentId: 'seg_1',
+          objectType: 'segment',
+          contentKind: 'note',
+          title: '一个新想法',
+          preview: '这是一个短预览',
+          createdAt: '2026-06-06T20:00:00.000-07:00',
+          updatedAt: '2026-06-06T20:10:00.000-07:00',
+        },
+        {
+          id: 'recent_ws_1_sup_1',
+          workspaceId: 'ws_1',
+          workspaceTitle: '灵感库',
+          memoryId: 'mem_1',
+          memoryTitle: '产品想法',
+          segmentId: 'seg_1',
+          supplementId: 'sup_1',
+          objectType: 'supplement',
+          contentKind: 'audio',
+          title: '补充录音',
+          createdAt: '2026-06-06T20:05:00.000-07:00',
+          updatedAt: '2026-06-06T20:08:00.000-07:00',
+        },
+      ],
+      skipped: [
+        {
+          workspaceId: 'ws_locked',
+          workspaceTitle: '锁定空间',
+          reason: 'locked',
+        },
+      ],
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal(response.value.items[0]?.objectType, 'segment');
+    const supplementRow = response.value.items[1];
+    assert.equal(supplementRow?.objectType, 'supplement');
+    if (supplementRow?.objectType === 'supplement') {
+      assert.equal(supplementRow.supplementId, 'sup_1');
+    }
+    assert.equal('rootPath' in response.value.skipped[0]!, false);
+  }
+
+  assert.throws(() =>
+    workspaceReadRecentExpressionsResponseSchema.parse({
+      ok: true,
+      value: {
+        items: [],
+        skipped: [
+          {
+            workspaceId: 'ws_unsafe',
+            workspaceTitle: 'Unsafe',
+            reason: 'unsafe',
+            rootPath: '/Users/example/Unsafe',
+          },
+        ],
+      },
     })
   );
 });

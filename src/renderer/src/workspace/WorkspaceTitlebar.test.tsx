@@ -111,12 +111,17 @@ function fireWidgetTabDragOver(
 
 function renderWorkspaceTitlebar({
   memory,
+  memorySpaceCapabilities,
   onCreateMemory = vi.fn(),
   onCreateWidget = vi.fn(),
   onReorderWidgets = vi.fn(),
   widgets = [],
 }: {
   readonly memory: WorkspaceMemorySummary | null;
+  readonly memorySpaceCapabilities?: {
+    readonly canRemove: boolean;
+    readonly canRename: boolean;
+  };
   readonly onCreateMemory?: () => void;
   readonly onCreateWidget?: () => void;
   readonly onReorderWidgets?: (widgetTabOrder: readonly string[]) => void;
@@ -127,6 +132,7 @@ function renderWorkspaceTitlebar({
       <WorkspaceTitlebar
         activeRailTab={MEMORY_RAIL_TAB}
         currentMemory={memory}
+        memorySpaceCapabilities={memorySpaceCapabilities}
         memoryRailOpen
         onCreateMemory={onCreateMemory}
         onCreateWidget={onCreateWidget}
@@ -153,6 +159,31 @@ function renderWorkspaceTitlebar({
 }
 
 describe('WorkspaceTitlebar', () => {
+  it('hides protected Draft workspace and Memory mutation actions', async () => {
+    const user = userEvent.setup();
+    renderWorkspaceTitlebar({
+      memory: {
+        ...currentMemory,
+        capabilities: { canDelete: false, canRename: false },
+        memoryId: 'mem_system_draft',
+        systemRole: 'draft-default-memory',
+        title: '草稿',
+      },
+      memorySpaceCapabilities: { canRemove: false, canRename: false },
+    });
+
+    await user.click(screen.getByRole('button', { name: '测试 记忆空间操作' }));
+    expect(screen.getByRole('menuitem', { name: '用默认应用打开' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '重命名' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '移除' })).not.toBeInTheDocument();
+
+    await user.click(document.body);
+    await user.click(screen.getByRole('button', { name: '草稿 记忆操作' }));
+    expect(screen.getByRole('menuitem', { name: '用默认应用打开' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '重命名' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
+  });
+
   it('shows one global create menu for new Memory and component actions', () => {
     const onCreateMemory = vi.fn();
     const onCreateWidget = vi.fn();

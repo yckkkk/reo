@@ -141,6 +141,51 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
   return {
     chooseDirectory: vi.fn(),
     listMemorySpaces: vi.fn(async () => ({ ok: true as const, value: { memorySpaces: [] } })),
+    readSystemDraftWorkspace: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        draft: {
+          workspaceId: 'ws_system_draft',
+          title: '草稿',
+          systemRole: 'draft-space' as const,
+          defaultMemoryId: 'mem_system_draft',
+          capabilities: {
+            canCreateMemory: true as const,
+            canRemove: false as const,
+            canRename: false as const,
+          },
+        },
+      },
+    })),
+    openSystemDraftWorkspace: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        workspaceHandle: 'workspace-handle-draft',
+        workspaceId: 'ws_system_draft',
+        defaultMemoryId: 'mem_system_draft',
+        draft: {
+          workspaceId: 'ws_system_draft',
+          title: '草稿',
+          systemRole: 'draft-space' as const,
+          defaultMemoryId: 'mem_system_draft',
+          capabilities: {
+            canCreateMemory: true as const,
+            canRemove: false as const,
+            canRename: false as const,
+          },
+        },
+        snapshot: {
+          workspaceId: 'ws_system_draft',
+          title: '草稿',
+          description: '',
+          memories: [],
+        },
+      },
+    })),
+    readRecentExpressions: vi.fn(async () => ({
+      ok: true as const,
+      value: { items: [], skipped: [] },
+    })),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),

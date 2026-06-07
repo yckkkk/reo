@@ -63,6 +63,7 @@ import {
   handleOpenSegmentDocumentForTest,
   handleOpenSegmentSupplementDocumentForTest,
   handleOpenMemorySpaceAgentsFileForTest,
+  handleOpenSystemDraftWorkspaceForTest,
   handleCopyMemoryAbsolutePathForTest,
   handleCopyMemorySpaceAbsolutePathForTest,
   handleCopyMemoryRelativePathForTest,
@@ -79,6 +80,8 @@ import {
   handleOpenWorkspaceForTest,
   handleRemoveMemorySpaceForTest,
   handleReadVoiceTranscriptionSettingsForTest,
+  handleReadRecentExpressionsForTest,
+  handleReadSystemDraftWorkspaceForTest,
   handleRestoreDeletedMemoryForTest,
   handleRestoreDeletedSegmentSupplementForTest,
   handleRestoreDeletedSegmentForTest,
@@ -101,6 +104,12 @@ import {
   handleWriteSegmentSupplementContentForTest,
   handleWriteSegmentSupplementNoteDraftBodyForTest,
 } from '../../src/main/workspaceIpc.js';
+import {
+  SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+  SYSTEM_DRAFT_TITLE,
+  SYSTEM_DRAFT_WORKSPACE_ID,
+  SYSTEM_DRAFT_WORKSPACE_ROLE,
+} from '../../src/main/systemDraftWorkspace.js';
 import { createVoiceSettingsStore } from '../../src/main/voiceSettingsStore.js';
 import {
   appendRecordingAudioChunk,
@@ -996,6 +1005,366 @@ function isBackfillCall(value: unknown): value is {
     typeof candidate['workspaceId'] === 'string'
   );
 }
+
+test('system Draft IPC ensures and opens protected Draft without adding it to normal memory spaces', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-system-draft-'));
+  try {
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    const handleStore = createWorkspaceHandleStore({ createHandle: () => 'wh_draft' });
+
+    const projection = await handleReadSystemDraftWorkspaceForTest({
+      appDataDir,
+      event,
+      input: undefined,
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      now: () => '2026-06-06T20:45:00.000-07:00',
+    });
+
+    assert.equal(projection.ok, true);
+    if (projection.ok) {
+      assert.deepEqual(projection.value.draft, {
+        workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+        title: SYSTEM_DRAFT_TITLE,
+        systemRole: SYSTEM_DRAFT_WORKSPACE_ROLE,
+        defaultMemoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+        capabilities: {
+          canRename: false,
+          canRemove: false,
+          canCreateMemory: true,
+        },
+      });
+      assert.equal('rootPath' in projection.value.draft, false);
+    }
+
+    const opened = await handleOpenSystemDraftWorkspaceForTest({
+      appDataDir,
+      event,
+      input: undefined,
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-06T20:45:00.000-07:00',
+    });
+
+    assert.equal(opened.ok, true);
+    if (opened.ok) {
+      assert.equal(opened.value.workspaceHandle, 'wh_draft');
+      assert.equal(opened.value.workspaceId, SYSTEM_DRAFT_WORKSPACE_ID);
+      assert.equal(opened.value.defaultMemoryId, SYSTEM_DRAFT_DEFAULT_MEMORY_ID);
+      assert.equal(opened.value.snapshot.memories.length, 1);
+      assert.equal(opened.value.snapshot.memories[0]?.memoryId, SYSTEM_DRAFT_DEFAULT_MEMORY_ID);
+      assert.equal(opened.value.snapshot.memories[0]?.systemRole, 'draft-default-memory');
+      assert.deepEqual(opened.value.snapshot.memories[0]?.capabilities, {
+        canRename: false,
+        canDelete: false,
+      });
+      assert.equal('rootPath' in opened.value, false);
+    }
+
+    const listed = await handleListWorkspaceMemorySpacesForTest({
+      event,
+      input: undefined,
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      memorySpaceRegistry,
+    });
+
+    assert.deepEqual(listed, { ok: true, value: { memorySpaces: [] } });
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+  }
+});
+
+test('system Draft IPC rejects protected Draft space and default Memory mutations', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-system-draft-protect-'));
+  try {
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    const handleStore = createWorkspaceHandleStore({ createHandle: () => 'wh_draft' });
+    const opened = await handleOpenSystemDraftWorkspaceForTest({
+      appDataDir,
+      event,
+      input: undefined,
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-06T20:45:00.000-07:00',
+    });
+    assert.equal(opened.ok, true);
+
+    const renameSpace = await handleUpdateMemorySpaceTitleForTest({
+      event,
+      input: { workspaceHandle: 'wh_draft', title: '不能改名' },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      memorySpaceRegistry,
+    });
+    assert.equal(renameSpace.ok, false);
+    if (!renameSpace.ok) {
+      assert.equal(renameSpace.error.code, 'ERR_WORKSPACE_PROTECTED_ENTITY');
+    }
+
+    const removeSpace = await handleRemoveMemorySpaceForTest({
+      event,
+      input: { workspaceId: SYSTEM_DRAFT_WORKSPACE_ID },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      memorySpaceRegistry,
+    });
+    assert.equal(removeSpace.ok, false);
+    if (!removeSpace.ok) {
+      assert.equal(removeSpace.error.code, 'ERR_WORKSPACE_PROTECTED_ENTITY');
+    }
+
+    const renameMemory = await handleUpdateMemoryTitleForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_draft',
+        memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+        title: '不能改名',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(renameMemory.ok, false);
+    if (!renameMemory.ok) {
+      assert.equal(renameMemory.error.code, 'ERR_WORKSPACE_PROTECTED_ENTITY');
+    }
+
+    const deleteMemory = await handleDeleteMemoryForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_draft',
+        memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(deleteMemory.ok, false);
+    if (!deleteMemory.ok) {
+      assert.equal(deleteMemory.error.code, 'ERR_WORKSPACE_PROTECTED_ENTITY');
+    }
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+  }
+});
+
+test('readRecentExpressions IPC reads system Draft and registered normal memory spaces', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-recent-feed-'));
+  const normalRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-recent-normal-'));
+  try {
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    const handleIds = ['wh_draft_recent', 'wh_normal_recent'];
+    const handleStore = createWorkspaceHandleStore({
+      createHandle: () => handleIds.shift() ?? 'wh_extra_recent',
+    });
+
+    const openedDraft = await handleOpenSystemDraftWorkspaceForTest({
+      appDataDir,
+      event,
+      input: undefined,
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-06T20:00:00.000-07:00',
+    });
+    assert.equal(openedDraft.ok, true);
+
+    const draftNote = await handleCreateNoteSegmentDraftForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_draft_recent',
+        workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+        memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+        title: 'Draft recent note',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      createSegmentId: () => 'seg_draft_recent',
+      now: () => '2026-06-06T20:08:00.000-07:00',
+    });
+    assert.equal(draftNote.ok, true);
+    const draftBody = await handleWriteNoteSegmentDraftBodyForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_draft_recent',
+        segmentId: 'seg_draft_recent',
+        bodyMarkdown: 'draft recent body',
+        revision: 0,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(draftBody.ok, true);
+    const finalizedDraft = await handleFinalizeNoteSegmentDraftForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_draft_recent',
+        workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+        memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+        segmentId: 'seg_draft_recent',
+        title: 'Draft recent note',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-06T20:08:00.000-07:00',
+    });
+    assert.equal(finalizedDraft.ok, true);
+
+    const tokenStore = createWorkspaceSelectionTokenStore({
+      createToken: () => 'selection-recent-normal',
+      now: () => 1_000,
+      ttlMs: 5_000,
+    });
+    tokenStore.issueSelection({
+      rootPath: normalRoot,
+      displayPath: path.basename(normalRoot),
+      sender,
+    });
+    const initializedNormal = await handleInitializeWorkspaceForTest({
+      event,
+      input: {
+        selectionToken: 'selection-recent-normal',
+        title: '普通空间',
+        description: '',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      tokenStore,
+      handleStore,
+      memorySpaceRegistry,
+      createWorkspaceId: () => 'ws_recent_normal',
+      now: () => '2026-06-06T19:00:00.000-07:00',
+    });
+    assert.equal(initializedNormal.ok, true);
+    const normalMemory = await handleCreateMemoryForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_normal_recent',
+        title: '普通记忆',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      createMemoryId: () => 'mem_recent_normal',
+      now: () => '2026-06-06T19:01:00.000-07:00',
+    });
+    assert.equal(normalMemory.ok, true);
+    const normalNote = await handleCreateNoteSegmentDraftForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_normal_recent',
+        workspaceId: 'ws_recent_normal',
+        memoryId: 'mem_recent_normal',
+        title: 'Normal recent note',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      createSegmentId: () => 'seg_normal_recent',
+      now: () => '2026-06-06T20:05:00.000-07:00',
+    });
+    assert.equal(normalNote.ok, true);
+    const normalBody = await handleWriteNoteSegmentDraftBodyForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_normal_recent',
+        segmentId: 'seg_normal_recent',
+        bodyMarkdown: 'normal recent body',
+        revision: 0,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(normalBody.ok, true);
+    const finalizedNormal = await handleFinalizeNoteSegmentDraftForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_normal_recent',
+        workspaceId: 'ws_recent_normal',
+        memoryId: 'mem_recent_normal',
+        segmentId: 'seg_normal_recent',
+        title: 'Normal recent note',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-06T20:05:00.000-07:00',
+    });
+    assert.equal(finalizedNormal.ok, true);
+
+    const feed = await handleReadRecentExpressionsForTest({
+      appDataDir,
+      event,
+      input: { limit: 10 },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      memorySpaceRegistry,
+      now: () => '2026-06-06T20:10:00.000-07:00',
+    });
+
+    assert.equal(feed.ok, true);
+    if (feed.ok) {
+      assert.deepEqual(
+        feed.value.items.map((item) => ({
+          workspaceId: item.workspaceId,
+          memoryId: item.memoryId,
+          segmentId: item.segmentId,
+          title: item.title,
+        })),
+        [
+          {
+            workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+            memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+            segmentId: 'seg_draft_recent',
+            title: 'Draft recent note',
+          },
+          {
+            workspaceId: 'ws_recent_normal',
+            memoryId: 'mem_recent_normal',
+            segmentId: 'seg_normal_recent',
+            title: 'Normal recent note',
+          },
+        ]
+      );
+      assert.deepEqual(feed.value.skipped, []);
+    }
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+    await rm(normalRoot, { force: true, recursive: true });
+  }
+});
 
 test('initializeWorkspace consumes selection token and never exposes rootPath', async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-init-'));

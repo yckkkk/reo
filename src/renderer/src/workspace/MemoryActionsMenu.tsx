@@ -12,6 +12,8 @@ export type MemoryActionIdentity = WorkspaceMemoryEntityActionRequest;
 
 export type MemoryActionsMenuProps = {
   readonly actionIdentity: MemoryActionIdentity;
+  readonly canDelete?: boolean | undefined;
+  readonly canRename?: boolean | undefined;
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly cover?: WorkspaceMemoryCoverProjection | undefined;
   readonly memoryTitle: string;
@@ -25,6 +27,8 @@ export type MemoryActionsMenuProps = {
 
 export function MemoryActionsMenu({
   actionIdentity,
+  canDelete = true,
+  canRename = true,
   contentAlign = 'end',
   cover,
   memoryTitle,
@@ -41,6 +45,8 @@ export function MemoryActionsMenu({
 
   return (
     <EntityActionMenu
+      canDelete={canDelete}
+      canRename={canRename}
       contentAlign={contentAlign}
       extraActions={[
         {

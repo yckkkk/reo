@@ -12,6 +12,20 @@ export function listMemorySpaces() {
   return window.reoWorkspace.listMemorySpaces();
 }
 
+export function readSystemDraftWorkspace() {
+  return window.reoWorkspace.readSystemDraftWorkspace();
+}
+
+export function openSystemDraftWorkspace() {
+  return window.reoWorkspace.openSystemDraftWorkspace();
+}
+
+export function readRecentExpressions(
+  payload: Parameters<Window['reoWorkspace']['readRecentExpressions']>[0]
+) {
+  return window.reoWorkspace.readRecentExpressions(payload);
+}
+
 export function openWorkspace(payload: Parameters<Window['reoWorkspace']['openWorkspace']>[0]) {
   return window.reoWorkspace.openWorkspace(payload);
 }
@@ -626,6 +640,22 @@ export function onFileTruthChanged(
 
 export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWorkspace>>;
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
+export type WorkspaceSystemDraftProjection = Extract<
+  Awaited<ReturnType<typeof readSystemDraftWorkspace>>,
+  { readonly ok: true }
+>['value']['draft'];
+export type WorkspaceSystemDraftSession = Extract<
+  Awaited<ReturnType<typeof openSystemDraftWorkspace>>,
+  { readonly ok: true }
+>['value'];
+export type WorkspaceRecentExpressionItem = Extract<
+  Awaited<ReturnType<typeof readRecentExpressions>>,
+  { readonly ok: true }
+>['value']['items'][number];
+export type WorkspaceRecentExpressionSkipped = Extract<
+  Awaited<ReturnType<typeof readRecentExpressions>>,
+  { readonly ok: true }
+>['value']['skipped'][number];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
 export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
 export type FinalizedAudioSegment = Extract<

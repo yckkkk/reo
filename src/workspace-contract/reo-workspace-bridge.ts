@@ -56,6 +56,7 @@ import type {
   WorkspaceOpenMemoryDocumentRequest,
   WorkspaceOpenMemorySpaceAgentsFileRequest,
   WorkspaceOpenRequest,
+  WorkspaceOpenSystemDraftWorkspaceResponse,
   WorkspaceOpenSegmentDocumentRequest,
   WorkspaceOpenSegmentSupplementDocumentRequest,
   WorkspaceReadArtifactRuntimeStateRequest,
@@ -84,8 +85,11 @@ import type {
   WorkspaceReadFinalizedAudioSegmentSupplementResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
+  WorkspaceReadRecentExpressionsRequest,
+  WorkspaceReadRecentExpressionsResponse,
   WorkspaceReadVoiceTranscriptionSettingsRequest,
   WorkspaceReadVoiceTranscriptionSettingsResponse,
+  WorkspaceReadSystemDraftWorkspaceResponse,
   WorkspaceReadWorkspaceSnapshotRequest,
   WorkspaceReadWorkspaceSnapshotResponse,
   WorkspaceResetMemoryCoverRequest,
@@ -185,6 +189,11 @@ import type {
 export interface ReoWorkspaceBridge {
   readonly chooseDirectory: () => Promise<WorkspaceChooseDirectoryResponse>;
   readonly listMemorySpaces: () => Promise<WorkspaceListMemorySpacesResponse>;
+  readonly readSystemDraftWorkspace: () => Promise<WorkspaceReadSystemDraftWorkspaceResponse>;
+  readonly openSystemDraftWorkspace: () => Promise<WorkspaceOpenSystemDraftWorkspaceResponse>;
+  readonly readRecentExpressions: (
+    payload: WorkspaceReadRecentExpressionsRequest
+  ) => Promise<WorkspaceReadRecentExpressionsResponse>;
   readonly initializeWorkspace: (
     payload: WorkspaceInitializeRequest
   ) => Promise<WorkspaceInitializeResponse>;

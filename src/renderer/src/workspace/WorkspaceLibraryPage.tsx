@@ -5,7 +5,7 @@ export function WorkspaceLibraryPage() {
         id="workspace-library-title"
         className="text-heading font-regular leading-heading text-foreground"
       >
-        资料库
+        画廊
       </h1>
     </section>
   );

@@ -87,6 +87,8 @@ Element.prototype.setPointerCapture ??= () => undefined;
 Element.prototype.hasPointerCapture ??= () => false;
 Element.prototype.releasePointerCapture ??= () => undefined;
 Element.prototype.scrollIntoView ??= () => undefined;
+Element.prototype.scrollBy ??= () => undefined;
+Element.prototype.scrollTo ??= () => undefined;
 
 function createTestDomRect(): DOMRect {
   return {

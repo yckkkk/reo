@@ -1,0 +1,246 @@
+{
+  "screenshotPath": "/Users/yck/Downloads/PM/技术线/reo/docs/specs/2026-06-06-2043-home-draft-system/evidence/home-draft-e2e-final.png",
+  "passed": 37,
+  "results": [
+    {
+      "evidence": "http://localhost:5183/",
+      "name": "01 renderer target is the Reo dev app",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "02 document reaches ready state",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "03 Home is reachable from current state",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "04 sidebar top IA order is 首页/画廊/草稿 before 记忆空间",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "05 Home sidebar item is current",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "06 Gallery top-level entry exists",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "07 Draft top-level entry exists",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "08 exactly four Home action buttons exist",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "09 capture action is disabled",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "10 write/record/create actions are enabled",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "11 Home action buttons do not use outer card background",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "12 Home action icon has one visual tile layer only",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "12b Home action tiles stay compact instead of card-height panels",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "13 recent expression block is visible on Home",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "14 recent expression block does not expose raw paths",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "15 Draft is not listed as a normal memory space row",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "16 clicking Draft opens the system Draft workspace",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "17 Draft sidebar item becomes current",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "18 protected default Draft Memory is current",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "19 Draft workspace menu hides rename/remove",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "20 Draft default Memory menu hides rename/delete",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "21 Draft still allows creating a new normal Memory",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "copied": true,
+        "homeCurrent": true,
+        "sampleCount": 110
+      },
+      "name": "22 Home create action copies prompt without showing Draft workspace",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "first": {
+          "t": 0,
+          "draftCurrent": false,
+          "draftTitlebar": false,
+          "home": true,
+          "homeCurrent": true,
+          "noteEditor": false,
+          "recordingOverlay": false,
+          "toastCopied": true
+        },
+        "last": {
+          "t": 901,
+          "draftCurrent": false,
+          "draftTitlebar": false,
+          "home": true,
+          "homeCurrent": true,
+          "noteEditor": true,
+          "recordingOverlay": false,
+          "toastCopied": true
+        },
+        "sampleCount": 94,
+        "targetReached": true
+      },
+      "name": "23 Home write action opens Note editor on Home foreground",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "24 Note editor keeps Home foreground before save",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "25 Note editor accepts real user text input",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "26 saving Note finalizes a Segment and closes the editor",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "26b saving Home Note enters Draft workspace foreground",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "segmentId": "seg_20260607063804_6629018d",
+        "title": "笔记8"
+      },
+      "name": "27 finalized Note exists in system Draft files",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "28 finalized Note is projected in Memory Studio",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "29 returning Home keeps the app non-blank",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "30 recent feed refetches the finalized Draft Note",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "31 clicking recent row opens and focuses the source Segment",
+      "status": "pass"
+    },
+    {
+      "evidence": {
+        "first": {
+          "t": 0,
+          "draftCurrent": false,
+          "draftTitlebar": false,
+          "home": true,
+          "homeCurrent": true,
+          "noteEditor": false,
+          "recordingOverlay": false,
+          "toastCopied": false
+        },
+        "last": {
+          "t": 903,
+          "draftCurrent": false,
+          "draftTitlebar": false,
+          "home": true,
+          "homeCurrent": true,
+          "noteEditor": false,
+          "recordingOverlay": true,
+          "toastCopied": false
+        },
+        "sampleCount": 110,
+        "targetReached": true
+      },
+      "name": "32 Home record action opens Recording overlay on Home foreground",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "33 recording overlay can return without starting microphone",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "34 disabled capture action does not leave Home",
+      "status": "pass"
+    },
+    {
+      "evidence": true,
+      "name": "35 dark mode keeps Home actions visible without white PNG backgrounds",
+      "status": "pass"
+    }
+  ],
+  "runId": "1780814279698",
+  "total": 37
+}

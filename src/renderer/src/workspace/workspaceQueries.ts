@@ -1,10 +1,12 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import {
   listMemorySpaces,
+  readRecentExpressions,
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
   readFinalizedAudioSegmentSupplementAudio,
+  readSystemDraftWorkspace,
   readMemoryDetail,
   readSegmentContent,
   readSegmentSpeechAudio,
@@ -22,6 +24,9 @@ import {
   type WorkspaceMemoryDetail,
   type WorkspaceSession,
   type WorkspaceSnapshot,
+  type WorkspaceSystemDraftProjection,
+  type WorkspaceRecentExpressionItem,
+  type WorkspaceRecentExpressionSkipped,
 } from './workspaceApi';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
@@ -941,5 +946,59 @@ export function memorySpacesQueryOptions() {
     },
     retry: false,
     staleTime: Infinity,
+  });
+}
+
+export function systemDraftWorkspaceQueryKey() {
+  return ['workspace', 'system-draft'] as const;
+}
+
+export function systemDraftWorkspaceQueryOptions() {
+  return queryOptions({
+    queryKey: systemDraftWorkspaceQueryKey(),
+    queryFn: async (): Promise<WorkspaceSystemDraftProjection> => {
+      const result = await readSystemDraftWorkspace();
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载草稿。'));
+      }
+
+      return result.value.draft;
+    },
+    retry: false,
+    staleTime: Infinity,
+  });
+}
+
+export function recentExpressionsQueryRootKey() {
+  return ['workspace', 'recent-expressions'] as const;
+}
+
+export function recentExpressionsQueryKey({ limit }: { readonly limit?: number } = {}) {
+  return [...recentExpressionsQueryRootKey(), limit ?? 'default'] as const;
+}
+
+export function recentExpressionsQueryOptions({
+  enabled = true,
+  limit,
+}: { readonly enabled?: boolean; readonly limit?: number } = {}) {
+  return queryOptions({
+    enabled,
+    queryKey:
+      limit === undefined ? recentExpressionsQueryKey() : recentExpressionsQueryKey({ limit }),
+    queryFn: async (): Promise<{
+      readonly items: readonly WorkspaceRecentExpressionItem[];
+      readonly skipped: readonly WorkspaceRecentExpressionSkipped[];
+    }> => {
+      const result = await readRecentExpressions(limit === undefined ? {} : { limit });
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载近期表达。'));
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: 30_000,
   });
 }

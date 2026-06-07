@@ -22,6 +22,7 @@ describe('AppShell', () => {
     initialThemePreference = 'light',
     isSystemDark = false,
     onCreateWorkspace = vi.fn(),
+    onDraft,
     onHome,
     onLibrary = vi.fn(),
     onOpenLocalWorkspace = vi.fn(),
@@ -37,11 +38,12 @@ describe('AppShell', () => {
     ],
   }: {
     readonly activeWorkspaceId?: string;
-    readonly activeSection?: 'home' | 'library' | 'workspace';
+    readonly activeSection?: 'home' | 'library' | 'draft' | 'workspace';
     readonly children: ReactNode;
     readonly initialThemePreference?: ThemePreference;
     readonly isSystemDark?: boolean;
     readonly onCreateWorkspace?: () => void;
+    readonly onDraft?: () => void;
     readonly onHome?: () => void;
     readonly onLibrary?: () => void;
     readonly onOpenLocalWorkspace?: () => void;
@@ -81,6 +83,7 @@ describe('AppShell', () => {
           onCycleThemePreference={() =>
             setThemePreference((current) => cycleThemePreference(current))
           }
+          onDraft={onDraft}
           onHome={onHome ?? (() => {})}
           onLibrary={onLibrary}
           onOpenLocalWorkspace={onOpenLocalWorkspace}
@@ -153,9 +156,12 @@ describe('AppShell', () => {
     expect(sidebar).toHaveClass('pt-[48px]');
     expect(screen.queryByText('REO')).not.toBeInTheDocument();
     const homeNavButton = screen.getByRole('button', { name: '首页' });
-    const libraryNavButton = screen.getByRole('button', { name: '资料库' });
+    const libraryNavButton = screen.getByRole('button', { name: '画廊' });
+    const draftNavButton = screen.getByRole('button', { name: '草稿' });
     expect(homeNavButton).not.toHaveAttribute('aria-current');
     expect(libraryNavButton).not.toHaveAttribute('aria-current');
+    expect(draftNavButton).not.toHaveAttribute('aria-current');
+    expect(draftNavButton).toBeDisabled();
     expect(homeNavButton).toHaveClass(
       'bg-transparent',
       'text-muted-foreground',
@@ -348,18 +354,25 @@ describe('AppShell', () => {
     fireEvent.click(homeButton);
     expect(onHome).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '资料库' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '画廊' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '草稿' })).toBeDisabled();
     expect(screen.getByText('记忆空间')).toBeInTheDocument();
   });
 
   it('wires named sidebar navigation items and closes the add menu before navigation', async () => {
     const user = userEvent.setup();
     const onHome = vi.fn();
+    const onDraft = vi.fn();
     const onLibrary = vi.fn();
     const onSelectMemorySpace = vi.fn();
 
     render(
-      <TestAppShell onHome={onHome} onLibrary={onLibrary} onSelectMemorySpace={onSelectMemorySpace}>
+      <TestAppShell
+        onDraft={onDraft}
+        onHome={onHome}
+        onLibrary={onLibrary}
+        onSelectMemorySpace={onSelectMemorySpace}
+      >
         <div>Detail content</div>
       </TestAppShell>
     );
@@ -373,9 +386,15 @@ describe('AppShell', () => {
     expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
-    await user.click(screen.getByRole('button', { name: '资料库' }));
+    await user.click(screen.getByRole('button', { name: '画廊' }));
 
     expect(onLibrary).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '添加记忆空间' }));
+    await user.click(screen.getByRole('button', { name: '草稿' }));
+
+    expect(onDraft).toHaveBeenCalledOnce();
     expect(screen.queryByRole('menu', { name: '添加记忆空间' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '添加记忆空间' }));

@@ -147,6 +147,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
   'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_READ_FAILED',
   'ERR_WORKSPACE_MEMORY_SPACE_REGISTRY_WRITE_FAILED',
+  'ERR_WORKSPACE_PROTECTED_ENTITY',
   'ERR_WORKSPACE_ROOT_MISSING',
   'ERR_WORKSPACE_UNSAFE_PATH',
   'ERR_WORKSPACE_MEMORY_NOT_FOUND',
@@ -548,9 +549,17 @@ export const workspaceChooseDirectoryResponseSchema = z.discriminatedUnion('ok',
   workspaceErrorEnvelopeSchema,
 ]);
 
+export const workspaceMemorySystemRoleSchema = z.enum(['draft-default-memory']);
+export const workspaceMemoryCapabilitiesSchema = z.strictObject({
+  canRename: z.boolean(),
+  canDelete: z.boolean(),
+});
+
 export const workspaceMemorySummarySchema = z.strictObject({
   memoryId: memoryIdSchema,
   title: z.string(),
+  systemRole: workspaceMemorySystemRoleSchema.optional(),
+  capabilities: workspaceMemoryCapabilitiesSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   segmentCount: z.number().int().nonnegative(),
@@ -795,6 +804,18 @@ export const workspaceSnapshotSchema = z.strictObject({
   review: workspaceReviewSummarySchema.optional(),
 });
 
+export const workspaceSystemDraftProjectionSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  title: z.string(),
+  systemRole: z.literal('draft-space'),
+  defaultMemoryId: memoryIdSchema,
+  capabilities: z.strictObject({
+    canRename: z.literal(false),
+    canRemove: z.literal(false),
+    canCreateMemory: z.literal(true),
+  }),
+});
+
 export const workspaceInitializeRequestSchema = z.strictObject({
   selectionToken: z.string().min(1),
   title: z
@@ -827,6 +848,75 @@ export const workspaceInitializeResponseSchema = z.discriminatedUnion('ok', [
       workspaceHandle: z.string().min(1),
       workspaceId: z.string().min(1),
       snapshot: workspaceSnapshotSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadSystemDraftWorkspaceResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      draft: workspaceSystemDraftProjectionSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceOpenSystemDraftWorkspaceResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      workspaceHandle: z.string().min(1),
+      workspaceId: z.string().min(1),
+      defaultMemoryId: memoryIdSchema,
+      draft: workspaceSystemDraftProjectionSchema,
+      snapshot: workspaceSnapshotSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadRecentExpressionsRequestSchema = z.strictObject({
+  limit: z.number().int().min(1).max(50).optional(),
+});
+
+const workspaceRecentExpressionBaseSchema = z.strictObject({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  workspaceTitle: z.string(),
+  memoryId: memoryIdSchema,
+  memoryTitle: z.string(),
+  segmentId: segmentIdSchema,
+  contentKind: z.enum(WORKSPACE_CONTENT_KINDS),
+  title: z.string(),
+  preview: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const workspaceRecentExpressionItemSchema = z.discriminatedUnion('objectType', [
+  workspaceRecentExpressionBaseSchema.extend({
+    objectType: z.literal('segment'),
+  }),
+  workspaceRecentExpressionBaseSchema.extend({
+    objectType: z.literal('supplement'),
+    supplementId: supplementIdSchema,
+  }),
+]);
+
+export const workspaceRecentExpressionSkippedSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  workspaceTitle: z.string(),
+  reason: z.enum(['missing', 'locked', 'unsafe', 'invalid', 'read-error']),
+});
+
+export const workspaceReadRecentExpressionsResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      items: z.array(workspaceRecentExpressionItemSchema),
+      skipped: z.array(workspaceRecentExpressionSkippedSchema),
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -2463,6 +2553,23 @@ export type WorkspaceChooseDirectoryResponse = z.infer<
 export type DraftSegmentMetadata = z.infer<typeof draftSegmentMetadataSchema>;
 export type DraftSegmentSupplementMetadata = z.infer<typeof draftSegmentSupplementMetadataSchema>;
 export type WorkspaceSnapshot = z.infer<typeof workspaceSnapshotSchema>;
+export type WorkspaceSystemDraftProjection = z.infer<typeof workspaceSystemDraftProjectionSchema>;
+export type WorkspaceReadSystemDraftWorkspaceResponse = z.infer<
+  typeof workspaceReadSystemDraftWorkspaceResponseSchema
+>;
+export type WorkspaceOpenSystemDraftWorkspaceResponse = z.infer<
+  typeof workspaceOpenSystemDraftWorkspaceResponseSchema
+>;
+export type WorkspaceReadRecentExpressionsRequest = z.infer<
+  typeof workspaceReadRecentExpressionsRequestSchema
+>;
+export type WorkspaceRecentExpressionItem = z.infer<typeof workspaceRecentExpressionItemSchema>;
+export type WorkspaceRecentExpressionSkipped = z.infer<
+  typeof workspaceRecentExpressionSkippedSchema
+>;
+export type WorkspaceReadRecentExpressionsResponse = z.infer<
+  typeof workspaceReadRecentExpressionsResponseSchema
+>;
 export type WorkspaceReviewSummary = z.infer<typeof workspaceReviewSummarySchema>;
 export type WorkspaceDefaultCoverTemplateId = z.infer<typeof workspaceDefaultCoverTemplateIdSchema>;
 export type WorkspaceCoverProjection = z.infer<typeof workspaceCoverProjectionSchema>;

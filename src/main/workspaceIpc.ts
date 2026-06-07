@@ -47,6 +47,7 @@ import {
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_MEMORY_DOCUMENT_CHANNEL,
@@ -56,11 +57,13 @@ import {
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+  WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
+  WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
   WORKSPACE_READ_SEGMENT_CONTENT_CHANNEL,
@@ -151,6 +154,7 @@ import {
   workspaceOpenWidgetDocumentRequestSchema,
   workspaceOpenMemoryDocumentRequestSchema,
   workspaceOpenMemorySpaceRequestSchema,
+  workspaceOpenSystemDraftWorkspaceResponseSchema,
   workspaceOpenMemorySpaceAgentsFileRequestSchema,
   workspaceOpenSegmentDocumentRequestSchema,
   workspaceOpenSegmentSupplementDocumentRequestSchema,
@@ -178,6 +182,8 @@ import {
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceReadRecentExpressionsRequestSchema,
+  workspaceReadRecentExpressionsResponseSchema,
   workspaceReadSegmentContentRequestSchema,
   workspaceReadSegmentContentResponseSchema,
   workspaceReadSegmentSpeechAudioRequestSchema,
@@ -194,6 +200,7 @@ import {
   workspaceListAttachmentsResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
+  workspaceReadSystemDraftWorkspaceResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
   workspaceRevealWidgetInFinderRequestSchema,
@@ -305,6 +312,7 @@ import {
   type WorkspaceCopyWidgetAgentPromptRequest,
   type WorkspaceEntityActionResponse,
   type WorkspaceInitializeResponse,
+  type WorkspaceOpenSystemDraftWorkspaceResponse,
   type WorkspaceChooseDirectoryResponse,
   type WorkspaceErrorEnvelope,
   type WorkspaceSpeechSynthesisBatchTarget,
@@ -472,6 +480,18 @@ import {
   type WorkspaceSpeechSynthesisRuntime,
 } from './speechSynthesisRuntime.js';
 import { transcriptDigest } from './transcriptDigest.js';
+import {
+  ensureSystemDraftWorkspace,
+  isSystemDraftDefaultMemoryId,
+  isSystemDraftWorkspaceId,
+  SYSTEM_DRAFT_DEFAULT_MEMORY_ROLE,
+  SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+  SYSTEM_DRAFT_TITLE,
+  SYSTEM_DRAFT_WORKSPACE_ID,
+  SYSTEM_DRAFT_WORKSPACE_ROLE,
+  type SystemDraftWorkspaceEnsureResult,
+} from './systemDraftWorkspace.js';
+import { readRecentExpressionsFromWorkspaceSources } from './recentExpressions.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
@@ -700,6 +720,27 @@ type HandleListWorkspaceMemorySpacesOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
   readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+};
+
+type HandleReadSystemDraftWorkspaceOptions = WorkspaceIpcBaseOptions & {
+  readonly appDataDir?: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly now?: () => string;
+};
+
+type HandleOpenSystemDraftWorkspaceOptions = HandleReadSystemDraftWorkspaceOptions & {
+  readonly handleStore?: WorkspaceHandleStore;
+  readonly createHandle?: () => string;
+  readonly afterWorkspaceLockAcquiredForTest?: () => MaybePromise<void>;
+};
+
+type HandleReadRecentExpressionsOptions = WorkspaceIpcBaseOptions & {
+  readonly appDataDir?: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly now?: () => string;
 };
 
 type HandleRemoveWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
@@ -1005,6 +1046,289 @@ export async function handleListWorkspaceMemorySpacesForTest(
   return handleListWorkspaceMemorySpacesCore(options);
 }
 
+async function ensureSystemDraftWorkspaceForIpc({
+  appDataDir,
+  now,
+}: {
+  readonly appDataDir?: string | undefined;
+  readonly now: () => string;
+}): Promise<SystemDraftWorkspaceEnsureResult> {
+  const resolvedAppDataDir = appDataDir ?? defaultAppDataDir();
+  if (typeof resolvedAppDataDir !== 'string') {
+    return resolvedAppDataDir;
+  }
+  return ensureSystemDraftWorkspace({
+    appDataDir: resolvedAppDataDir,
+    now,
+  });
+}
+
+async function handleReadSystemDraftWorkspaceCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  now = nowIso,
+}: HandleReadSystemDraftWorkspaceOptions): Promise<
+  z.infer<typeof workspaceReadSystemDraftWorkspaceResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceNoInputSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readSystemDraftWorkspace accepts no payload'
+    );
+  }
+
+  const ensured = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+  if (!ensured.ok) {
+    return ensured;
+  }
+
+  return workspaceReadSystemDraftWorkspaceResponseSchema.parse({
+    ok: true,
+    value: {
+      draft: systemDraftProjection(),
+    },
+  });
+}
+
+export async function handleReadSystemDraftWorkspace(
+  options: HandleReadSystemDraftWorkspaceOptions
+): Promise<z.infer<typeof workspaceReadSystemDraftWorkspaceResponseSchema>> {
+  return handleReadSystemDraftWorkspaceCore(options);
+}
+
+export async function handleReadSystemDraftWorkspaceForTest(
+  options: HandleReadSystemDraftWorkspaceOptions
+): Promise<z.infer<typeof workspaceReadSystemDraftWorkspaceResponseSchema>> {
+  return handleReadSystemDraftWorkspaceCore(options);
+}
+
+async function handleOpenSystemDraftWorkspaceCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+  createHandle,
+  now = nowIso,
+  afterWorkspaceLockAcquiredForTest,
+}: HandleOpenSystemDraftWorkspaceOptions): Promise<WorkspaceOpenSystemDraftWorkspaceResponse> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceNoInputSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'openSystemDraftWorkspace accepts no payload'
+    );
+  }
+
+  const ensured = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+  if (!ensured.ok) {
+    return ensured;
+  }
+
+  const lock = await acquireWorkspaceLock({ canonicalRoot: ensured.value.rootPath });
+  if (!lock.ok) {
+    return lock;
+  }
+  await afterWorkspaceLockAcquiredForTest?.();
+  if (!lock.lock.isUsable()) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written');
+  }
+
+  const opened = await openWorkspaceFiles({
+    rootPath: ensured.value.rootPath,
+    assertWorkspaceUsable: () =>
+      lock.lock.isUsable()
+        ? { ok: true as const }
+        : workspaceError('ERR_WORKSPACE_LOCK_LOST', 'Workspace lock was lost', 'none-written'),
+  });
+  if (!opened.ok) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return opened;
+  }
+  if (!isSystemDraftWorkspaceId(opened.snapshot.workspaceId)) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'System Draft workspace metadata is invalid',
+      'previous-file-preserved'
+    );
+  }
+
+  const store =
+    createHandle === undefined ? handleStore : createWorkspaceHandleStore({ createHandle });
+  let registered: ReturnType<WorkspaceHandleStore['register']> | undefined;
+  try {
+    registered = store.register({
+      canonicalRoot: ensured.value.rootPath,
+      workspaceId: opened.snapshot.workspaceId,
+      sender: trusted.sender,
+      lock: lock.lock,
+    });
+  } catch {
+    await releaseWorkspaceRegistrationAfterFailure({
+      lock,
+      store,
+      registered,
+      sender: trusted.sender,
+    });
+    return workspaceError(
+      'ERR_WORKSPACE_OPEN_FAILED',
+      'System Draft workspace could not be opened'
+    );
+  }
+
+  return workspaceOpenSystemDraftWorkspaceResponseSchema.parse({
+    ok: true,
+    value: {
+      ...registered,
+      defaultMemoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+      draft: systemDraftProjection(),
+      snapshot: annotateSystemDraftSnapshot(opened.snapshot),
+    },
+  });
+}
+
+export async function handleOpenSystemDraftWorkspace(
+  options: HandleOpenSystemDraftWorkspaceOptions
+): Promise<WorkspaceOpenSystemDraftWorkspaceResponse> {
+  return handleOpenSystemDraftWorkspaceCore(options);
+}
+
+export async function handleOpenSystemDraftWorkspaceForTest(
+  options: HandleOpenSystemDraftWorkspaceOptions
+): Promise<WorkspaceOpenSystemDraftWorkspaceResponse> {
+  return handleOpenSystemDraftWorkspaceCore(options);
+}
+
+async function handleReadRecentExpressionsCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleReadRecentExpressionsOptions): Promise<
+  z.infer<typeof workspaceReadRecentExpressionsResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadRecentExpressionsRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readRecentExpressions request is invalid'
+    );
+  }
+
+  const ensuredDraft = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+  if (!ensuredDraft.ok) {
+    return ensuredDraft;
+  }
+
+  const sources = [
+    {
+      rootPath: ensuredDraft.value.rootPath,
+      workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+      workspaceTitle: SYSTEM_DRAFT_TITLE,
+    },
+  ];
+  const skipped: Array<{
+    readonly workspaceId: string;
+    readonly workspaceTitle: string;
+    readonly reason: 'missing';
+  }> = [];
+
+  let memorySpaces: Awaited<ReturnType<WorkspaceMemorySpaceRegistry['listMemorySpaces']>>;
+  try {
+    memorySpaces = await memorySpaceRegistry.listMemorySpaces();
+  } catch (error) {
+    return workspaceMemorySpaceRegistryReadError(error);
+  }
+
+  for (const memorySpace of memorySpaces) {
+    if (isSystemDraftWorkspaceId(memorySpace.workspaceId)) {
+      continue;
+    }
+    const resolved = await memorySpaceRegistry.resolveMemorySpace(memorySpace.workspaceId);
+    if (!resolved) {
+      skipped.push({
+        workspaceId: memorySpace.workspaceId,
+        workspaceTitle: memorySpace.title,
+        reason: 'missing',
+      });
+      continue;
+    }
+    sources.push({
+      rootPath: resolved.rootPath,
+      workspaceId: memorySpace.workspaceId,
+      workspaceTitle: memorySpace.title,
+    });
+  }
+
+  const feed = await readRecentExpressionsFromWorkspaceSources({
+    limit: request.data.limit ?? 12,
+    sources,
+  });
+
+  return workspaceReadRecentExpressionsResponseSchema.parse({
+    ok: true,
+    value: { items: feed.items, skipped: [...skipped, ...feed.skipped] },
+  });
+}
+
+export async function handleReadRecentExpressions(
+  options: HandleReadRecentExpressionsOptions
+): Promise<z.infer<typeof workspaceReadRecentExpressionsResponseSchema>> {
+  return handleReadRecentExpressionsCore(options);
+}
+
+export async function handleReadRecentExpressionsForTest(
+  options: HandleReadRecentExpressionsOptions
+): Promise<z.infer<typeof workspaceReadRecentExpressionsResponseSchema>> {
+  return handleReadRecentExpressionsCore(options);
+}
+
 async function handleRemoveMemorySpaceCore({
   event,
   input,
@@ -1029,6 +1353,9 @@ async function handleRemoveMemorySpaceCore({
   const request = workspaceRemoveMemorySpaceRequestSchema.safeParse(input);
   if (!request.success) {
     return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'removeMemorySpace request is invalid');
+  }
+  if (isSystemDraftWorkspaceId(request.data.workspaceId)) {
+    return protectedSystemEntityError('System Draft workspace cannot be removed');
   }
 
   try {
@@ -2345,23 +2672,29 @@ async function handleUpdateMemorySpaceTitleCore({
       invalidMessage: 'updateMemorySpaceTitle request is invalid',
       run: (activeRequest, handle, assertUsable, trustedSender) =>
         withUsableWorkspaceHandle(assertUsable, () =>
-          persistMemorySpaceTitleUpdate({
-            canonicalRoot: handle.canonicalRoot,
-            workspaceId: handle.workspaceId,
-            title: activeRequest.title,
-            memorySpaceRegistry,
-            assertWorkspaceUsable: assertUsable,
-            relocateWorkspaceRoot: (nextCanonicalRoot) =>
-              handleStore.relocateHandleRoot({
-                workspaceHandle: activeRequest.workspaceHandle,
-                sender: trustedSender,
+          isSystemDraftWorkspaceId(handle.workspaceId)
+            ? protectedSystemEntityError('System Draft workspace cannot be renamed')
+            : persistMemorySpaceTitleUpdate({
+                canonicalRoot: handle.canonicalRoot,
                 workspaceId: handle.workspaceId,
-                canonicalRoot: nextCanonicalRoot,
-              }),
-            registryProjection: 'best-effort',
-          })
+                title: activeRequest.title,
+                memorySpaceRegistry,
+                assertWorkspaceUsable: assertUsable,
+                relocateWorkspaceRoot: (nextCanonicalRoot) =>
+                  handleStore.relocateHandleRoot({
+                    workspaceHandle: activeRequest.workspaceHandle,
+                    sender: trustedSender,
+                    workspaceId: handle.workspaceId,
+                    canonicalRoot: nextCanonicalRoot,
+                  }),
+                registryProjection: 'best-effort',
+              })
         ),
     });
+  }
+
+  if (isSystemDraftWorkspaceId(request.data.workspaceId)) {
+    return protectedSystemEntityError('System Draft workspace cannot be renamed');
   }
 
   return updateRegisteredMemorySpaceTitle({
@@ -2435,6 +2768,57 @@ function getDefaultMemorySpaceRegistry(): WorkspaceMemorySpaceRegistry {
     registryPath: path.join(userDataPath, 'workspace-registry.json'),
   });
   return defaultMemorySpaceRegistry;
+}
+
+function defaultAppDataDir(): string | WorkspaceErrorEnvelope {
+  const userDataPath = app?.getPath('userData');
+  if (!userDataPath) {
+    return workspaceError(
+      'ERR_WORKSPACE_INIT_FAILED',
+      'System Draft app data directory is unavailable',
+      'none-written'
+    );
+  }
+  return userDataPath;
+}
+
+function systemDraftProjection() {
+  return {
+    workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+    title: SYSTEM_DRAFT_TITLE,
+    systemRole: SYSTEM_DRAFT_WORKSPACE_ROLE,
+    defaultMemoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+    capabilities: {
+      canRename: false,
+      canRemove: false,
+      canCreateMemory: true,
+    },
+  } as const;
+}
+
+function annotateSystemDraftSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
+  if (!isSystemDraftWorkspaceId(snapshot.workspaceId)) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    memories: snapshot.memories.map((memory) =>
+      isSystemDraftDefaultMemoryId(memory.memoryId)
+        ? {
+            ...memory,
+            systemRole: SYSTEM_DRAFT_DEFAULT_MEMORY_ROLE,
+            capabilities: {
+              canRename: false,
+              canDelete: false,
+            },
+          }
+        : memory
+    ),
+  };
+}
+
+function protectedSystemEntityError(message: string): WorkspaceErrorEnvelope {
+  return workspaceError('ERR_WORKSPACE_PROTECTED_ENTITY', message, 'none-written');
 }
 
 function workspaceMemorySpaceRegistryReadError(error: unknown): WorkspaceErrorEnvelope {
@@ -4857,6 +5241,12 @@ function handleUpdateMemoryTitleCore({
     invalidMessage: 'updateMemoryTitle request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
+        if (
+          isSystemDraftWorkspaceId(handle.workspaceId) &&
+          isSystemDraftDefaultMemoryId(request.memoryId)
+        ) {
+          return protectedSystemEntityError('System Draft default Memory cannot be renamed');
+        }
         const result = await updateMemoryTitleFromFileTruth({
           rootPath: handle.canonicalRoot,
           memoryId: request.memoryId,
@@ -5208,6 +5598,12 @@ function handleDeleteMemoryCore(
     invalidMessage: 'deleteMemory request is invalid',
     run: (request, handle, assertUsable) =>
       withUsableWorkspaceHandle(assertUsable, async () => {
+        if (
+          isSystemDraftWorkspaceId(handle.workspaceId) &&
+          isSystemDraftDefaultMemoryId(request.memoryId)
+        ) {
+          return protectedSystemEntityError('System Draft default Memory cannot be deleted');
+        }
         const result = await deleteMemoryFromFileTruth({
           rootPath: handle.canonicalRoot,
           memoryId: request.memoryId,
@@ -7818,11 +8214,15 @@ export function registerWorkspaceIpc({
     void speechSynthesisRuntime.enqueueAutomaticWorkspace(readyBackfillWorkspace);
   }
 
-  function rememberReadyBackfillWorkspace(
+  type ReadyWorkspaceOpenResponse =
+    | WorkspaceInitializeResponse
+    | WorkspaceOpenSystemDraftWorkspaceResponse;
+
+  function rememberReadyBackfillWorkspace<Response extends ReadyWorkspaceOpenResponse>(
     event: TrustedSenderEventAdapter,
     channel: string,
-    response: WorkspaceInitializeResponse
-  ): WorkspaceInitializeResponse {
+    response: Response
+  ): Response {
     if (!response.ok) {
       return response;
     }
@@ -7906,6 +8306,38 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL, (event, input) =>
+    handleReadSystemDraftWorkspace({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL, async (event, input) =>
+    rememberReadyBackfillWorkspace(
+      event,
+      WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
+      await handleOpenSystemDraftWorkspace({
+        event,
+        input,
+        expectedSession,
+        expectedSessionKey,
+        isTrustedUrl,
+        handleStore,
+      })
+    )
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, (event, input) =>
+    handleReadRecentExpressions({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, async (event, input) =>

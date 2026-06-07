@@ -8,6 +8,8 @@ export type MemorySpaceActionIdentity = WorkspaceMemorySpaceEntityActionRequest;
 
 export type MemorySpaceActionsMenuProps = {
   readonly actionIdentity: MemorySpaceActionIdentity;
+  readonly canRemove?: boolean | undefined;
+  readonly canRename?: boolean | undefined;
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly memorySpaceTitle: string;
   readonly onOpenChange?: (open: boolean) => void;
@@ -21,6 +23,8 @@ export type MemorySpaceActionsMenuProps = {
 
 export function MemorySpaceActionsMenu({
   actionIdentity,
+  canRemove = true,
+  canRename = true,
   contentAlign = 'end',
   memorySpaceTitle,
   onOpenChange,
@@ -36,6 +40,8 @@ export function MemorySpaceActionsMenu({
 
   return (
     <EntityActionMenu
+      canDelete={canRemove}
+      canRename={canRename}
       contentAlign={contentAlign}
       deleteLabel="移除"
       menuLabel={menuLabel}

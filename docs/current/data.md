@@ -5,8 +5,8 @@
 ## 当前事实
 
 - 当前没有 database schema、Drizzle config、Better Auth tables 或 auth session persistence owner。
-- 当前 durable data contract 是记忆空间文件夹文件和 main-owned memory space registry。
-- 当前 TanStack Query key 覆盖 memory space list、Workspace snapshot、Memory detail、selected Segment content、selected SegmentSupplement content、playback audio bytes、note speech audio bytes 和 voice transcription settings。
+- 当前 durable data contract 是记忆空间文件夹文件、main-owned memory space registry 和 main-owned system Draft store。
+- 当前 TanStack Query key 覆盖 memory space list、system Draft projection、recent expression feed、Workspace snapshot、Memory detail、selected Segment content、selected SegmentSupplement content、playback audio bytes、note speech audio bytes 和 voice transcription settings。
 - 当前没有 Zustand stores。
 - 当前补转录和 note speech synthesis 都不新增 DB schema、不新增 Zustand store。自动补转录和自动 speech synthesis 状态只存在于 main process queue；手动补转录和手动 speech synthesis running 状态只存在于 App feature-local component state；generated note speech MP3 bytes 只通过独立 TanStack Query key 懒加载。
 - 当前 React Hook Form form owner 覆盖 create memory space、Memory create、Memory rename、Segment rename、SegmentSupplement rename 和 memory space rename 的提交前 draft。
@@ -37,6 +37,7 @@
 - Note speech synthesis 是 Reo 管理的派生 payload：`speech.mp3` 与 note Segment 或 note SegmentSupplement 同目录，技术状态写入对应 manifest 的 `speechSynthesis` 字段，包含 content hash、speaker、format、MIME、model、resource id、sample rate、byte length、audio hash、last synthesis attempt 和 updatedAt。读取 note content 时只返回轻量 `speechSynthesis` projection，不返回 MP3 bytes，也不为 projection 读取整段 MP3 计算 hash；ready/stale speech audio 通过独立 bounded read 按 manifest identity 懒加载，并用 `audioHash` 校验 `speech.mp3` 后才返回。manifest 缺失投影为 missing，manifest content hash 与当前正文 hash 不一致投影为 stale，缺少 audio hash、缺少 matching byte length 的 `speech.mp3` 或 audio read hash 校验失败时不可播放并按失败路径恢复。
 - Note projection 不暴露 duration、transcript 或 lastTranscriptionAttempt 字段；generated speech 不进入 Memory audio duration、audio byte、audio Segment count 或 activity ordering aggregate。附件相对引用写在 Markdown 正文中；附件本身不是独立对象、不是 `.reo/index.json` 投影，也不进入 manifest 列表。
 - Memory space registry entry 属于 main-owned app state，字段包含 `workspaceId`、title、description、rootPath、addedAt 和 lastOpenedAt；renderer 只能读取不含 rootPath 的列表投影。
+- 系统 `草稿` 是 main-owned app state 创建和保证存在的真实记忆空间，不属于普通 memory space registry。系统 store 位于 app `userData` 下，记录固定 system Draft workspace identity 和 app-managed root；Draft root 位于 app-managed `system-memory-spaces/草稿` 下。Draft workspace projection 使用 `systemRole: 'draft-space'`，内含固定 protected default Memory `草稿`，其 Memory summary 使用 `systemRole: 'draft-default-memory'` 和 `capabilities: { canRename: false, canDelete: false }`；Draft workspace root 本身也以 capabilities 表达不可 rename/remove。用户仍可在 Draft 内创建其它 Memory、Segment 和 SegmentSupplement。
 - Voice settings 属于 main-owned app state，文件位于 `userData/voice-transcription-settings.json`；X-Api-Key 字段经 Electron `safeStorage` 加密，renderer 只能读取不含明文或密文的 settings snapshot。同一 key 是录音中流式识别、finalized audio 补转录和 note speech synthesis 的凭证真源。Settings snapshot 还持有 speech synthesis speaker 以及 ASR/TTS split validation state。
 - `workspaceHandle` 是 main process runtime capability，只用于当前窗口授权 IPC 操作和 renderer handle-scoped runtime cache key，不进入 DOM、URL、记忆空间文件或 registry，也不跨 app restart 持久化。
 
@@ -53,7 +54,7 @@
 ## 当前数据决策
 
 - 当前用户内容真源是记忆空间文件夹；不引入 Drizzle schema、SQLite file、migration directory 或 DB-backed content truth。
-- Memory space registry 用于跨 app restart 保留已导入记忆空间。Registry 最多保留 100 个记忆空间；新增导入进入列表顶部，打开已有 entry 只更新 `lastOpenedAt` 和投影字段，不改变列表位置；root path 只在 main-owned registry file 和 main process 内部存在。Renderer 通过 list/open/remove IPC 操作 registry projection，不读取真实路径。
+- Memory space registry 用于跨 app restart 保留已导入记忆空间。Registry 最多保留 100 个普通记忆空间；新增导入进入列表顶部，打开已有 entry 只更新 `lastOpenedAt` 和投影字段，不改变列表位置；root path 只在 main-owned registry file 和 main process 内部存在。Renderer 通过 list/open/remove IPC 操作 registry projection，不读取真实路径。系统 `草稿` 不进入 registry list，也不能通过 registry remove/update 路径删除或改名。
 - Memory space registry 不是记忆空间内容真源。记忆空间 root folder basename 是 title 文件真源；`.reo/workspace.json.title` 是 metadata mirror；description、memory summary 和 Segment truth 仍来自记忆空间文件。
 - Registry 文件缺失、损坏、schema 不匹配或 symlink leaf 按空列表处理；不可读 IO 错误返回 typed error envelope。Open 已导入记忆空间时只 resolve 当前 `workspaceId`；stored root 缺失时才做有界 sibling scan。
 - Memory space rename 使用 `workspace:updateMemorySpaceTitle`。Active request 使用 `workspaceHandle` 和安全 title；inactive request 使用 `workspaceId` 和安全 title。Main 在 single-writer lock 下移动真实 root folder basename，并在 root move 成功后写入 `.reo/workspace.json.title` mirror。Response 不返回 root path 或 handle。
@@ -65,7 +66,7 @@
 - `.reo/index.json` 是可重建 UI index，不是用户内容真源。合法但陈旧的 index 只能作为启动 cache，不能让合法 finalized object 永久隐藏。
 - `.reo/workspace.lock` 和 `.reo/workspace.lock.lock` 是 volatile runtime lock artifacts，不进入稳定内容 hash；owner file 只用于识别 stale lock，不是用户内容。
 - Query keys 使用 stable `workspaceId`、`memoryId`、`segmentId` 和 `supplementId` 表达 durable identity；需要当前 handle 授权的 selected content 和 speech audio query 在 renderer runtime key 中追加 `workspaceHandle`，避免旧 handle 的 in-flight response 写入新 session。`workspaceHandle` 不写入文件、不进入 DOM/URL、不跨 app restart 持久化。
-- TanStack Query 拥有 main-backed memory space list、Workspace snapshot、Memory detail、selected Segment content、selected SegmentSupplement content、playback audio bytes、note speech audio bytes 和 voice settings snapshot。Memory detail、note Segment content 和 note SegmentSupplement content 是文件真源投影，fresh cache 在重新打开或重新选择同一未失效目标时可直接复用；file truth event、保存 mutation 或 exact invalidation 会让对应 cache 失效并在重新挂载或 active refetch 时读取 main process 文件真源。Audio Segment / audio SegmentSupplement content cache 只持有 transcript projection、audioByteLength、可选 audioHash 和 baseline hash，不持有本地录音 audio bytes；note content cache 只持有 speech projection、Markdown/Tiptap 正文和 baseline hash，不持有 generated speech MP3 bytes；artifact preview URL 由 Memory detail projection 派生，不新增 selected content Query。本地录音 playback audio bytes 和 note speech audio bytes 都由独立短生命周期 query 与 Loaded Workspace Frame 有界 Blob URL LRU 持有。baseline 只用于下一次保存的外部修改检测。
+- TanStack Query 拥有 main-backed memory space list、system Draft projection、recent expression feed、Workspace snapshot、Memory detail、selected Segment content、selected SegmentSupplement content、playback audio bytes、note speech audio bytes 和 voice settings snapshot。Memory detail、note Segment content 和 note SegmentSupplement content 是文件真源投影，fresh cache 在重新打开或重新选择同一未失效目标时可直接复用；file truth event、保存 mutation 或 exact invalidation 会让对应 cache 失效并在重新挂载或 active refetch 时读取 main process 文件真源。Audio Segment / audio SegmentSupplement content cache 只持有 transcript projection、audioByteLength、可选 audioHash 和 baseline hash，不持有本地录音 audio bytes；note content cache 只持有 speech projection、Markdown/Tiptap 正文和 baseline hash，不持有 generated speech MP3 bytes；artifact preview URL 由 Memory detail projection 派生，不新增 selected content Query。Recent expression feed 是应用级只读投影，由 main 枚举 system Draft 和普通 registry memory spaces 后读取 finalized Segment 与 SegmentSupplement 轻量信息；不可读空间只返回 redacted skipped summary，不返回 root path 或 file path。本地录音 playback audio bytes 和 note speech audio bytes 都由独立短生命周期 query 与 Loaded Workspace Frame 有界 Blob URL LRU 持有。baseline 只用于下一次保存的外部修改检测。
 - Workspace session close、reopen 或进入 replacement session 时，renderer 保留 Memory detail 与 handle-scoped content cache 的即时投影，并为新 handle seed 等价 content cache 后按失效状态后台 refetch。删除实体、恢复实体、stale save 失败和 identity-changing flow 才 exact remove 对应 content cache。关闭 workspace 会移除对应 workspace 的 playback audio byte query；显式 batch regenerate speech 会移除对应 note speech audio byte query，避免旧音频 bytes 长期占用内存。
 - Active recording lifecycle、overlay close protection、chunk sequence、transcript draft ref、playback state、Blob URL、pending rename/delete targets、manual backfill running state 和 manual speech synthesis running state 都不进入 durable files 或 Query truth，按 owner 保留在 feature-local state。
 - Recording recovery marker 存在 renderer `localStorage`，按 `workspaceId` 隔离，不保存音频二进制、密钥、workspace handle 或 raw path。
@@ -96,7 +97,7 @@
 
 - 用户记忆内容的 durable artifact source 属于记忆空间文件。
 - `.reo` metadata 和 rebuildable index 属于记忆空间文件夹，由 Reo 管理。
-- Memory space registry 属于 main-owned app state，只保存已导入记忆空间列表和 main-only root path，不是用户内容真源。
+- Memory space registry 属于 main-owned app state，只保存已导入普通记忆空间列表和 main-only root path，不是用户内容真源；system Draft store 也是 main-owned app state，不是用户内容真源。
 - SQLite 只有在引入后才拥有明确的 app index、relationship、query、session 或 processing state；不得替代记忆空间文件成为用户内容真源。
 - Main/server-backed async data 属于 TanStack Query。
 - Ephemeral UI state 属于 component state 或 Zustand。

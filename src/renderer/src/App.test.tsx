@@ -39,6 +39,9 @@ describe('App', () => {
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
     listMemorySpaces: vi.fn(),
+    readSystemDraftWorkspace: vi.fn(),
+    openSystemDraftWorkspace: vi.fn(),
+    readRecentExpressions: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
@@ -146,6 +149,59 @@ describe('App', () => {
       reject = promiseReject;
     });
     return { promise, reject, resolve };
+  }
+
+  function systemDraftMemory(): WorkspaceMemorySummary {
+    return {
+      memoryId: 'mem_system_draft',
+      title: '草稿',
+      createdAt: '2026-06-06T20:00:00.000Z',
+      updatedAt: '2026-06-06T20:00:00.000Z',
+      segmentCount: 0,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 0,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+      systemRole: 'draft-default-memory',
+      capabilities: {
+        canDelete: false,
+        canRename: false,
+      },
+    };
+  }
+
+  function systemDraftProjection() {
+    return {
+      workspaceId: 'ws_system_draft',
+      title: '草稿',
+      systemRole: 'draft-space' as const,
+      defaultMemoryId: 'mem_system_draft',
+      capabilities: {
+        canCreateMemory: true,
+        canRemove: false,
+        canRename: false,
+      },
+    };
+  }
+
+  function systemDraftSession() {
+    const draft = systemDraftProjection();
+    return {
+      workspaceHandle: 'workspace-handle-draft',
+      workspaceId: draft.workspaceId,
+      defaultMemoryId: draft.defaultMemoryId,
+      draft,
+      snapshot: {
+        workspaceId: draft.workspaceId,
+        title: draft.title,
+        description: '',
+        memories: [systemDraftMemory()],
+      },
+    };
   }
 
   function createDragDataTransfer() {
@@ -412,6 +468,18 @@ describe('App', () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     window.localStorage.clear();
     reoWorkspace.listMemorySpaces.mockResolvedValue({ ok: true, value: { memorySpaces: [] } });
+    reoWorkspace.readSystemDraftWorkspace.mockResolvedValue({
+      ok: true,
+      value: { draft: systemDraftProjection() },
+    });
+    reoWorkspace.openSystemDraftWorkspace.mockResolvedValue({
+      ok: true,
+      value: systemDraftSession(),
+    });
+    reoWorkspace.readRecentExpressions.mockResolvedValue({
+      ok: true,
+      value: { items: [], skipped: [] },
+    });
     reoWorkspace.openMemorySpaceAgentsFile.mockResolvedValue({ ok: true });
     reoWorkspace.openMemoryDocument.mockResolvedValue({ ok: true });
     reoWorkspace.openSegmentDocument.mockResolvedValue({ ok: true });
@@ -423,6 +491,7 @@ describe('App', () => {
     reoWorkspace.copyMemoryRelativePath.mockResolvedValue({ ok: true });
     reoWorkspace.copySegmentAbsolutePath.mockResolvedValue({ ok: true });
     reoWorkspace.copySegmentRelativePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyArtifactAgentPrompt.mockResolvedValue({ ok: true });
     reoWorkspace.copyNeedsReviewAgentPrompt.mockResolvedValue({ ok: true });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
@@ -1426,7 +1495,7 @@ describe('App', () => {
     expect(screen.queryByRole('heading', { name: '创建本地记忆空间' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '创建记忆空间' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '新记忆' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '资料库' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '画廊' })).toBeInTheDocument();
     await openCreateWorkspaceDialog(user);
 
     expect(screen.getByRole('dialog', { name: '创建本地记忆空间' })).toBeInTheDocument();
@@ -1447,10 +1516,349 @@ describe('App', () => {
       </ReoQueryProvider>
     );
 
-    await user.click(screen.getByRole('button', { name: '资料库' }));
+    await user.click(screen.getByRole('button', { name: '画廊' }));
 
-    expect(screen.getByRole('heading', { name: '资料库' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '画廊' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
+  });
+
+  it('opens the protected system Draft workspace from the sidebar without listing it as a normal memory space', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_normal',
+            title: '日常记录',
+            description: '',
+            addedAt: '2026-06-06T20:30:00.000Z',
+            lastOpenedAt: '2026-06-06T20:30:00.000Z',
+          },
+        ],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const draftButtons = await screen.findAllByRole('button', { name: '草稿' });
+    expect(draftButtons).toHaveLength(1);
+    expect(await screen.findByRole('button', { name: '日常记录' })).toBeInTheDocument();
+    const draftButton = draftButtons[0];
+    if (!draftButton) {
+      throw new Error('Draft button was not rendered');
+    }
+
+    await user.click(draftButton);
+
+    await waitFor(() => expect(reoWorkspace.openSystemDraftWorkspace).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('button', { name: '草稿 记忆空间操作' })).not.toHaveAttribute(
+      'aria-current'
+    );
+    expect(screen.getByRole('button', { name: '草稿' })).toHaveAttribute('aria-current', 'page');
+    expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+  });
+
+  it('opens Home 写下来 directly in the system Draft default Memory note flow', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '写下来' }));
+
+    await waitFor(() => expect(reoWorkspace.openSystemDraftWorkspace).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('dialog', { name: '笔记' })).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: '笔记正文' })).toBeInTheDocument();
+    expect(document.querySelector('section[aria-label="首页"]')).toBeInTheDocument();
+    expect(
+      document.querySelector('button[aria-label="草稿 记忆空间操作"]')
+    ).not.toBeInTheDocument();
+    expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+  });
+
+  it('keeps Home as the foreground surface when a Home Draft Note is closed without saving', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '写下来' }));
+    const noteDialog = await screen.findByRole('dialog', { name: '笔记' });
+
+    await user.click(within(noteDialog).getByRole('button', { name: '返回' }));
+    await settleClosingDialog('笔记');
+
+    expect(screen.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: '写下来' })).toBeInTheDocument();
+    expect(
+      document.querySelector('button[aria-label="草稿 记忆空间操作"]')
+    ).not.toBeInTheDocument();
+    expect(reoWorkspace.finalizeNoteSegmentDraft).not.toHaveBeenCalled();
+  });
+
+  it('opens Home 录下来 directly in the system Draft default Memory recording flow', async () => {
+    const user = userEvent.setup();
+    installRecordingBrowserMocks();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '录下来' }));
+
+    await waitFor(() => expect(reoWorkspace.openSystemDraftWorkspace).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('dialog', { name: '录音' })).toBeInTheDocument();
+    expect(document.querySelector('section[aria-label="首页"]')).toBeInTheDocument();
+    expect(
+      document.querySelector('button[aria-label="草稿 记忆空间操作"]')
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '新建记忆' })).not.toBeInTheDocument();
+    expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+  });
+
+  it('opens Home 造出来 directly through the system Draft default Memory artifact prompt', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '造出来' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-draft',
+        workspaceId: 'ws_system_draft',
+        action: 'create-segment',
+        memoryId: 'mem_system_draft',
+      })
+    );
+    expect(reoWorkspace.openSystemDraftWorkspace).toHaveBeenCalledOnce();
+    expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+    expect(screen.queryByRole('menu', { name: '表达方式' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '首页' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: '写下来' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '草稿 记忆空间操作' })).not.toBeInTheDocument();
+  });
+
+  it('opens a Draft recent expression row and focuses the source Segment', async () => {
+    const user = userEvent.setup();
+    const draftMemory: WorkspaceMemorySummary = {
+      ...systemDraftMemory(),
+      hasAnyNote: true,
+      noteSegmentCount: 1,
+      segmentCount: 1,
+      updatedAt: '2026-06-06T21:00:00.000Z',
+    };
+    const draftSnapshot = {
+      workspaceId: 'ws_system_draft',
+      title: '草稿',
+      description: '',
+      memories: [draftMemory],
+    };
+    const recentSegment = {
+      workspaceId: 'ws_system_draft',
+      memoryId: 'mem_system_draft',
+      segmentId: 'seg_recent_note',
+      type: 'note' as const,
+      title: '产品判断笔记',
+      createdAt: '2026-06-06T20:55:00.000Z',
+      updatedAt: '2026-06-06T21:00:00.000Z',
+      bodyByteLength: 24,
+      speechSynthesis: missingNoteSpeechSynthesis(),
+      supplementCount: 0,
+      supplements: [],
+    };
+    reoWorkspace.readRecentExpressions.mockResolvedValue({
+      ok: true,
+      value: {
+        items: [
+          {
+            id: 'recent-seg-1',
+            workspaceId: 'ws_system_draft',
+            workspaceTitle: '草稿',
+            memoryId: 'mem_system_draft',
+            memoryTitle: '草稿',
+            segmentId: 'seg_recent_note',
+            contentKind: 'note',
+            objectType: 'segment',
+            title: '产品判断笔记',
+            preview: '整理今日产品判断。',
+            createdAt: '2026-06-06T20:55:00.000Z',
+            updatedAt: '2026-06-06T21:00:00.000Z',
+          },
+        ],
+        skipped: [],
+      },
+    });
+    reoWorkspace.openSystemDraftWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        ...systemDraftSession(),
+        snapshot: draftSnapshot,
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({ ok: true, value: draftSnapshot });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...draftMemory,
+          workspaceId: 'ws_system_draft',
+          segments: [recentSegment],
+        },
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '打开近期表达 产品判断笔记' }));
+
+    await waitFor(() => expect(reoWorkspace.openSystemDraftWorkspace).toHaveBeenCalledOnce());
+    expect(
+      await screen.findByRole('button', { name: '选择片段 产品判断笔记' })
+    ).toBeInTheDocument();
+    expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+  });
+
+  it('refreshes Home recent expressions after finalizing a Home Draft Note', async () => {
+    const user = userEvent.setup();
+    const draftMemory = systemDraftMemory();
+    const finalizedMemory: WorkspaceMemorySummary = {
+      ...draftMemory,
+      hasAnyNote: true,
+      noteSegmentCount: 1,
+      segmentCount: 1,
+      updatedAt: '2026-06-06T22:15:00.000Z',
+    };
+    const finalizedNoteSegment = {
+      workspaceId: 'ws_system_draft',
+      memoryId: 'mem_system_draft',
+      segmentId: 'seg_home_recent_note',
+      type: 'note' as const,
+      title: '笔记1',
+      createdAt: '2026-06-06T22:15:00.000Z',
+      updatedAt: '2026-06-06T22:15:00.000Z',
+      bodyByteLength: 18,
+      speechSynthesis: missingNoteSpeechSynthesis(),
+      supplementCount: 0,
+      supplements: [],
+    };
+    reoWorkspace.readRecentExpressions.mockReset();
+    reoWorkspace.readRecentExpressions
+      .mockResolvedValueOnce({
+        ok: true,
+        value: { items: [], skipped: [] },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          items: [
+            {
+              id: 'recent-home-draft-note',
+              workspaceId: 'ws_system_draft',
+              workspaceTitle: '草稿',
+              memoryId: 'mem_system_draft',
+              memoryTitle: '草稿',
+              segmentId: 'seg_home_recent_note',
+              contentKind: 'note',
+              objectType: 'segment',
+              title: '笔记1',
+              preview: '最新草稿正文',
+              createdAt: '2026-06-06T22:15:00.000Z',
+              updatedAt: '2026-06-06T22:15:00.000Z',
+            },
+          ],
+          skipped: [],
+        },
+      });
+    reoWorkspace.openSystemDraftWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        ...systemDraftSession(),
+        snapshot: {
+          ...systemDraftSession().snapshot,
+          memories: [draftMemory],
+        },
+      },
+    });
+    reoWorkspace.createNoteSegmentDraft.mockResolvedValue({
+      ok: true,
+      value: { segmentId: 'seg_home_recent_note', revision: 0 },
+    });
+    reoWorkspace.writeNoteSegmentDraftBody.mockResolvedValue({
+      ok: true,
+      value: { revision: 1, saved: true },
+    });
+    reoWorkspace.finalizeNoteSegmentDraft.mockResolvedValue({
+      ok: true,
+      value: {
+        memory: finalizedMemory,
+        segment: finalizedNoteSegment,
+      },
+    });
+    reoWorkspace.readMemoryDetail.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        detail: {
+          ...finalizedMemory,
+          workspaceId: 'ws_system_draft',
+          segments: [finalizedNoteSegment],
+        },
+      },
+    }));
+    reoWorkspace.readSegmentContent.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: 'ws_system_draft',
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        type: 'note',
+        title: '笔记1',
+        bodyMarkdown: '最新草稿正文',
+        bodyByteLength: 18,
+      },
+    }));
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '写下来' }));
+    const noteDialog = await screen.findByRole('dialog', { name: '笔记' });
+    await replaceRichEditorMarkdown(within(noteDialog).getByLabelText('笔记正文'), '最新草稿正文');
+    await user.click(within(noteDialog).getByRole('button', { name: '保存笔记' }));
+
+    await waitFor(() => expect(reoWorkspace.finalizeNoteSegmentDraft).toHaveBeenCalledOnce());
+    await settleClosingDialog('笔记');
+    expect(await screen.findByRole('button', { name: '草稿 记忆空间操作' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '草稿' })).toHaveAttribute('aria-current', 'page');
+    await user.click(screen.getByRole('button', { name: '首页' }));
+
+    await waitFor(() => expect(reoWorkspace.readRecentExpressions).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: '打开近期表达 笔记1' })).toHaveTextContent(
+      '最新草稿正文'
+    );
   });
 
   it('opens the rich dev workspace scenario from the URL parameter', async () => {
@@ -1558,7 +1966,7 @@ describe('App', () => {
     expect(screen.getByRole('switch', { name: '启用豆包语音' })).toBeInTheDocument();
     expect(screen.queryByRole('main', { name: '记忆空间内容' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '首页' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '资料库' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '画廊' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '返回应用' }));
 
@@ -5039,7 +5447,7 @@ describe('App', () => {
     const titlebar = screen.getByRole('banner', { name: '标题栏' });
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(1));
     expect(
-      within(titlebar).queryByRole('tab', { name: 'Workspace 总览 Widget' })
+      within(titlebar).queryByRole('tab', { name: 'Workspace 总览 组件' })
     ).not.toBeInTheDocument();
 
     await act(async () => {
@@ -5054,9 +5462,7 @@ describe('App', () => {
 
     await waitFor(() => expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledTimes(2));
     await user.click(within(titlebar).getByRole('button', { name: '展开记忆列表' }));
-    expect(
-      within(titlebar).getByRole('tab', { name: 'Workspace 总览 Widget' })
-    ).toBeInTheDocument();
+    expect(within(titlebar).getByRole('tab', { name: 'Workspace 总览 组件' })).toBeInTheDocument();
   });
 
   function createWidgetReorderFixture() {
@@ -5179,7 +5585,7 @@ describe('App', () => {
     const widgetTabNames = () =>
       within(tabStrip as HTMLElement)
         .getAllByRole('tab')
-        .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' Widget'))
+        .filter((tab) => tab.getAttribute('aria-label')?.endsWith(' 组件'))
         .map((tab) => tab.getAttribute('aria-label'));
     const widgetTabItem = (name: string) =>
       within(tabStrip as HTMLElement)
@@ -5210,14 +5616,14 @@ describe('App', () => {
     });
 
     expect(widgetTabNames()).toEqual([
-      'Workspace 总览 Widget',
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
+      'Workspace 总览 组件',
+      '第二个 Widget 组件',
+      '今日空间总览 组件',
     ]);
 
     const firstDataTransfer = createDragDataTransfer();
-    const overviewItem = widgetTabItem('Workspace 总览 Widget');
-    const todayItem = widgetTabItem('今日空间总览 Widget');
+    const overviewItem = widgetTabItem('Workspace 总览 组件');
+    const todayItem = widgetTabItem('今日空间总览 组件');
     mockTabRect(overviewItem);
     fireEvent.dragStart(todayItem, { dataTransfer: firstDataTransfer });
     fireWidgetTabDragOver(overviewItem, { clientX: -10, dataTransfer: firstDataTransfer });
@@ -5225,14 +5631,14 @@ describe('App', () => {
 
     await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(1));
     expect(widgetTabNames()).toEqual([
-      '今日空间总览 Widget',
-      'Workspace 总览 Widget',
-      '第二个 Widget Widget',
+      '今日空间总览 组件',
+      'Workspace 总览 组件',
+      '第二个 Widget 组件',
     ]);
 
     const secondDataTransfer = createDragDataTransfer();
-    const currentTodayItem = widgetTabItem('今日空间总览 Widget');
-    const currentSecondItem = widgetTabItem('第二个 Widget Widget');
+    const currentTodayItem = widgetTabItem('今日空间总览 组件');
+    const currentSecondItem = widgetTabItem('第二个 Widget 组件');
     mockTabRect(currentTodayItem);
     fireEvent.dragStart(currentSecondItem, { dataTransfer: secondDataTransfer });
     fireWidgetTabDragOver(currentTodayItem, { clientX: -10, dataTransfer: secondDataTransfer });
@@ -5245,9 +5651,9 @@ describe('App', () => {
       widgetTabOrder: ['wdg_second', 'wdg_today', 'wdg_overview'],
     });
     expect(widgetTabNames()).toEqual([
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
-      'Workspace 总览 Widget',
+      '第二个 Widget 组件',
+      '今日空间总览 组件',
+      'Workspace 总览 组件',
     ]);
 
     await act(async () => {
@@ -5260,9 +5666,9 @@ describe('App', () => {
     });
 
     expect(widgetTabNames()).toEqual([
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
-      'Workspace 总览 Widget',
+      '第二个 Widget 组件',
+      '今日空间总览 组件',
+      'Workspace 总览 组件',
     ]);
   });
 
@@ -5284,8 +5690,8 @@ describe('App', () => {
     });
 
     const firstDataTransfer = createDragDataTransfer();
-    const overviewItem = widgetTabItem('Workspace 总览 Widget');
-    const todayItem = widgetTabItem('今日空间总览 Widget');
+    const overviewItem = widgetTabItem('Workspace 总览 组件');
+    const todayItem = widgetTabItem('今日空间总览 组件');
     mockTabRect(overviewItem);
     fireEvent.dragStart(todayItem, { dataTransfer: firstDataTransfer });
     fireWidgetTabDragOver(overviewItem, { clientX: -10, dataTransfer: firstDataTransfer });
@@ -5293,14 +5699,14 @@ describe('App', () => {
 
     await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(1));
     expect(widgetTabNames()).toEqual([
-      '今日空间总览 Widget',
-      'Workspace 总览 Widget',
-      '第二个 Widget Widget',
+      '今日空间总览 组件',
+      'Workspace 总览 组件',
+      '第二个 Widget 组件',
     ]);
 
     const secondDataTransfer = createDragDataTransfer();
-    const currentTodayItem = widgetTabItem('今日空间总览 Widget');
-    const currentSecondItem = widgetTabItem('第二个 Widget Widget');
+    const currentTodayItem = widgetTabItem('今日空间总览 组件');
+    const currentSecondItem = widgetTabItem('第二个 Widget 组件');
     mockTabRect(currentTodayItem);
     fireEvent.dragStart(currentSecondItem, { dataTransfer: secondDataTransfer });
     fireWidgetTabDragOver(currentTodayItem, { clientX: -10, dataTransfer: secondDataTransfer });
@@ -5308,9 +5714,9 @@ describe('App', () => {
 
     await waitFor(() => expect(reoWorkspace.updateWidgetTabOrder).toHaveBeenCalledTimes(2));
     expect(widgetTabNames()).toEqual([
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
-      'Workspace 总览 Widget',
+      '第二个 Widget 组件',
+      '今日空间总览 组件',
+      'Workspace 总览 组件',
     ]);
 
     await act(async () => {
@@ -5320,9 +5726,9 @@ describe('App', () => {
       });
     });
     expect(widgetTabNames()).toEqual([
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
-      'Workspace 总览 Widget',
+      '第二个 Widget 组件',
+      '今日空间总览 组件',
+      'Workspace 总览 组件',
     ]);
 
     await act(async () => {
@@ -5333,9 +5739,9 @@ describe('App', () => {
     });
 
     expect(widgetTabNames()).toEqual([
-      'Workspace 总览 Widget',
-      '第二个 Widget Widget',
-      '今日空间总览 Widget',
+      'Workspace 总览 组件',
+      '第二个 Widget 组件',
+      '今日空间总览 组件',
     ]);
   });
 
@@ -6866,9 +7272,9 @@ describe('App', () => {
     expect(memoryToastTitle.closest('[data-sonner-toast]')).toHaveClass('reo-undo-toast');
     expect(screen.getByText('My seventh birthday')).toBeInTheDocument();
     const memoryUndoButton = screen.getByRole('button', { name: '恢复' });
-    expect(memoryUndoButton).toHaveClass('reo-toast-action');
+    expect(memoryUndoButton).toHaveClass('bg-primary', 'text-primary-foreground');
     expect(memoryUndoButton).not.toHaveClass('bg-secondary', 'hover:bg-accent');
-    expect(memoryUndoButton).toHaveClass('hover:text-popover-foreground');
+    expect(memoryUndoButton).toHaveClass('hover:bg-primary-hover');
     expect(memoryUndoButton).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-ring');
     expect(memoryUndoButton.querySelector('svg[aria-hidden="true"]')).toHaveClass('h-16', 'w-16');
 
@@ -7092,9 +7498,9 @@ describe('App', () => {
     expect(toastTitle.closest('[data-sonner-toast]')).toHaveClass('reo-undo-toast');
     expect(screen.getByText('Birthday candles')).toBeInTheDocument();
     const segmentUndoButton = screen.getByRole('button', { name: '恢复' });
-    expect(segmentUndoButton).toHaveClass('reo-toast-action');
+    expect(segmentUndoButton).toHaveClass('bg-primary', 'text-primary-foreground');
     expect(segmentUndoButton).not.toHaveClass('bg-secondary', 'hover:bg-accent');
-    expect(segmentUndoButton).toHaveClass('hover:text-popover-foreground');
+    expect(segmentUndoButton).toHaveClass('hover:bg-primary-hover');
     expect(segmentUndoButton).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-ring');
     expect(segmentUndoButton.querySelector('svg[aria-hidden="true"]')).toHaveClass('h-16', 'w-16');
 
@@ -9303,7 +9709,8 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
 
     const titlebar = screen.getByRole('banner', { name: '标题栏' });
-    await user.click(within(titlebar).getByRole('button', { name: '新建记忆' }));
+    await user.click(within(titlebar).getByRole('button', { name: '新增' }));
+    await user.click(screen.getByRole('menuitem', { name: '新建记忆' }));
 
     const dialog = screen.getByRole('dialog', { name: '新建记忆' });
     const titleInput = within(dialog).getByLabelText('记忆名称');
@@ -12901,12 +13308,12 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     expect(await screen.findByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '资料库' }));
+    await user.click(screen.getByRole('button', { name: '画廊' }));
 
     expect(await screen.findByText('无法获取记忆空间锁。')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '今天想记录些什么？' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '资料库' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '画廊' })).not.toBeInTheDocument();
   });
 
   it('keeps the current memory context when selecting the active workspace from the sidebar', async () => {

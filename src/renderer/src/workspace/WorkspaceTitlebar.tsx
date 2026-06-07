@@ -42,6 +42,12 @@ const WIDGET_TAB_DRAG_MIME = 'application/x-reo-widget-tab';
 type WorkspaceTitlebarProps = {
   readonly activeRailTab: WorkspaceRailTab;
   readonly currentMemory?: WorkspaceTitlebarMemory | null;
+  readonly memorySpaceCapabilities?:
+    | {
+        readonly canRemove: boolean;
+        readonly canRename: boolean;
+      }
+    | undefined;
   readonly memoryRailOpen: boolean;
   readonly onCreateMemory: () => void;
   readonly onCreateWidget: () => void;
@@ -67,6 +73,7 @@ type WorkspaceTitlebarProps = {
 export function WorkspaceTitlebar({
   activeRailTab,
   currentMemory = null,
+  memorySpaceCapabilities,
   memoryRailOpen,
   onCreateMemory,
   onCreateWidget,
@@ -104,6 +111,8 @@ export function WorkspaceTitlebar({
           <BreadcrumbItem className="min-w-0">
             <MemorySpaceActionsMenu
               actionIdentity={{ workspaceId }}
+              canRemove={memorySpaceCapabilities?.canRemove}
+              canRename={memorySpaceCapabilities?.canRename}
               contentAlign="start"
               memorySpaceTitle={title}
               onRemove={onRemoveMemorySpace}
@@ -131,6 +140,8 @@ export function WorkspaceTitlebar({
                       workspaceHandle,
                       workspaceId,
                     }}
+                    canDelete={currentMemory.capabilities?.canDelete}
+                    canRename={currentMemory.capabilities?.canRename}
                     contentAlign="start"
                     cover={currentMemory.cover}
                     memoryTitle={currentMemory.title}

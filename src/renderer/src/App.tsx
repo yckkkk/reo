@@ -77,7 +77,10 @@ import { WorkspaceCreateDialog } from './workspace/WorkspaceCreateDialog';
 import { WorkspaceDangerConfirmDialog } from './workspace/WorkspaceDangerConfirmDialog';
 import { WorkspaceLibraryPage } from './workspace/WorkspaceLibraryPage';
 import { MemorySpaceRemoveDialog } from './workspace/MemorySpaceRemoveDialog';
-import { WorkspaceStarterHome } from './workspace/WorkspaceStarterHome';
+import {
+  WorkspaceStarterHome,
+  type WorkspaceStarterHomeRecentExpression,
+} from './workspace/WorkspaceStarterHome';
 import { WorkspaceTitlebar } from './workspace/WorkspaceTitlebar';
 import { MEMORY_RAIL_TAB, type WorkspaceRailTab } from './workspace/workspaceRailTabs';
 import {
@@ -91,6 +94,7 @@ import {
 } from './workspace/segmentDeleteProjection';
 import {
   closeWorkspace,
+  copyArtifactAgentPrompt,
   copyWidgetAgentPrompt,
   createMemory,
   deleteWidget,
@@ -104,6 +108,7 @@ import {
   onFileTruthChanged,
   openWorkspace,
   openMemorySpace,
+  openSystemDraftWorkspace,
   readWorkspaceSnapshot,
   removeMemorySpace,
   resetMemoryCover,
@@ -135,10 +140,12 @@ import {
   type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
   type WorkspaceWidgetProjection,
+  type WorkspaceRecentExpressionItem,
   type WorkspaceNoteSegmentContent,
   type WorkspaceNoteSegmentSupplementContent,
   type WorkspaceError,
   type WorkspaceSession,
+  type WorkspaceSystemDraftSession,
   type VoiceTranscriptionSettings,
 } from './workspace/workspaceApi';
 import { resolveNextDefaultCoverTemplateId } from './workspace/covers/memoryCoverSource';
@@ -163,11 +170,15 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  recentExpressionsQueryRootKey,
+  recentExpressionsQueryOptions,
   seedWorkspaceHandleScopedContentQueries,
   seedWorkspaceSnapshot,
   segmentSupplementContentQueryKey,
   segmentSupplementContentQueryPrefix,
   segmentContentQueryKey,
+  systemDraftWorkspaceQueryKey,
+  systemDraftWorkspaceQueryOptions,
   workspaceContentQueryBelongsToWorkspace,
   workspacePlaybackAudioQueryBelongsToEntity,
   workspacePlaybackAudioQueryBelongsToWorkspace,
@@ -175,12 +186,15 @@ import {
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
-type WorkspaceView = { readonly name: 'workspace-stage' } | { readonly name: 'library' };
+type WorkspaceView =
+  | { readonly name: 'home' }
+  | { readonly name: 'workspace-stage' }
+  | { readonly name: 'library' };
 type AppMode = 'app' | 'settings';
 
 type TopLevelWorkspaceView = Extract<
   WorkspaceView,
-  { readonly name: 'workspace-stage' | 'library' }
+  { readonly name: 'home' | 'workspace-stage' | 'library' }
 >;
 type WorkspaceMemorySpaceListItem = SidebarWorkspaceMemorySpace;
 type PendingWorkspaceRelease = {
@@ -205,6 +219,8 @@ type SegmentFocusIntent = {
   readonly segmentId: string;
   readonly supplementId?: string;
 };
+type WorkspaceSessionPresentation = 'background' | 'foreground';
+type DraftWorkspaceActionSession = WorkspaceSystemDraftSession;
 type TranscriptionBackfillResponse<TValue> =
   | { readonly ok: true; readonly value: TValue }
   | { readonly ok: false; readonly error: WorkspaceError };
@@ -238,6 +254,33 @@ function memoryCreateDialogSubmitLabel(intent: MemoryCreateIntent | null) {
   }
 
   return '创建';
+}
+
+function formatRecentExpressionTime(updatedAt: string) {
+  const date = new Date(updatedAt);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    day: 'numeric',
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+    month: 'numeric',
+  }).format(date);
+}
+
+function mapRecentExpressionToHomeRow(
+  item: WorkspaceRecentExpressionItem
+): WorkspaceStarterHomeRecentExpression {
+  return {
+    id: item.id,
+    preview: item.preview?.trim() || `${item.workspaceTitle} / ${item.memoryTitle}`,
+    time: formatRecentExpressionTime(item.updatedAt),
+    title: item.title,
+    type: item.contentKind,
+  };
 }
 type SegmentSupplementRestoreContext = {
   readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
@@ -273,6 +316,10 @@ type NoteEditorFlow =
 
 const WORKSPACE_STAGE_VIEW: TopLevelWorkspaceView = { name: 'workspace-stage' };
 const LIBRARY_VIEW: TopLevelWorkspaceView = { name: 'library' };
+const HOME_VIEW: TopLevelWorkspaceView = { name: 'home' };
+const DRAFT_DEFAULT_MEMORY_SYSTEM_ROLE = 'draft-default-memory' satisfies NonNullable<
+  WorkspaceMemorySummary['systemRole']
+>;
 const OPEN_MEMORY_SPACE_ERROR = '无法打开记忆空间。';
 const REMOVE_MEMORY_SPACE_ERROR = '无法移除记忆空间。';
 const RELEASE_MEMORY_SPACE_ERROR = '当前记忆空间会话未能释放。';
@@ -866,7 +913,7 @@ export function App() {
     Readonly<Record<string, number>>
   >({});
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
-  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(WORKSPACE_STAGE_VIEW);
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(HOME_VIEW);
   const [appMode, setAppMode] = useState<AppMode>('app');
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
@@ -952,6 +999,14 @@ export function App() {
     []
   );
   const memorySpacesQuery = useQuery(memorySpacesQueryOptions());
+  const systemDraftWorkspaceQuery = useQuery(systemDraftWorkspaceQueryOptions());
+  const recentExpressionsQuery = useQuery(
+    recentExpressionsQueryOptions({
+      enabled:
+        appMode === 'app' && workspaceView.name === 'home' && systemDraftWorkspaceQuery.isSuccess,
+      limit: 12,
+    })
+  );
   const voiceSettingsQuery = useQuery(voiceSettingsQueryOptions());
   const devWorkspaceScenarioNameRef = useRef(readAutoOpenDevWorkspaceScenarioName());
   const devWorkspaceScenarioOpeningRef = useRef(false);
@@ -1318,7 +1373,11 @@ export function App() {
     setThemePreference(cycleThemePreference(themePreference));
   }
 
-  function setReadyWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
+  function setReadyWorkspaceSession(
+    nextWorkspaceSession: WorkspaceSession,
+    selectedMemoryIdOverride?: string,
+    options: { readonly presentation?: WorkspaceSessionPresentation } = {}
+  ) {
     void queryClient.invalidateQueries({
       predicate: (query) =>
         workspaceContentQueryBelongsToWorkspace(query.queryKey, nextWorkspaceSession.workspaceId),
@@ -1331,11 +1390,15 @@ export function App() {
     });
     seedWorkspaceHandleScopedContentQueries(queryClient, nextWorkspaceSession);
     seedWorkspaceSnapshot(queryClient, nextWorkspaceSession);
-    setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+    if ((options.presentation ?? 'foreground') === 'foreground') {
+      setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+    }
     setWorkspaceCreateOpen(false);
     setWorkspaceEntryError(null);
     clearWorkspaceScopedTargets();
-    setSelectedMemoryId(nextWorkspaceSession.snapshot.memories[0]?.memoryId ?? null);
+    setSelectedMemoryId(
+      selectedMemoryIdOverride ?? nextWorkspaceSession.snapshot.memories[0]?.memoryId ?? null
+    );
     setWorkspaceSession(nextWorkspaceSession);
     void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
   }
@@ -1462,7 +1525,13 @@ export function App() {
     return true;
   }
 
-  function acceptWorkspaceSession(nextWorkspaceSession: WorkspaceSession) {
+  function acceptWorkspaceSession(
+    nextWorkspaceSession: WorkspaceSession,
+    options: {
+      readonly presentation?: WorkspaceSessionPresentation;
+      readonly selectedMemoryId?: string;
+    } = {}
+  ) {
     const currentSession = workspaceSessionRef.current;
     if (currentSession && currentSession.workspaceHandle !== nextWorkspaceSession.workspaceHandle) {
       releasePreviousWorkspaceSession(currentSession, nextWorkspaceSession);
@@ -1472,7 +1541,11 @@ export function App() {
     setMemoryCreateIntent(null);
     setMemoryRenameTarget(null);
     setMemorySpaceRenameTarget(null);
-    setReadyWorkspaceSession(nextWorkspaceSession);
+    setReadyWorkspaceSession(
+      nextWorkspaceSession,
+      options.selectedMemoryId,
+      options.presentation === undefined ? {} : { presentation: options.presentation }
+    );
     return true;
   }
 
@@ -1555,7 +1628,7 @@ export function App() {
       request,
       workspaceId,
     }: {
-      readonly applySuccess: (value: TValue) => void;
+      readonly applySuccess: (value: TValue, session: WorkspaceSession) => void;
       readonly key: string;
       readonly request: (
         session: WorkspaceSession
@@ -1592,7 +1665,7 @@ export function App() {
             });
             return;
           }
-          applySuccess(response.value);
+          applySuccess(response.value, session);
           showReoToast({ type: 'success', title: TRANSCRIPTION_BACKFILL_SUCCESS });
         } catch (error) {
           showReoToast({
@@ -1619,8 +1692,9 @@ export function App() {
   const retrySegmentTranscriptionBackfill = useCallback(
     (target: SegmentTranscriptionRetryTarget & { readonly mode: TranscriptionBackfillMode }) => {
       return runTranscriptionBackfill<SegmentTranscriptionBackfillValue>({
-        applySuccess: (value) =>
+        applySuccess: (value, session) =>
           handleRecordingContentSavedRef.current({
+            expectedSession: session,
             memory: value.memory,
             memoryId: target.memoryId,
             segmentId: target.segmentId,
@@ -1647,14 +1721,14 @@ export function App() {
       }
     ) => {
       return runTranscriptionBackfill<SegmentSupplementTranscriptionBackfillValue>({
-        applySuccess: (value) =>
+        applySuccess: (value, session) =>
           handleSegmentSupplementFinalizedRef.current(
             {
               memory: value.memory,
               segment: value.segment,
               supplement: value.supplement,
             },
-            { refreshContent: true }
+            { expectedSession: session, refreshContent: true }
           ),
         key: segmentSupplementBackfillKey(target),
         request: (session) =>
@@ -1917,11 +1991,11 @@ export function App() {
   }
 
   async function navigateHome() {
-    await navigateTopLevel(WORKSPACE_STAGE_VIEW, '无法返回首页。');
+    await navigateTopLevel(HOME_VIEW, '无法返回首页。');
   }
 
   async function navigateLibrary() {
-    await navigateTopLevel(LIBRARY_VIEW, '无法打开资料库。');
+    await navigateTopLevel(LIBRARY_VIEW, '无法打开画廊。');
   }
 
   function openMemorySpaceRemoveDialog(memorySpace: WorkspaceMemorySpaceListItem) {
@@ -2226,6 +2300,116 @@ export function App() {
     }
   }
 
+  function workspaceSessionIsSystemDraft(session: WorkspaceSession | null) {
+    if (!session) {
+      return false;
+    }
+
+    return systemDraftWorkspaceQuery.data?.workspaceId === session.workspaceId;
+  }
+
+  function defaultDraftMemoryIdForSession(session: WorkspaceSession) {
+    if (systemDraftWorkspaceQuery.data?.workspaceId === session.workspaceId) {
+      return systemDraftWorkspaceQuery.data.defaultMemoryId;
+    }
+
+    return (
+      session.snapshot.memories.find(
+        (memory) => memory.systemRole === DRAFT_DEFAULT_MEMORY_SYSTEM_ROLE
+      )?.memoryId ??
+      session.snapshot.memories[0]?.memoryId ??
+      null
+    );
+  }
+
+  async function openSystemDraftWorkspaceAfterActionStarted(
+    failureFallback: string,
+    options: { readonly presentation?: WorkspaceSessionPresentation } = {}
+  ): Promise<DraftWorkspaceActionSession | null> {
+    const presentation = options.presentation ?? 'foreground';
+    const currentSession = workspaceSessionRef.current;
+    if (currentSession && workspaceSessionIsSystemDraft(currentSession)) {
+      const draft = systemDraftWorkspaceQuery.data;
+      if (!draft) {
+        setWorkspaceEntryError('草稿缺少默认记忆。');
+        return null;
+      }
+      const defaultMemoryId = defaultDraftMemoryIdForSession(currentSession);
+      if (!defaultMemoryId) {
+        setWorkspaceEntryError('草稿缺少默认记忆。');
+        return null;
+      }
+
+      handleWorkspaceCreateOpenChange(false);
+      if (presentation === 'foreground') {
+        setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+      }
+      setSelectedMemoryId(defaultMemoryId);
+      return { ...currentSession, defaultMemoryId, draft };
+    }
+
+    setWorkspaceEntryError(null);
+    const draftWorkspaceId = systemDraftWorkspaceQuery.data?.workspaceId;
+    if (draftWorkspaceId && !(await waitForWorkspaceReleaseBeforeOpen(draftWorkspaceId))) {
+      return null;
+    }
+    if (!(await retryFailedWorkspaceReleases())) {
+      return null;
+    }
+
+    const response = await openSystemDraftWorkspace();
+    if (!response.ok) {
+      setWorkspaceEntryError(workspaceErrorDisplayMessage(response.error, failureFallback));
+      return null;
+    }
+
+    queryClient.setQueryData(systemDraftWorkspaceQueryKey(), response.value.draft);
+    acceptWorkspaceSession(response.value, {
+      presentation,
+      selectedMemoryId: response.value.defaultMemoryId,
+    });
+    return response.value;
+  }
+
+  async function openSystemDraftWorkspaceFromSidebar() {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    try {
+      await openSystemDraftWorkspaceAfterActionStarted('无法打开草稿。');
+    } catch (error) {
+      setWorkspaceEntryError(unknownErrorDisplayMessage(error, '无法打开草稿。'));
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function openSystemDraftWorkspaceForHomeAction() {
+    if (blockWorkspaceFlowInterruption()) {
+      return null;
+    }
+
+    if (!beginWorkspaceAction()) {
+      return null;
+    }
+
+    try {
+      return await openSystemDraftWorkspaceAfterActionStarted('无法打开草稿。', {
+        presentation: 'background',
+      });
+    } catch (error) {
+      setWorkspaceEntryError(unknownErrorDisplayMessage(error, '无法打开草稿。'));
+      return null;
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
   async function handleOpenLocalWorkspace() {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -2277,6 +2461,7 @@ export function App() {
       ? null
       : unknownErrorDisplayMessage(memorySpacesQuery.error, '无法加载记忆空间列表。');
   const visibleWorkspaceEntryError = workspaceEntryError ?? memorySpacesError;
+  const currentWorkspaceIsSystemDraft = workspaceSessionIsSystemDraft(workspaceSession);
 
   useEffect(() => {
     if (!visibleWorkspaceEntryError) {
@@ -2294,6 +2479,7 @@ export function App() {
 
   const visibleWorkspaceMemorySpaces: readonly WorkspaceMemorySpaceListItem[] =
     workspaceSession &&
+    !currentWorkspaceIsSystemDraft &&
     !memorySpaces.some((memorySpace) => memorySpace.workspaceId === workspaceSession.workspaceId)
       ? [
           {
@@ -2303,6 +2489,28 @@ export function App() {
           ...memorySpaces,
         ]
       : memorySpaces;
+  const recentExpressionItems = recentExpressionsQuery.data?.items ?? [];
+  const homeRecentExpressions = useMemo(
+    () => recentExpressionItems.map(mapRecentExpressionToHomeRow),
+    [recentExpressionItems]
+  );
+  const homeRecentExpressionsStatus =
+    systemDraftWorkspaceQuery.isLoading || recentExpressionsQuery.isLoading
+      ? 'loading'
+      : systemDraftWorkspaceQuery.isError || recentExpressionsQuery.isError
+        ? 'error'
+        : 'ready';
+  const workspaceSessionResource = workspaceSession;
+
+  function handleOpenRecentExpression(row: WorkspaceStarterHomeRecentExpression) {
+    const item = recentExpressionItems.find((candidate) => candidate.id === row.id);
+    if (!item) {
+      return;
+    }
+
+    void openRecentExpression(item);
+  }
+
   const settingsContent = (
     <SettingsShell
       returnDisabled={settingsBusy}
@@ -2343,6 +2551,9 @@ export function App() {
     },
     onLibrary: () => {
       void navigateLibrary();
+    },
+    onDraft: () => {
+      void openSystemDraftWorkspaceFromSidebar();
     },
     onCycleThemePreference: cyclePreference,
     onOpenSettings: openSettingsMode,
@@ -2391,8 +2602,52 @@ export function App() {
       />
     </>
   );
+  function renderWorkspaceExpressionOverlays(expressionSession: WorkspaceSession) {
+    return (
+      <>
+        {recordingTarget ? (
+          <RecordingOverlay
+            onCloseBlockedChange={handleRecordingCloseBlockedChange}
+            onRecordingContentSaved={(content) =>
+              handleRecordingContentSaved({ ...content, expectedSession: expressionSession })
+            }
+            onOpenChange={handleRecordingOpenChange}
+            onAudioSegmentFinalized={(finalized) =>
+              handleAudioSegmentFinalized(finalized, { expectedSession: expressionSession })
+            }
+            onRecordingFlowSettled={handleRecordingFlowSettled}
+            onSegmentSupplementFinalized={(finalized, options) =>
+              handleSegmentSupplementFinalized(finalized, {
+                ...options,
+                expectedSession: expressionSession,
+              })
+            }
+            open={recordingOverlayOpen}
+            recoveredDraft={recordingRecoveryReviewDraft}
+            recordingTarget={recordingTarget}
+            workspaceSession={expressionSession}
+          />
+        ) : null}
+        {noteEditorTarget ? (
+          <NoteEditorOverlay
+            onNoteSegmentFinalized={(finalized) =>
+              handleNoteSegmentFinalized(finalized, expressionSession)
+            }
+            onExitAnimationEnd={handleNoteEditorExitAnimationEnd}
+            onOpenChange={handleNoteEditorOpenChange}
+            onSegmentSupplementNoteFinalized={(finalized) =>
+              handleSegmentSupplementNoteFinalized(finalized, expressionSession)
+            }
+            open={noteEditorOpen}
+            target={noteEditorTarget}
+            workspaceSession={expressionSession}
+          />
+        ) : null}
+      </>
+    );
+  }
 
-  if (!workspaceSession) {
+  if (!workspaceSessionResource || workspaceView.name !== 'workspace-stage') {
     if (appMode === 'settings') {
       return (
         <>
@@ -2410,13 +2665,34 @@ export function App() {
           {...shellProps}
           activeSection={workspaceView.name === 'library' ? 'library' : 'home'}
         >
-          {workspaceView.name === 'library' ? <WorkspaceLibraryPage /> : <WorkspaceStarterHome />}
+          {workspaceView.name === 'library' ? (
+            <WorkspaceLibraryPage />
+          ) : (
+            <WorkspaceStarterHome
+              onOpenRecentExpression={handleOpenRecentExpression}
+              onStartArtifact={() => {
+                void requestStartDraftArtifactFromHome();
+              }}
+              onStartNote={() => {
+                void requestStartDraftNoteFromHome();
+              }}
+              onStartRecording={() => {
+                void requestStartDraftRecordingFromHome();
+              }}
+              recentExpressions={homeRecentExpressions}
+              recentExpressionsSkippedCount={recentExpressionsQuery.data?.skipped.length ?? 0}
+              recentExpressionsStatus={homeRecentExpressionsStatus}
+            />
+          )}
         </AppShell>
+        {workspaceSessionResource
+          ? renderWorkspaceExpressionOverlays(workspaceSessionResource)
+          : null}
         {workspaceDialogs}
       </>
     );
   }
-  const activeWorkspaceSession = workspaceSession;
+  const activeWorkspaceSession = workspaceSessionResource;
   const currentMemory =
     activeWorkspaceSession.snapshot.memories.find(
       (memory) => memory.memoryId === selectedMemoryId
@@ -2439,11 +2715,15 @@ export function App() {
     );
   }
 
+  function invalidateRecentExpressions() {
+    void queryClient.invalidateQueries({ queryKey: recentExpressionsQueryRootKey() });
+  }
+
   function handleAudioSegmentFinalized(
     finalized: FinalizedAudioSegment,
-    options: { readonly expectedSession?: WorkspaceSession } = {}
+    options: { readonly expectedSession: WorkspaceSession }
   ) {
-    const expectedSession = options.expectedSession ?? activeWorkspaceSession;
+    const expectedSession = options.expectedSession;
     if (!workspaceSessionMatches(expectedSession)) {
       return;
     }
@@ -2483,16 +2763,18 @@ export function App() {
         ? mergeMemoryIntoSession(currentSession, finalized.memory)
         : currentSession
     );
+    setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+    invalidateRecentExpressions();
   }
 
   function handleSegmentSupplementFinalized(
     finalized: FinalizedSegmentSupplementRecording,
     options: {
-      readonly expectedSession?: WorkspaceSession;
+      readonly expectedSession: WorkspaceSession;
       readonly refreshContent?: boolean;
-    } = {}
+    }
   ) {
-    const expectedSession = options.expectedSession ?? activeWorkspaceSession;
+    const expectedSession = options.expectedSession;
     const activeSession = workspaceSessionRef.current;
     if (
       !activeSession ||
@@ -2534,6 +2816,7 @@ export function App() {
         ? mergeMemoryIntoSession(session, finalized.memory)
         : session
     );
+    invalidateRecentExpressions();
     if (options.refreshContent) {
       void queryClient.invalidateQueries({
         exact: true,
@@ -2559,14 +2842,14 @@ export function App() {
     );
   }
 
-  function handleNoteSegmentFinalized(finalized: FinalizedNoteSegment) {
-    if (!workspaceSessionMatches(activeWorkspaceSession)) {
+  function handleNoteSegmentFinalized(finalized: FinalizedNoteSegment, session: WorkspaceSession) {
+    if (!workspaceSessionMatches(session)) {
       return;
     }
 
-    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
     const detailQueryKey = memoryDetailQueryKey({
-      workspaceId: activeWorkspaceSession.workspaceId,
+      workspaceId: session.workspaceId,
       memoryId: finalized.memory.memoryId,
     });
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
@@ -2574,8 +2857,8 @@ export function App() {
       (currentSnapshot) =>
         mergeMemoryIntoSession(
           {
-            ...activeWorkspaceSession,
-            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+            ...session,
+            snapshot: currentSnapshot ?? session.snapshot,
           },
           finalized.memory
         ).snapshot
@@ -2585,7 +2868,7 @@ export function App() {
         currentDetail,
         finalized.memory,
         finalized.segment,
-        activeWorkspaceSession.workspaceId
+        session.workspaceId
       )
     );
     setSelectedMemoryId(finalized.segment.memoryId);
@@ -2594,20 +2877,22 @@ export function App() {
       segmentId: finalized.segment.segmentId,
     });
     setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceHandle === activeWorkspaceSession.workspaceHandle &&
-      currentSession.workspaceId === activeWorkspaceSession.workspaceId
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
         ? mergeMemoryIntoSession(currentSession, finalized.memory)
         : currentSession
     );
+    setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     void queryClient.invalidateQueries({
       exact: true,
       queryKey: segmentContentQueryKey({
-        workspaceId: activeWorkspaceSession.workspaceId,
-        workspaceHandle: activeWorkspaceSession.workspaceHandle,
+        workspaceId: session.workspaceId,
+        workspaceHandle: session.workspaceHandle,
         memoryId: finalized.segment.memoryId,
         segmentId: finalized.segment.segmentId,
       }),
     });
+    invalidateRecentExpressions();
   }
 
   function handleNoteSegmentContentSaved(saved: SavedNoteSegmentContent) {
@@ -2718,26 +3003,29 @@ export function App() {
     );
   }
 
-  function handleSegmentSupplementNoteFinalized(finalized: FinalizedSegmentSupplementNote) {
-    if (!workspaceSessionMatches(activeWorkspaceSession)) {
+  function handleSegmentSupplementNoteFinalized(
+    finalized: FinalizedSegmentSupplementNote,
+    session: WorkspaceSession
+  ) {
+    if (!workspaceSessionMatches(session)) {
       return;
     }
 
-    const snapshotQueryKey = workspaceSnapshotQueryKey(activeWorkspaceSession);
+    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
     queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
       snapshotQueryKey,
       (currentSnapshot) =>
         mergeMemoryIntoSession(
           {
-            ...activeWorkspaceSession,
-            snapshot: currentSnapshot ?? activeWorkspaceSession.snapshot,
+            ...session,
+            snapshot: currentSnapshot ?? session.snapshot,
           },
           finalized.memory
         ).snapshot
     );
     queryClient.setQueryData<MemoryDetailQueryData | undefined>(
       memoryDetailQueryKey({
-        workspaceId: activeWorkspaceSession.workspaceId,
+        workspaceId: session.workspaceId,
         memoryId: finalized.memory.memoryId,
       }),
       (currentDetail) =>
@@ -2745,26 +3033,27 @@ export function App() {
           currentDetail,
           finalized.memory,
           finalized.segment,
-          activeWorkspaceSession.workspaceId
+          session.workspaceId
         )
     );
     setSelectedMemoryId(finalized.memory.memoryId);
     setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceHandle === activeWorkspaceSession.workspaceHandle &&
-      currentSession.workspaceId === activeWorkspaceSession.workspaceId
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
         ? mergeMemoryIntoSession(currentSession, finalized.memory)
         : currentSession
     );
     void queryClient.invalidateQueries({
       exact: true,
       queryKey: segmentSupplementContentQueryKey({
-        workspaceId: activeWorkspaceSession.workspaceId,
-        workspaceHandle: activeWorkspaceSession.workspaceHandle,
+        workspaceId: session.workspaceId,
+        workspaceHandle: session.workspaceHandle,
         memoryId: finalized.memory.memoryId,
         segmentId: finalized.segment.segmentId,
         supplementId: finalized.supplement.supplementId,
       }),
     });
+    invalidateRecentExpressions();
   }
 
   async function saveRecoveredRecording() {
@@ -5168,6 +5457,113 @@ export function App() {
     openNoteEditorForMemory(currentMemoryId, (currentMemory?.noteSegmentCount ?? 0) + 1);
   }
 
+  async function requestStartDraftNoteFromHome() {
+    const draftSession = await openSystemDraftWorkspaceForHomeAction();
+    if (!draftSession) {
+      return;
+    }
+
+    const defaultMemory = draftSession.snapshot.memories.find(
+      (memory) => memory.memoryId === draftSession.defaultMemoryId
+    );
+    openNoteEditorForMemory(
+      draftSession.defaultMemoryId,
+      (defaultMemory?.noteSegmentCount ?? 0) + 1
+    );
+  }
+
+  async function requestStartDraftRecordingFromHome() {
+    const draftSession = await openSystemDraftWorkspaceForHomeAction();
+    if (!draftSession) {
+      return;
+    }
+
+    openRecording({ kind: 'existing-memory', memoryId: draftSession.defaultMemoryId });
+  }
+
+  async function requestStartDraftArtifactFromHome() {
+    const draftSession = await openSystemDraftWorkspaceForHomeAction();
+    if (!draftSession) {
+      return;
+    }
+
+    try {
+      const result = await copyArtifactAgentPrompt({
+        workspaceHandle: draftSession.workspaceHandle,
+        workspaceId: draftSession.workspaceId,
+        action: 'create-segment',
+        memoryId: draftSession.defaultMemoryId,
+      });
+
+      if (!result.ok) {
+        showReoToast({ type: 'error', title: '无法复制作品提示词' });
+        return;
+      }
+
+      showReoToast({
+        type: 'success',
+        title: '已复制作品提示词',
+        description: '交给您的 Agent 后，它会在当前记忆中创建作品文件。',
+      });
+    } catch {
+      showReoToast({ type: 'error', title: '无法复制作品提示词' });
+    }
+  }
+
+  async function openRecentExpression(item: WorkspaceRecentExpressionItem) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    try {
+      let targetSession: WorkspaceSession | null = null;
+      const currentSession = workspaceSessionRef.current;
+      if (item.workspaceId === systemDraftWorkspaceQuery.data?.workspaceId) {
+        targetSession = await openSystemDraftWorkspaceAfterActionStarted('无法打开近期表达。');
+      } else if (currentSession?.workspaceId === item.workspaceId) {
+        handleWorkspaceCreateOpenChange(false);
+        setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+        targetSession = currentSession;
+      } else {
+        if (!(await waitForWorkspaceReleaseBeforeOpen(item.workspaceId))) {
+          return;
+        }
+        if (!(await retryFailedWorkspaceReleases())) {
+          return;
+        }
+
+        const response = await openMemorySpace({ workspaceId: item.workspaceId });
+        if (!response.ok) {
+          setWorkspaceEntryError(
+            workspaceErrorDisplayMessage(response.error, '无法打开近期表达。')
+          );
+          return;
+        }
+        await acceptWorkspaceSession(response.value);
+        targetSession = response.value;
+      }
+
+      if (!targetSession) {
+        return;
+      }
+
+      setSelectedMemoryId(item.memoryId);
+      setSegmentFocusIntent({
+        memoryId: item.memoryId,
+        segmentId: item.segmentId,
+        ...(item.objectType === 'supplement' ? { supplementId: item.supplementId } : {}),
+      });
+    } catch (error) {
+      setWorkspaceEntryError(unknownErrorDisplayMessage(error, '无法打开近期表达。'));
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
   function requestStartSegmentSupplementRecording(target: {
     readonly memoryId: string;
     readonly segmentId: string;
@@ -5213,8 +5609,8 @@ export function App() {
     memory,
     memoryId,
     segmentId,
-  }: SavedRecordingContent & { readonly expectedSession?: WorkspaceSession }) {
-    const session = expectedSession ?? activeWorkspaceSession;
+  }: SavedRecordingContent & { readonly expectedSession: WorkspaceSession }) {
+    const session = expectedSession;
     if (!workspaceSessionMatches(session)) {
       return;
     }
@@ -5699,141 +6095,117 @@ export function App() {
       <AppShell
         {...shellProps}
         activeWorkspaceId={activeWorkspaceSession.workspaceId}
-        activeSection={workspaceView.name === 'library' ? 'library' : 'workspace'}
+        activeSection={currentWorkspaceIsSystemDraft ? 'draft' : 'workspace'}
         panelTitlebar={
-          workspaceView.name === 'workspace-stage' ? (
-            <WorkspaceTitlebar
-              activeRailTab={effectiveWorkspaceRailTab}
-              currentMemory={currentMemory}
-              memoryRailOpen={memoryRailOpen}
-              onCreateMemory={() => openMemoryCreateDialog({ afterCreate: 'stay-on-stage' })}
-              onCreateWidget={requestCreateWidget}
-              onDeleteMemory={openMemoryDeleteDialog}
-              onDeleteWidget={openWidgetDeleteDialog}
-              onRenameMemory={setMemoryRenameTarget}
-              onRenameWidget={openWidgetRenameDialog}
-              onRequestWidgetRefresh={refreshWidget}
-              onRequestWidgetUpdate={requestUpdateWidget}
-              onResetMemoryCover={(memory) => {
-                void resetMemoryCoverToDefault(memory);
-              }}
-              onReorderWidgets={reorderWidgets}
-              onSelectRailTab={setActiveWorkspaceRailTab}
-              onSwitchMemoryDefaultCover={(memory) => {
-                void switchMemoryDefaultCoverTemplate(memory);
-              }}
-              onRenameMemorySpace={() =>
-                openMemorySpaceRenameDialog({
-                  workspaceId: activeWorkspaceSession.workspaceId,
-                  title: activeWorkspaceSession.snapshot.title,
-                })
-              }
-              onRemoveMemorySpace={() =>
-                openMemorySpaceRemoveDialog({
-                  workspaceId: activeWorkspaceSession.workspaceId,
-                  title: activeWorkspaceSession.snapshot.title,
-                })
-              }
-              onToggleMemoryRail={toggleMemoryRail}
-              title={activeWorkspaceSession.snapshot.title}
-              widgets={workspaceWidgets}
-              workspaceHandle={activeWorkspaceSession.workspaceHandle}
-              workspaceId={activeWorkspaceSession.workspaceId}
-            />
-          ) : null
-        }
-      >
-        {workspaceView.name === 'library' ? (
-          <WorkspaceLibraryPage />
-        ) : (
-          <LoadedWorkspaceFrame
-            workspaceSession={activeWorkspaceSession}
+          <WorkspaceTitlebar
             activeRailTab={effectiveWorkspaceRailTab}
             currentMemory={currentMemory}
-            segmentFocusIntent={
-              currentMemory && segmentFocusIntent?.memoryId === currentMemory.memoryId
-                ? {
-                    segmentId: segmentFocusIntent.segmentId,
-                    ...(segmentFocusIntent.supplementId
-                      ? { supplementId: segmentFocusIntent.supplementId }
-                      : {}),
-                  }
-                : null
-            }
+            memorySpaceCapabilities={{
+              canRemove: !currentWorkspaceIsSystemDraft,
+              canRename: !currentWorkspaceIsSystemDraft,
+            }}
             memoryRailOpen={memoryRailOpen}
-            memoryRailMode={memoryRailInline ? 'inline' : 'overlay'}
+            onCreateMemory={() => openMemoryCreateDialog({ afterCreate: 'stay-on-stage' })}
+            onCreateWidget={requestCreateWidget}
             onDeleteMemory={openMemoryDeleteDialog}
+            onDeleteWidget={openWidgetDeleteDialog}
+            onRenameMemory={setMemoryRenameTarget}
+            onRenameWidget={openWidgetRenameDialog}
+            onRequestWidgetRefresh={refreshWidget}
+            onRequestWidgetUpdate={requestUpdateWidget}
             onResetMemoryCover={(memory) => {
               void resetMemoryCoverToDefault(memory);
             }}
+            onReorderWidgets={reorderWidgets}
+            onSelectRailTab={setActiveWorkspaceRailTab}
             onSwitchMemoryDefaultCover={(memory) => {
               void switchMemoryDefaultCoverTemplate(memory);
             }}
-            onResetSegmentCover={(target) => {
-              void resetSegmentCoverToDefault(target);
-            }}
-            onSwitchSegmentDefaultCover={(target) => {
-              void switchSegmentDefaultCoverTemplate(target);
-            }}
-            onDeleteSegment={openSegmentDeleteDialog}
-            onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
-            onClearSegmentContent={setSegmentContentClearTarget}
-            onSegmentTranscriptSaved={handleRecordingContentSaved}
-            onSegmentSupplementTranscriptSaved={handleSegmentSupplementTranscriptSaved}
-            onInlineMarkdownDirtyChange={setMemoryStudioInlineMarkdownDirty}
-            onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
-            onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
-            onSegmentFocusConsumed={(segmentId) => {
-              setSegmentFocusIntent((currentIntent) =>
-                currentIntent?.segmentId === segmentId ? null : currentIntent
-              );
-            }}
-            onSelectMemory={selectMemory}
-            onSelectObject={selectObject}
-            onRequestWidgetUpdate={requestUpdateWidget}
-            onWidgetRuntimeMutation={handleWidgetRuntimeMutation}
-            onRenameMemory={setMemoryRenameTarget}
-            onRenameSegmentContent={setSegmentContentRenameTarget}
-            onRenameSegment={setSegmentRenameTarget}
-            onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
-            onShownReviewToastSessionKeyChange={setShownReviewToastSessionKey}
-            speechSynthesis={memoryStudioSpeechSynthesis}
-            transcriptionBackfill={memoryStudioTranscriptionBackfill}
-            expressionDockVisible={recordingTarget === null && !noteEditorBlocking}
-            onStartNote={requestStartNote}
-            onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
-            onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
-            onStartRecording={requestStartRecording}
-            shownReviewToastSessionKey={shownReviewToastSessionKey}
-            widgetRefreshVersions={widgetRefreshVersions}
+            onRenameMemorySpace={() =>
+              openMemorySpaceRenameDialog({
+                workspaceId: activeWorkspaceSession.workspaceId,
+                title: activeWorkspaceSession.snapshot.title,
+              })
+            }
+            onRemoveMemorySpace={() =>
+              openMemorySpaceRemoveDialog({
+                workspaceId: activeWorkspaceSession.workspaceId,
+                title: activeWorkspaceSession.snapshot.title,
+              })
+            }
+            onToggleMemoryRail={toggleMemoryRail}
+            title={activeWorkspaceSession.snapshot.title}
+            widgets={workspaceWidgets}
+            workspaceHandle={activeWorkspaceSession.workspaceHandle}
+            workspaceId={activeWorkspaceSession.workspaceId}
           />
-        )}
+        }
+      >
+        <LoadedWorkspaceFrame
+          workspaceSession={activeWorkspaceSession}
+          activeRailTab={effectiveWorkspaceRailTab}
+          currentMemory={currentMemory}
+          segmentFocusIntent={
+            currentMemory && segmentFocusIntent?.memoryId === currentMemory.memoryId
+              ? {
+                  segmentId: segmentFocusIntent.segmentId,
+                  ...(segmentFocusIntent.supplementId
+                    ? { supplementId: segmentFocusIntent.supplementId }
+                    : {}),
+                }
+              : null
+          }
+          memoryRailOpen={memoryRailOpen}
+          memoryRailMode={memoryRailInline ? 'inline' : 'overlay'}
+          onDeleteMemory={openMemoryDeleteDialog}
+          onResetMemoryCover={(memory) => {
+            void resetMemoryCoverToDefault(memory);
+          }}
+          onSwitchMemoryDefaultCover={(memory) => {
+            void switchMemoryDefaultCoverTemplate(memory);
+          }}
+          onResetSegmentCover={(target) => {
+            void resetSegmentCoverToDefault(target);
+          }}
+          onSwitchSegmentDefaultCover={(target) => {
+            void switchSegmentDefaultCoverTemplate(target);
+          }}
+          onDeleteSegment={openSegmentDeleteDialog}
+          onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
+          onClearSegmentContent={setSegmentContentClearTarget}
+          onSegmentTranscriptSaved={(saved) =>
+            handleRecordingContentSaved({ ...saved, expectedSession: activeWorkspaceSession })
+          }
+          onSegmentSupplementTranscriptSaved={handleSegmentSupplementTranscriptSaved}
+          onInlineMarkdownDirtyChange={setMemoryStudioInlineMarkdownDirty}
+          onNoteSegmentContentSaved={handleNoteSegmentContentSaved}
+          onNoteSegmentSupplementContentSaved={handleNoteSegmentSupplementContentSaved}
+          onSegmentFocusConsumed={(segmentId) => {
+            setSegmentFocusIntent((currentIntent) =>
+              currentIntent?.segmentId === segmentId ? null : currentIntent
+            );
+          }}
+          onSelectMemory={selectMemory}
+          onSelectObject={selectObject}
+          onRequestWidgetUpdate={requestUpdateWidget}
+          onWidgetRuntimeMutation={handleWidgetRuntimeMutation}
+          onRenameMemory={setMemoryRenameTarget}
+          onRenameSegmentContent={setSegmentContentRenameTarget}
+          onRenameSegment={setSegmentRenameTarget}
+          onRenameSegmentSupplement={setSegmentSupplementRenameTarget}
+          onShownReviewToastSessionKeyChange={setShownReviewToastSessionKey}
+          speechSynthesis={memoryStudioSpeechSynthesis}
+          transcriptionBackfill={memoryStudioTranscriptionBackfill}
+          expressionDockVisible={recordingTarget === null && !noteEditorBlocking}
+          onStartNote={requestStartNote}
+          onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
+          onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}
+          onStartRecording={requestStartRecording}
+          shownReviewToastSessionKey={shownReviewToastSessionKey}
+          widgetRefreshVersions={widgetRefreshVersions}
+        />
       </AppShell>
-      {recordingTarget ? (
-        <RecordingOverlay
-          onCloseBlockedChange={handleRecordingCloseBlockedChange}
-          onRecordingContentSaved={handleRecordingContentSaved}
-          onOpenChange={handleRecordingOpenChange}
-          onAudioSegmentFinalized={handleAudioSegmentFinalized}
-          onRecordingFlowSettled={handleRecordingFlowSettled}
-          onSegmentSupplementFinalized={handleSegmentSupplementFinalized}
-          open={recordingOverlayOpen}
-          recoveredDraft={recordingRecoveryReviewDraft}
-          recordingTarget={recordingTarget}
-          workspaceSession={activeWorkspaceSession}
-        />
-      ) : null}
-      {noteEditorTarget ? (
-        <NoteEditorOverlay
-          onNoteSegmentFinalized={handleNoteSegmentFinalized}
-          onExitAnimationEnd={handleNoteEditorExitAnimationEnd}
-          onOpenChange={handleNoteEditorOpenChange}
-          onSegmentSupplementNoteFinalized={handleSegmentSupplementNoteFinalized}
-          open={noteEditorOpen}
-          target={noteEditorTarget}
-          workspaceSession={activeWorkspaceSession}
-        />
-      ) : null}
+      {renderWorkspaceExpressionOverlays(activeWorkspaceSession)}
       <RecordingRecoveryDialog
         canReview={recordingRecoveryDraft?.targetKind !== 'segment-supplement'}
         disabled={recordingRecoveryActionPending}

@@ -49,6 +49,8 @@ export type EntityActionMenuExtraSubmenu = {
 export type EntityActionMenuExtraAction = EntityActionMenuExtraItem | EntityActionMenuExtraSubmenu;
 
 export type EntityActionMenuProps = {
+  readonly canDelete?: boolean | undefined;
+  readonly canRename?: boolean | undefined;
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly deleteLabel?: '删除' | '移除';
   readonly menuLabel: string;
@@ -155,6 +157,8 @@ function EntityActionExtraItem({ action }: { readonly action: EntityActionMenuEx
 }
 
 export function EntityActionMenu({
+  canDelete = true,
+  canRename = true,
   contentAlign = 'end',
   deleteLabel = '删除',
   menuLabel,
@@ -221,17 +225,25 @@ export function EntityActionMenu({
             </DropdownMenuGroup>
           </>
         ) : null}
-        <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onSelect={onRename}>
-            <EntityActionMenuIcon icon={PencilLine} />
-            重命名
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onDelete}>
-            <EntityActionMenuIcon icon={Trash2} />
-            {deleteLabel}
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+        {canRename || canDelete ? (
+          <>
+            <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
+            <DropdownMenuGroup>
+              {canRename ? (
+                <DropdownMenuItem onSelect={onRename}>
+                  <EntityActionMenuIcon icon={PencilLine} />
+                  重命名
+                </DropdownMenuItem>
+              ) : null}
+              {canDelete ? (
+                <DropdownMenuItem onSelect={onDelete}>
+                  <EntityActionMenuIcon icon={Trash2} />
+                  {deleteLabel}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuGroup>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

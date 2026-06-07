@@ -6,6 +6,9 @@ import type { ReoWorkspaceBridge } from '../../src/workspace-contract/reo-worksp
 const workspaceBridgeKeys = [
   'chooseDirectory',
   'listMemorySpaces',
+  'readSystemDraftWorkspace',
+  'openSystemDraftWorkspace',
+  'readRecentExpressions',
   'initializeWorkspace',
   'openWorkspace',
   'openMemorySpace',
@@ -138,6 +141,9 @@ const workspaceEntityActionBridgeKeys = [
 ] as const;
 
 const applicationScopedBridgeContractKeys = [
+  'readSystemDraftWorkspace',
+  'openSystemDraftWorkspace',
+  'readRecentExpressions',
   'readVoiceTranscriptionSettings',
   'setVoiceTranscriptionEnabled',
   'setVoiceSpeechSynthesisSpeaker',
@@ -153,6 +159,9 @@ test('workspace bridge contract declares application-scoped methods before prelo
   assert.deepEqual(
     [...applicationScopedBridgeContractKeys],
     [
+      'readSystemDraftWorkspace',
+      'openSystemDraftWorkspace',
+      'readRecentExpressions',
       'readVoiceTranscriptionSettings',
       'setVoiceTranscriptionEnabled',
       'setVoiceSpeechSynthesisSpeaker',
@@ -184,6 +193,9 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     value: { status: 'canceled' },
   });
   await bridge.listMemorySpaces();
+  await bridge.readSystemDraftWorkspace();
+  await bridge.openSystemDraftWorkspace();
+  await bridge.readRecentExpressions({ limit: 12 });
   await bridge.openMemorySpace({ workspaceId: 'ws_1' });
   await bridge.removeMemorySpace({ workspaceId: 'ws_1' });
   await bridge.updateMemorySpaceTitle({ workspaceId: 'ws_1', title: '测试工作区1' });
@@ -505,6 +517,9 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
+    'workspace:readSystemDraftWorkspace',
+    'workspace:openSystemDraftWorkspace',
+    'workspace:readRecentExpressions',
     'workspace:openMemorySpace',
     'workspace:removeMemorySpace',
     'workspace:updateMemorySpaceTitle',

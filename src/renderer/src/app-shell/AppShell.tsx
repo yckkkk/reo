@@ -1,11 +1,12 @@
 import {
+  FileStack,
   Folder,
   FolderPlus,
   Home,
-  Library,
   Menu,
   MonitorSmartphone,
   Moon,
+  Orbit,
   PanelLeftClose,
   Sun,
 } from 'lucide-react';
@@ -37,7 +38,7 @@ import {
 import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
-export type AppShellActiveSection = 'home' | 'library' | 'workspace';
+export type AppShellActiveSection = 'home' | 'library' | 'draft' | 'workspace';
 
 const PANEL_TITLEBAR_X = 28;
 const COLLAPSED_PANEL_TITLEBAR_LEFT =
@@ -58,6 +59,7 @@ type AppShellProps = {
   readonly activeWorkspaceId?: string | undefined;
   readonly children: React.ReactNode;
   readonly onCreateWorkspace?: (() => void) | undefined;
+  readonly onDraft?: (() => void) | undefined;
   readonly onHome: () => void;
   readonly onLibrary: () => void;
   readonly onOpenLocalWorkspace?: (() => void) | undefined;
@@ -105,6 +107,7 @@ export function AppShell({
   activeWorkspaceId,
   children,
   onCreateWorkspace,
+  onDraft,
   onHome,
   onLibrary,
   onOpenLocalWorkspace,
@@ -148,6 +151,7 @@ export function AppShell({
   const ThemeCycleIcon = THEME_STATE_VIEW[themePreference].icon;
   const themeCycleLabel = THEME_STATE_VIEW[cycleThemePreference(themePreference)].label;
   const currentSection = activeSection ?? (activeWorkspaceId ? 'workspace' : 'home');
+  const draftCurrent = currentSection === 'draft';
   const homeCurrent = currentSection === 'home';
   const libraryCurrent = currentSection === 'library';
   const anySidebarMenuOpen = workspaceMenuOpen || workspaceMemorySpaceMenuOpen !== null;
@@ -171,6 +175,15 @@ export function AppShell({
   function handleLibrary() {
     closeSidebarMenus();
     onLibrary();
+  }
+
+  function handleDraft() {
+    if (!onDraft) {
+      return;
+    }
+
+    closeSidebarMenus();
+    onDraft();
   }
 
   function handleOpenLocalWorkspace() {
@@ -274,8 +287,25 @@ export function AppShell({
               className={sidebarNavButtonClass(libraryCurrent)}
               onClick={handleLibrary}
             >
-              <Library className="size-16" aria-hidden="true" />
-              资料库
+              <Orbit className="size-16" aria-hidden="true" />
+              画廊
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="compact"
+              aria-current={draftCurrent ? 'page' : undefined}
+              aria-disabled={onDraft ? undefined : true}
+              disabled={!onDraft}
+              className={cn(
+                sidebarNavButtonClass(draftCurrent),
+                !onDraft &&
+                  'cursor-default disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100'
+              )}
+              onClick={handleDraft}
+            >
+              <FileStack className="size-16" aria-hidden="true" />
+              草稿
             </Button>
           </nav>
 
