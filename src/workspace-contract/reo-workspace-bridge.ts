@@ -87,6 +87,10 @@ import type {
   WorkspaceReadMemoryDetailResponse,
   WorkspaceReadRecentExpressionsRequest,
   WorkspaceReadRecentExpressionsResponse,
+  WorkspaceReadAppPermissionStatusRequest,
+  WorkspaceReadAppPermissionStatusResponse,
+  WorkspaceRequestAppPermissionRequest,
+  WorkspaceRequestAppPermissionResponse,
   WorkspaceReadVoiceTranscriptionSettingsRequest,
   WorkspaceReadVoiceTranscriptionSettingsResponse,
   WorkspaceReadSystemDraftWorkspaceResponse,
@@ -481,6 +485,12 @@ export interface ReoWorkspaceBridge {
   readonly closeRecordingTranscription: (
     payload: WorkspaceRecordingTranscriptionCloseRequest
   ) => Promise<WorkspaceRecordingTranscriptionControlResponse>;
+  readonly readAppPermissionStatus: (
+    payload: WorkspaceReadAppPermissionStatusRequest
+  ) => Promise<WorkspaceReadAppPermissionStatusResponse>;
+  readonly requestAppPermission: (
+    payload: WorkspaceRequestAppPermissionRequest
+  ) => Promise<WorkspaceRequestAppPermissionResponse>;
   readonly readVoiceTranscriptionSettings: (
     payload: WorkspaceReadVoiceTranscriptionSettingsRequest
   ) => Promise<WorkspaceReadVoiceTranscriptionSettingsResponse>;

@@ -43,6 +43,7 @@ import {
   openSegmentSupplementDocument,
   openWorkspace,
   openMemorySpace,
+  readAppPermissionStatus,
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
@@ -55,6 +56,7 @@ import {
   readRecordingDraftAudio,
   regenerateImportedSpeechSynthesis,
   removeMemorySpace,
+  requestAppPermission,
   requestSegmentSpeechSynthesis,
   requestSegmentSupplementSpeechSynthesis,
   requestSegmentSupplementTranscriptionBackfill,
@@ -168,6 +170,8 @@ describe('workspace renderer API wrapper', () => {
     requestSegmentSupplementSpeechSynthesis: vi.fn(),
     regenerateImportedSpeechSynthesis: vi.fn(),
     setVoiceSpeechSynthesisSpeaker: vi.fn(),
+    readAppPermissionStatus: vi.fn(),
+    requestAppPermission: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
   };
@@ -333,6 +337,46 @@ describe('workspace renderer API wrapper', () => {
       requestId: 'state-write-1',
       baselineVersion: 'a'.repeat(64),
       state: { schemaVersion: 1, stores: { ui: {} } },
+    });
+  });
+
+  it('forwards app permission status reads to the explicit preload surface', async () => {
+    const response = {
+      ok: true,
+      value: {
+        permissions: {
+          microphone: { status: 'granted' },
+          camera: { status: 'not-determined' },
+          accessibility: { status: 'not-determined' },
+        },
+      },
+    };
+    reoWorkspace.readAppPermissionStatus.mockResolvedValue(response);
+
+    await expect(readAppPermissionStatus()).resolves.toEqual(response);
+
+    expect(reoWorkspace.readAppPermissionStatus).toHaveBeenCalledWith(undefined);
+  });
+
+  it('forwards app permission requests to the explicit preload surface', async () => {
+    const response = {
+      ok: true,
+      value: {
+        permission: 'microphone',
+        restartRequired: false,
+        status: 'granted',
+      },
+    };
+    reoWorkspace.requestAppPermission.mockResolvedValue(response);
+
+    await expect(requestAppPermission({ permission: 'microphone' })).resolves.toEqual(response);
+    await requestAppPermission({ permission: 'camera' });
+    await requestAppPermission({ permission: 'accessibility' });
+
+    expect(reoWorkspace.requestAppPermission).toHaveBeenCalledWith({ permission: 'microphone' });
+    expect(reoWorkspace.requestAppPermission).toHaveBeenCalledWith({ permission: 'camera' });
+    expect(reoWorkspace.requestAppPermission).toHaveBeenCalledWith({
+      permission: 'accessibility',
     });
   });
 

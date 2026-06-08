@@ -50,6 +50,8 @@ import {
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+  WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
+  WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
@@ -605,6 +607,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     closeRecordingTranscription: (payload) =>
       invoke<WorkspaceBridgeResponse<'closeRecordingTranscription'>>(
         WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
+        payload
+      ),
+    readAppPermissionStatus: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readAppPermissionStatus'>>(
+        WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
+        payload
+      ),
+    requestAppPermission: (payload) =>
+      invoke<WorkspaceBridgeResponse<'requestAppPermission'>>(
+        WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
         payload
       ),
     readVoiceTranscriptionSettings: (payload) =>

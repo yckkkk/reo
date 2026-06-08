@@ -25,6 +25,8 @@ import {
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
+  WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
+  WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
@@ -205,6 +207,11 @@ import {
   workspaceOpenVoiceTranscriptionProviderConsoleResponseSchema,
   workspaceOpenMarkdownExternalLinkRequestSchema,
   workspaceOpenMarkdownExternalLinkResponseSchema,
+  workspaceReadAppPermissionStatusRequestSchema,
+  workspaceReadAppPermissionStatusResponseSchema,
+  workspaceRequestAppPermissionRequestSchema,
+  workspaceRequestAppPermissionResponseSchema,
+  workspaceAppPermissionStatusSnapshotSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceSaveVoiceTranscriptionApiKeyRequestSchema,
@@ -219,6 +226,7 @@ import {
   workspaceValidateVoiceTranscriptionCredentialsResponseSchema,
   voiceSpeechSynthesisSpeakerSchema,
   voiceTranscriptionSettingsSnapshotSchema,
+  type AppPermissionStatusSnapshot,
   type VoiceSpeechSynthesisSpeaker,
   type VoiceTranscriptionSettingsSnapshot,
   type WorkspaceClearVoiceTranscriptionApiKeyRequest,
@@ -227,6 +235,10 @@ import {
   type WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
   type WorkspaceOpenMarkdownExternalLinkRequest,
   type WorkspaceOpenMarkdownExternalLinkResponse,
+  type WorkspaceReadAppPermissionStatusRequest,
+  type WorkspaceReadAppPermissionStatusResponse,
+  type WorkspaceRequestAppPermissionRequest,
+  type WorkspaceRequestAppPermissionResponse,
   type WorkspaceReadVoiceTranscriptionSettingsRequest,
   type WorkspaceReadVoiceTranscriptionSettingsResponse,
   type WorkspaceSaveVoiceTranscriptionApiKeyRequest,
@@ -298,8 +310,28 @@ function assertVoiceSettingsSnapshot(_snapshot: VoiceTranscriptionSettingsSnapsh
   void _snapshot;
 }
 
+function assertAppPermissionStatusSnapshot(_snapshot: AppPermissionStatusSnapshot): void {
+  void _snapshot;
+}
+
 function assertVoiceSpeechSynthesisSpeaker(_speaker: VoiceSpeechSynthesisSpeaker): void {
   void _speaker;
+}
+
+function assertAppPermissionStatusContract(
+  _request: WorkspaceReadAppPermissionStatusRequest,
+  _response: WorkspaceReadAppPermissionStatusResponse
+): void {
+  void _request;
+  void _response;
+}
+
+function assertAppPermissionRequestContract(
+  _request: WorkspaceRequestAppPermissionRequest,
+  _response: WorkspaceRequestAppPermissionResponse
+): void {
+  void _request;
+  void _response;
 }
 
 function assertVoiceSettingsContracts(
@@ -436,6 +468,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:sendRecordingTranscriptionAudio',
     'workspace:finishRecordingTranscription',
     'workspace:closeRecordingTranscription',
+    'workspace:readAppPermissionStatus',
+    'workspace:requestAppPermission',
     'workspace:readVoiceTranscriptionSettings',
     'workspace:setVoiceTranscriptionEnabled',
     'workspace:setVoiceSpeechSynthesisSpeaker',
@@ -574,6 +608,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
       'workspace:regenerateImportedSpeechSynthesis',
     ],
+    [WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL, 'workspace:readAppPermissionStatus'],
+    [WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL, 'workspace:requestAppPermission'],
     [
       WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
       'workspace:readVoiceTranscriptionSettings',
@@ -968,8 +1004,10 @@ test('workspace imported note speech regeneration schema uses speaker and retry 
   assert.equal(response.value.failedTargets[0]?.kind, 'supplement');
 });
 
-test('workspace IPC channels include application-scoped voice settings channels', () => {
+test('workspace IPC channels include application-scoped permission and voice settings channels', () => {
   const voiceSettingsChannels = [
+    'workspace:readAppPermissionStatus',
+    'workspace:requestAppPermission',
     'workspace:readVoiceTranscriptionSettings',
     'workspace:setVoiceTranscriptionEnabled',
     'workspace:setVoiceSpeechSynthesisSpeaker',
@@ -979,7 +1017,7 @@ test('workspace IPC channels include application-scoped voice settings channels'
     'workspace:openVoiceTranscriptionProviderConsole',
   ];
 
-  assert.equal(voiceSettingsChannels.length, 7);
+  assert.equal(voiceSettingsChannels.length, 9);
 
   for (const channel of voiceSettingsChannels) {
     assert.equal((WORKSPACE_IPC_CHANNELS as readonly string[]).includes(channel), true);
@@ -1120,17 +1158,103 @@ test('voice transcription settings contract exposes redacted snapshot and strict
 });
 
 test('voice transcription settings IPC schemas use undefined for no-payload requests', () => {
+  const permissionStatusRequest = workspaceReadAppPermissionStatusRequestSchema.parse(undefined);
   const readRequest = workspaceReadVoiceTranscriptionSettingsRequestSchema.parse(undefined);
   const clearRequest = workspaceClearVoiceTranscriptionApiKeyRequestSchema.parse(undefined);
   const validateRequest =
     workspaceValidateVoiceTranscriptionCredentialsRequestSchema.parse(undefined);
 
+  assert.equal(permissionStatusRequest, undefined);
   assert.equal(readRequest, undefined);
   assert.equal(clearRequest, undefined);
   assert.equal(validateRequest, undefined);
+  assert.throws(() => workspaceReadAppPermissionStatusRequestSchema.parse({}));
   assert.throws(() => workspaceReadVoiceTranscriptionSettingsRequestSchema.parse({}));
   assert.throws(() => workspaceClearVoiceTranscriptionApiKeyRequestSchema.parse({}));
   assert.throws(() => workspaceValidateVoiceTranscriptionCredentialsRequestSchema.parse({}));
+});
+
+test('app permission status IPC schema exposes bounded status snapshots only', () => {
+  const snapshot = workspaceAppPermissionStatusSnapshotSchema.parse({
+    microphone: { status: 'granted' },
+    camera: { status: 'not-determined' },
+    accessibility: { status: 'not-determined' },
+  });
+  const request = workspaceReadAppPermissionStatusRequestSchema.parse(undefined);
+  const response = workspaceReadAppPermissionStatusResponseSchema.parse({
+    ok: true,
+    value: { permissions: snapshot },
+  });
+
+  assertAppPermissionStatusSnapshot(snapshot);
+  assertAppPermissionStatusContract(request, response);
+  assert.equal(snapshot.microphone.status, 'granted');
+  assert.equal(snapshot.camera.status, 'not-determined');
+  assert.equal(snapshot.accessibility.status, 'not-determined');
+  assert.throws(() =>
+    workspaceAppPermissionStatusSnapshotSchema.parse({
+      ...snapshot,
+      microphone: { status: 'authorized' },
+    })
+  );
+  assert.throws(() =>
+    workspaceReadAppPermissionStatusResponseSchema.parse({
+      ok: true,
+      value: {
+        permissions: {
+          ...snapshot,
+          microphone: {
+            status: 'granted',
+            macosSettingsPath: '/System/Settings/Privacy/Microphone',
+          },
+        },
+      },
+    })
+  );
+});
+
+test('app permission request IPC schema only permits current requestable permissions', () => {
+  const request = workspaceRequestAppPermissionRequestSchema.parse({
+    permission: 'microphone',
+  });
+  const cameraRequest = workspaceRequestAppPermissionRequestSchema.parse({
+    permission: 'camera',
+  });
+  const accessibilityRequest = workspaceRequestAppPermissionRequestSchema.parse({
+    permission: 'accessibility',
+  });
+  const response = workspaceRequestAppPermissionResponseSchema.parse({
+    ok: true,
+    value: {
+      permission: 'accessibility',
+      restartRequired: true,
+      status: 'not-determined',
+    },
+  });
+
+  assertAppPermissionRequestContract(request, response);
+  assert.deepEqual(request, { permission: 'microphone' });
+  assert.deepEqual(cameraRequest, { permission: 'camera' });
+  assert.deepEqual(accessibilityRequest, { permission: 'accessibility' });
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.deepEqual(response.value, {
+      permission: 'accessibility',
+      restartRequired: true,
+      status: 'not-determined',
+    });
+  }
+  assert.throws(() =>
+    workspaceRequestAppPermissionResponseSchema.parse({
+      ok: true,
+      value: {
+        permission: 'microphone',
+        restartRequired: false,
+        status: 'granted',
+        macosSettingsPath: '/System/Settings/Privacy/Microphone',
+      },
+    })
+  );
 });
 
 test('voice transcription settings IPC schemas validate payloads and redacted responses', () => {

@@ -465,6 +465,54 @@ const voiceTranscriptionSettingsResponseValueSchema = z.strictObject({
   settings: voiceTranscriptionSettingsSnapshotSchema,
 });
 
+export const appPermissionStatusSchema = z.enum([
+  'not-determined',
+  'granted',
+  'denied',
+  'restricted',
+  'unknown',
+]);
+
+const appPermissionStatusItemSchema = z.strictObject({
+  status: appPermissionStatusSchema,
+});
+
+const requestableAppPermissionSchema = z.enum(['microphone', 'camera', 'accessibility']);
+
+export const workspaceAppPermissionStatusSnapshotSchema = z.strictObject({
+  microphone: appPermissionStatusItemSchema,
+  camera: appPermissionStatusItemSchema,
+  accessibility: appPermissionStatusItemSchema,
+});
+
+export const workspaceReadAppPermissionStatusRequestSchema = workspaceNoInputSchema;
+
+export const workspaceReadAppPermissionStatusResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      permissions: workspaceAppPermissionStatusSnapshotSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceRequestAppPermissionRequestSchema = z.strictObject({
+  permission: requestableAppPermissionSchema,
+});
+
+export const workspaceRequestAppPermissionResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      permission: requestableAppPermissionSchema,
+      status: appPermissionStatusSchema,
+      restartRequired: z.boolean(),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
 export const workspaceReadVoiceTranscriptionSettingsRequestSchema = workspaceNoInputSchema;
 
 export const workspaceReadVoiceTranscriptionSettingsResponseSchema = z.discriminatedUnion('ok', [
@@ -2483,6 +2531,22 @@ export type WorkspaceError = z.infer<typeof workspaceErrorSchema>;
 export type WorkspaceErrorEnvelope = z.infer<typeof workspaceErrorEnvelopeSchema>;
 export type VoiceTranscriptionSettingsSnapshot = z.infer<
   typeof voiceTranscriptionSettingsSnapshotSchema
+>;
+export type AppPermissionStatus = z.infer<typeof appPermissionStatusSchema>;
+export type AppPermissionStatusSnapshot = z.infer<
+  typeof workspaceAppPermissionStatusSnapshotSchema
+>;
+export type WorkspaceReadAppPermissionStatusRequest = z.infer<
+  typeof workspaceReadAppPermissionStatusRequestSchema
+>;
+export type WorkspaceReadAppPermissionStatusResponse = z.infer<
+  typeof workspaceReadAppPermissionStatusResponseSchema
+>;
+export type WorkspaceRequestAppPermissionRequest = z.infer<
+  typeof workspaceRequestAppPermissionRequestSchema
+>;
+export type WorkspaceRequestAppPermissionResponse = z.infer<
+  typeof workspaceRequestAppPermissionResponseSchema
 >;
 export type WorkspaceReadVoiceTranscriptionSettingsRequest = z.infer<
   typeof workspaceReadVoiceTranscriptionSettingsRequestSchema

@@ -78,6 +78,8 @@ import {
   handleOpenMarkdownExternalLinkForTest,
   handleOpenVoiceTranscriptionProviderConsoleForTest,
   handleOpenWorkspaceForTest,
+  handleReadAppPermissionStatusForTest,
+  handleRequestAppPermissionForTest,
   handleRemoveMemorySpaceForTest,
   handleReadVoiceTranscriptionSettingsForTest,
   handleReadRecentExpressionsForTest,
@@ -325,6 +327,145 @@ test('voice settings IPC read returns snapshot without key or ciphertext', async
   }
   assert.equal(JSON.stringify(response).includes('abcd1234SECRET'), false);
   assert.equal(JSON.stringify(response).includes('enc:'), false);
+});
+
+test('app permission status IPC read returns bounded main-owned permission statuses', async () => {
+  const mediaTypes: string[] = [];
+  const response = await handleReadAppPermissionStatusForTest({
+    ...voiceIpcBaseOptions(),
+    getMediaAccessStatus: (mediaType: 'microphone' | 'camera') => {
+      mediaTypes.push(mediaType);
+      return mediaType === 'microphone' ? 'granted' : 'not-determined';
+    },
+    getAccessibilityPermissionStatus: () => false,
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.deepEqual(response.value.permissions, {
+      microphone: { status: 'granted' },
+      camera: { status: 'not-determined' },
+      accessibility: { status: 'not-determined' },
+    });
+  }
+  assert.deepEqual(mediaTypes, ['microphone', 'camera']);
+  assert.equal(JSON.stringify(response).includes('/System/Settings'), false);
+});
+
+test('app permission status IPC read rejects an untrusted sender before reading macOS status', async () => {
+  const untrustedEvent: TrustedSenderEventAdapter = {
+    ...event,
+    senderFrame: {
+      routingId: 4,
+      topRoutingId: 4,
+      url: 'https://example.com/',
+    },
+  };
+  let calls = 0;
+
+  const response = await handleReadAppPermissionStatusForTest({
+    ...voiceIpcBaseOptions(undefined, untrustedEvent),
+    getMediaAccessStatus: () => {
+      calls += 1;
+      return 'granted';
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.equal(calls, 0);
+});
+
+for (const permission of ['microphone', 'camera'] as const) {
+  test(`app permission request IPC asks for ${permission} through the media permission API`, async () => {
+    const askedMediaTypes: string[] = [];
+    const readMediaTypes: string[] = [];
+
+    const response = await handleRequestAppPermissionForTest({
+      ...voiceIpcBaseOptions({ permission }),
+      askForMediaAccess: async (mediaType: 'microphone' | 'camera') => {
+        askedMediaTypes.push(mediaType);
+        return true;
+      },
+      getMediaAccessStatus: (mediaType: 'microphone' | 'camera') => {
+        readMediaTypes.push(mediaType);
+        return 'not-determined';
+      },
+    });
+
+    assert.equal(response.ok, true);
+    if (response.ok) {
+      assert.deepEqual(response.value, {
+        permission,
+        restartRequired: true,
+        status: 'not-determined',
+      });
+    }
+    assert.deepEqual(askedMediaTypes, [permission]);
+    assert.deepEqual(readMediaTypes, [permission]);
+  });
+}
+
+test('app permission request IPC prompts for accessibility through the accessibility client API', async () => {
+  let promptCalls = 0;
+  let readCalls = 0;
+
+  const response = await handleRequestAppPermissionForTest({
+    ...voiceIpcBaseOptions({ permission: 'accessibility' }),
+    getAccessibilityPermissionStatus: () => {
+      readCalls += 1;
+      return false;
+    },
+    requestAccessibilityPermission: () => {
+      promptCalls += 1;
+      return false;
+    },
+  });
+
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.deepEqual(response.value, {
+      permission: 'accessibility',
+      restartRequired: true,
+      status: 'not-determined',
+    });
+  }
+  assert.equal(promptCalls, 1);
+  assert.equal(readCalls, 1);
+});
+
+test('app permission request IPC rejects an untrusted sender before asking macOS', async () => {
+  const untrustedEvent: TrustedSenderEventAdapter = {
+    ...event,
+    senderFrame: {
+      routingId: 4,
+      topRoutingId: 4,
+      url: 'https://example.com/',
+    },
+  };
+  let askCalls = 0;
+  let readCalls = 0;
+
+  const response = await handleRequestAppPermissionForTest({
+    ...voiceIpcBaseOptions({ permission: 'microphone' }, untrustedEvent),
+    askForMediaAccess: async () => {
+      askCalls += 1;
+      return true;
+    },
+    getMediaAccessStatus: () => {
+      readCalls += 1;
+      return 'granted';
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'ERR_WORKSPACE_UNTRUSTED_SENDER');
+  }
+  assert.equal(askCalls, 0);
+  assert.equal(readCalls, 0);
 });
 
 test('voice settings IPC read rejects an untrusted sender before returning settings', async () => {

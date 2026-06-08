@@ -25,7 +25,22 @@ import {
   devWorkspaceScenarioMemorySpaceId,
   readAutoOpenDevWorkspaceScenarioName,
 } from './devWorkspaceScenario';
+import { PermissionGuideDialog } from './onboarding/PermissionGuideDialog';
+import {
+  clearPermissionRestartRequired,
+  markFirstRunGuideSkipped,
+  readOnboardingStartupTarget,
+  writePermissionRestartRequired,
+  type OnboardingStartupTarget,
+} from './onboarding/onboardingState';
+import { appPermissionFocusLabel } from './app-permissions/PermissionChecklistRow';
+import {
+  appPermissionStatusQueryOptions,
+  patchAppPermissionStatus,
+} from './settings/appPermissionQueries';
 import { SettingsShell } from './settings/SettingsShell';
+import type { SettingsSection } from './settings/SettingsShell';
+import { PermissionSettingsPanel } from './settings/PermissionSettingsPanel';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
@@ -111,6 +126,7 @@ import {
   openSystemDraftWorkspace,
   readWorkspaceSnapshot,
   removeMemorySpace,
+  requestAppPermission,
   resetMemoryCover,
   resetSegmentCover,
   requestSegmentSpeechSynthesis,
@@ -194,6 +210,7 @@ type WorkspaceView =
   | { readonly name: 'workspace-stage' }
   | { readonly name: 'library' };
 type AppMode = 'app' | 'settings';
+type RequestableAppPermission = Parameters<typeof requestAppPermission>[0]['permission'];
 
 type TopLevelWorkspaceView = Extract<
   WorkspaceView,
@@ -919,6 +936,12 @@ export function App() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(HOME_VIEW);
   const [appMode, setAppMode] = useState<AppMode>('app');
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('voice');
+  const [permissionGuideTarget, setPermissionGuideTarget] = useState<OnboardingStartupTarget>(() =>
+    readOnboardingStartupTarget()
+  );
+  const [pendingPermissionRequest, setPendingPermissionRequest] =
+    useState<RequestableAppPermission | null>(null);
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
     readThemePreference()
   );
@@ -942,6 +965,7 @@ export function App() {
   const widgetReorderMutationIdRef = useRef(0);
   const widgetReorderStateRef = useRef<WidgetReorderState | null>(null);
   const workspaceReleaseRecordsRef = useRef<Map<string, PendingWorkspaceRelease>>(new Map());
+  const pendingPermissionRequestRef = useRef<RequestableAppPermission | null>(null);
   const recordingRecoveryActionIdRef = useRef(0);
   const runningTranscriptionBackfillsRef = useRef<Map<string, string>>(new Map());
   const runningSpeechSynthesesRef = useRef<Map<string, string>>(new Map());
@@ -1017,6 +1041,25 @@ export function App() {
     })
   );
   const voiceSettingsQuery = useQuery(voiceSettingsQueryOptions());
+  const appPermissionStatusQuery = useQuery({
+    ...appPermissionStatusQueryOptions(),
+    enabled: permissionGuideTarget.kind === 'permission-guide',
+  });
+
+  useEffect(() => {
+    if (
+      permissionGuideTarget.kind !== 'permission-guide' ||
+      permissionGuideTarget.reason !== 'permission-restart-required' ||
+      permissionGuideTarget.focusItem === undefined ||
+      permissionGuideTarget.focusItem === 'voice' ||
+      appPermissionStatusQuery.data?.[permissionGuideTarget.focusItem]?.status !== 'granted'
+    ) {
+      return;
+    }
+
+    clearPermissionRestartRequired(permissionGuideTarget.focusItem);
+    setPermissionGuideTarget({ kind: 'app' });
+  }, [appPermissionStatusQuery.data, permissionGuideTarget]);
   const devWorkspaceScenarioNameRef = useRef(readAutoOpenDevWorkspaceScenarioName());
   const devWorkspaceScenarioOpeningRef = useRef(false);
   const activeRecordingFlow = recordingFlow.status === 'active' ? recordingFlow : null;
@@ -2520,8 +2563,107 @@ export function App() {
     void openRecentExpression(item);
   }
 
+  function closePermissionGuideAsSkipped() {
+    markFirstRunGuideSkipped();
+    setPermissionGuideTarget({ kind: 'app' });
+  }
+
+  function openPermissionGuide(focusItem: RequestableAppPermission) {
+    setPermissionGuideTarget({
+      kind: 'permission-guide',
+      reason: 'action-required',
+      focusItem,
+    });
+  }
+
+  function requestPermissionFromSettings(permission: RequestableAppPermission) {
+    void requestPermissionFromGuide(permission);
+  }
+
+  async function requestPermissionFromGuide(permission: RequestableAppPermission) {
+    if (pendingPermissionRequestRef.current !== null) {
+      return;
+    }
+
+    pendingPermissionRequestRef.current = permission;
+    setPendingPermissionRequest(permission);
+
+    let response: Awaited<ReturnType<typeof requestAppPermission>>;
+    try {
+      response = await requestAppPermission({ permission });
+    } catch (error) {
+      showReoToast({
+        type: 'error',
+        title: `无法请求${appPermissionFocusLabel(permission)}权限`,
+        description: unknownErrorDisplayMessage(
+          error,
+          `无法请求${appPermissionFocusLabel(permission)}权限`
+        ),
+      });
+      return;
+    } finally {
+      pendingPermissionRequestRef.current = null;
+      setPendingPermissionRequest(null);
+    }
+
+    if (!response.ok) {
+      showReoToast({ type: 'error', title: `无法请求${appPermissionFocusLabel(permission)}权限` });
+      return;
+    }
+
+    patchAppPermissionStatus(queryClient, response.value.permission, response.value.status);
+
+    if (response.value.restartRequired) {
+      writePermissionRestartRequired(permission);
+      setPermissionGuideTarget({
+        kind: 'permission-guide',
+        reason: 'permission-restart-required',
+        focusItem: permission,
+      });
+      return;
+    }
+
+    if (response.value.status === 'granted') {
+      clearPermissionRestartRequired(permission);
+      showReoToast({ type: 'success', title: `${appPermissionFocusLabel(permission)}权限已允许` });
+      return;
+    }
+
+    setPermissionGuideTarget({
+      kind: 'permission-guide',
+      reason: 'action-required',
+      focusItem: permission,
+    });
+    showReoToast({
+      type: 'warning',
+      title: `${appPermissionFocusLabel(permission)}权限未允许`,
+      description: '请在系统设置完成后回到 Reo。',
+    });
+  }
+
+  function openVoiceSettingsFromPermissionGuide() {
+    closePermissionGuideAsSkipped();
+    openSettingsMode('voice');
+  }
+
+  async function ensureMicrophonePermissionForRecording() {
+    try {
+      const permissions = await queryClient.fetchQuery(appPermissionStatusQueryOptions());
+      if (permissions.microphone.status === 'granted') {
+        return true;
+      }
+    } catch {
+      // A failed permission read should keep the recording flow out of the system permission path.
+    }
+
+    openPermissionGuide('microphone');
+    return false;
+  }
+
   const settingsContent = (
     <SettingsShell
+      activeSection={settingsSection}
+      onSectionChange={setSettingsSection}
       returnDisabled={settingsBusy}
       onReturnToApp={() => {
         if (!settingsBusy) {
@@ -2529,26 +2671,54 @@ export function App() {
         }
       }}
     >
-      <VoiceSettingsPanel
-        activeWorkspace={
-          workspaceSession
-            ? {
-                workspaceHandle: workspaceSession.workspaceHandle,
-                workspaceId: workspaceSession.workspaceId,
-              }
-            : undefined
-        }
-        onBusyChange={setSettingsBusy}
-      />
+      {settingsSection === 'permissions' ? (
+        <PermissionSettingsPanel
+          pendingPermissionRequest={pendingPermissionRequest}
+          onRequestPermission={requestPermissionFromSettings}
+        />
+      ) : (
+        <VoiceSettingsPanel
+          activeWorkspace={
+            workspaceSession
+              ? {
+                  workspaceHandle: workspaceSession.workspaceHandle,
+                  workspaceId: workspaceSession.workspaceId,
+                }
+              : undefined
+          }
+          onBusyChange={setSettingsBusy}
+        />
+      )}
     </SettingsShell>
   );
-  function openSettingsMode() {
+  function openSettingsMode(section: SettingsSection = 'voice') {
     if (blockWorkspaceFlowInterruption()) {
       return;
     }
 
+    setSettingsSection(section);
     setAppMode('settings');
   }
+
+  const permissionGuideDialog = (
+    <PermissionGuideDialog
+      open={permissionGuideTarget.kind === 'permission-guide'}
+      pendingPermissionRequest={pendingPermissionRequest}
+      permissions={appPermissionStatusQuery.data ?? null}
+      startupTarget={permissionGuideTarget}
+      voiceSettingsConfigured={voiceSettingsQuery.data?.apiKeyConfigured === true}
+      onOpenChange={(open) => {
+        if (!open) {
+          closePermissionGuideAsSkipped();
+        }
+      }}
+      onOpenVoiceSettings={openVoiceSettingsFromPermissionGuide}
+      onRequestPermission={(permission) => {
+        void requestPermissionFromGuide(permission);
+      }}
+      onSkip={closePermissionGuideAsSkipped}
+    />
+  );
 
   const shellProps = {
     themePreference,
@@ -2662,6 +2832,7 @@ export function App() {
         <>
           <ReoToaster themeMode={effectiveTheme} />
           {settingsContent}
+          {permissionGuideDialog}
           {workspaceDialogs}
         </>
       );
@@ -2704,6 +2875,7 @@ export function App() {
         {workspaceSessionResource
           ? renderWorkspaceExpressionOverlays(workspaceSessionResource)
           : null}
+        {permissionGuideDialog}
         {workspaceDialogs}
       </>
     );
@@ -5435,8 +5607,12 @@ export function App() {
     openRecording({ kind: 'existing-memory', memoryId: draft.memoryId, title: draft.title }, draft);
   }
 
-  function requestStartRecording() {
+  async function requestStartRecording() {
     if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    if (!(await ensureMicrophonePermissionForRecording())) {
       return;
     }
 
@@ -5489,6 +5665,10 @@ export function App() {
   }
 
   async function requestStartDraftRecordingFromHome() {
+    if (!(await ensureMicrophonePermissionForRecording())) {
+      return;
+    }
+
     const draftSession = await openSystemDraftWorkspaceForHomeAction();
     if (!draftSession) {
       return;
@@ -5580,12 +5760,16 @@ export function App() {
     }
   }
 
-  function requestStartSegmentSupplementRecording(target: {
+  async function requestStartSegmentSupplementRecording(target: {
     readonly memoryId: string;
     readonly segmentId: string;
     readonly title: string;
   }) {
     if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    if (!(await ensureMicrophonePermissionForRecording())) {
       return;
     }
 
@@ -6100,6 +6284,7 @@ export function App() {
       <>
         <ReoToaster themeMode={effectiveTheme} />
         {settingsContent}
+        {permissionGuideDialog}
         {workspaceDialogs}
       </>
     );
@@ -6348,6 +6533,7 @@ export function App() {
         open={memoryCreateIntent !== null}
         submitLabel={memoryCreateDialogSubmitLabel(memoryCreateIntent)}
       />
+      {permissionGuideDialog}
       {workspaceDialogs}
     </>
   );

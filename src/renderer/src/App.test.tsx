@@ -14,6 +14,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { THEME_PREFERENCE_STORAGE_KEY } from './app-shell/themePreference';
 import { toast } from './components/ui/toaster';
+import {
+  ONBOARDING_STATE_STORAGE_KEY,
+  markFirstRunGuideSkipped,
+  writePermissionRestartRequired,
+} from './onboarding/onboardingState';
 import { createReoQueryClient, ReoQueryProvider } from './queryClient';
 import type {
   WorkspaceMemoryDetail,
@@ -129,6 +134,8 @@ describe('App', () => {
     sendRecordingTranscriptionAudio: vi.fn(),
     finishRecordingTranscription: vi.fn(),
     closeRecordingTranscription: vi.fn(),
+    readAppPermissionStatus: vi.fn(),
+    requestAppPermission: vi.fn(),
     readVoiceTranscriptionSettings: vi.fn(),
     setVoiceTranscriptionEnabled: vi.fn(),
     setVoiceSpeechSynthesisSpeaker: vi.fn(),
@@ -467,6 +474,7 @@ describe('App', () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'load').mockImplementation(() => {});
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     window.localStorage.clear();
+    markFirstRunGuideSkipped();
     reoWorkspace.listMemorySpaces.mockResolvedValue({ ok: true, value: { memorySpaces: [] } });
     reoWorkspace.readSystemDraftWorkspace.mockResolvedValue({
       ok: true,
@@ -746,6 +754,24 @@ describe('App', () => {
           lastSpeechSynthesisValidationOk: null,
           lastSpeechSynthesisValidationCode: null,
         },
+      },
+    });
+    reoWorkspace.readAppPermissionStatus.mockResolvedValue({
+      ok: true,
+      value: {
+        permissions: {
+          microphone: { status: 'granted' },
+          camera: { status: 'not-determined' },
+          accessibility: { status: 'not-determined' },
+        },
+      },
+    });
+    reoWorkspace.requestAppPermission.mockResolvedValue({
+      ok: true,
+      value: {
+        permission: 'microphone',
+        restartRequired: false,
+        status: 'granted',
       },
     });
     reoWorkspace.onRecordingTranscriptionEvent.mockReturnValue(() => {});
@@ -1514,6 +1540,21 @@ describe('App', () => {
       ok: true,
       value: {
         items: [
+          ...Array.from({ length: 20 }, (_, index) => ({
+            id: `recent-gallery-filler-${index}`,
+            workspaceId: 'ws_system_draft',
+            workspaceTitle: '草稿',
+            memoryId: 'mem_system_draft',
+            memoryTitle: '草稿',
+            segmentId: `seg_gallery_filler_${index}`,
+            contentKind: 'note' as const,
+            objectType: 'segment' as const,
+            title: `图库占位笔记 ${index + 1}`,
+            preview: '用于填充图库前景位置。',
+            cover: { source: 'default' as const, templateId: 'cover-01' },
+            createdAt: '2026-06-06T20:55:00.000Z',
+            updatedAt: '2026-06-06T21:00:00.000Z',
+          })),
           {
             id: 'recent-gallery-note',
             workspaceId: 'ws_system_draft',
@@ -2010,6 +2051,295 @@ describe('App', () => {
 
     expect(screen.getByRole('region', { name: '首页' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '语音设置' })).not.toBeInTheDocument();
+  });
+
+  it('switches from voice settings to permission settings in the same settings window', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(await screen.findByRole('region', { name: '语音设置' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '权限' }));
+
+    expect(await screen.findByRole('region', { name: '权限设置' })).toBeInTheDocument();
+    expect(screen.getByTestId('permission-settings-row-microphone')).toHaveTextContent('麦克风');
+    expect(reoWorkspace.readAppPermissionStatus).toHaveBeenCalledWith(undefined);
+  });
+
+  it('requests permissions directly from the permission settings window', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.requestAppPermission.mockResolvedValue({
+      ok: true,
+      value: {
+        permission: 'camera',
+        restartRequired: false,
+        status: 'granted',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    await user.click(await screen.findByRole('button', { name: '权限' }));
+    await user.click(await screen.findByRole('button', { name: '允许摄像头' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.requestAppPermission).toHaveBeenCalledWith({ permission: 'camera' })
+    );
+    expect(screen.queryByRole('dialog', { name: '设置 Reo 权限' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('permission-settings-row-camera')).toHaveTextContent('已允许');
+  });
+
+  it('opens the first-run permission guide when onboarding state is absent', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(ONBOARDING_STATE_STORAGE_KEY);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: '设置 Reo 权限' });
+    expect(dialog).toHaveTextContent('录音');
+    expect(reoWorkspace.readAppPermissionStatus).toHaveBeenCalledWith(undefined);
+
+    await user.click(within(dialog).getByRole('button', { name: '稍后' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '设置 Reo 权限' })).not.toBeInTheDocument()
+    );
+    expect(window.localStorage.getItem(ONBOARDING_STATE_STORAGE_KEY)).toContain(
+      '"hasSeenFirstRun":true'
+    );
+  });
+
+  it('reopens the permission guide after a restart-required marker and focuses microphone', async () => {
+    writePermissionRestartRequired('microphone');
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: '设置 Reo 权限' });
+    expect(dialog).toHaveTextContent('重启后继续完成麦克风权限');
+    expect(screen.getByTestId('permission-guide-row-microphone')).toHaveAttribute(
+      'data-focused',
+      'true'
+    );
+  });
+
+  it('persists a restart-required marker when the microphone prompt requires app restart', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(ONBOARDING_STATE_STORAGE_KEY);
+    reoWorkspace.readAppPermissionStatus.mockResolvedValue({
+      ok: true,
+      value: {
+        permissions: {
+          microphone: { status: 'not-determined' },
+          camera: { status: 'not-determined' },
+          accessibility: { status: 'not-determined' },
+        },
+      },
+    });
+    reoWorkspace.requestAppPermission.mockResolvedValue({
+      ok: true,
+      value: {
+        permission: 'microphone',
+        restartRequired: true,
+        status: 'not-determined',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: '设置 Reo 权限' });
+    await user.click(await within(dialog).findByRole('button', { name: '允许麦克风' }));
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ONBOARDING_STATE_STORAGE_KEY)).toContain(
+        '"permissionRestartRequired":"microphone"'
+      )
+    );
+    expect(await screen.findByRole('dialog', { name: '设置 Reo 权限' })).toHaveTextContent(
+      '重启后继续完成麦克风权限'
+    );
+    expect(reoWorkspace.requestAppPermission).toHaveBeenCalledWith({ permission: 'microphone' });
+  });
+
+  it('clears a restart-required marker when the focused permission is already granted after relaunch', async () => {
+    writePermissionRestartRequired('microphone');
+    reoWorkspace.readAppPermissionStatus.mockResolvedValue({
+      ok: true,
+      value: {
+        permissions: {
+          microphone: { status: 'granted' },
+          camera: { status: 'not-determined' },
+          accessibility: { status: 'not-determined' },
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '设置 Reo 权限' })).not.toBeInTheDocument()
+    );
+    expect(window.localStorage.getItem(ONBOARDING_STATE_STORAGE_KEY)).not.toContain(
+      'permissionRestartRequired'
+    );
+  });
+
+  it('persists a restart-required marker when the accessibility prompt requires app restart', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(ONBOARDING_STATE_STORAGE_KEY);
+    reoWorkspace.requestAppPermission.mockResolvedValue({
+      ok: true,
+      value: {
+        permission: 'accessibility',
+        restartRequired: true,
+        status: 'not-determined',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: '设置 Reo 权限' });
+    await user.click(await within(dialog).findByRole('button', { name: '开启辅助功能' }));
+
+    await waitFor(() =>
+      expect(window.localStorage.getItem(ONBOARDING_STATE_STORAGE_KEY)).toContain(
+        '"permissionRestartRequired":"accessibility"'
+      )
+    );
+    expect(await screen.findByRole('dialog', { name: '设置 Reo 权限' })).toHaveTextContent(
+      '重启后继续完成辅助功能权限'
+    );
+    expect(reoWorkspace.requestAppPermission).toHaveBeenCalledWith({
+      permission: 'accessibility',
+    });
+  });
+
+  it('keeps a denied permission request focused instead of silently dropping the result', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(ONBOARDING_STATE_STORAGE_KEY);
+    reoWorkspace.requestAppPermission.mockResolvedValue({
+      ok: true,
+      value: {
+        permission: 'camera',
+        restartRequired: false,
+        status: 'denied',
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: '设置 Reo 权限' });
+    await user.click(await within(dialog).findByRole('button', { name: '允许摄像头' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('permission-guide-row-camera')).toHaveAttribute(
+        'data-focused',
+        'true'
+      )
+    );
+    expect(await screen.findByText('摄像头权限未允许')).toBeInTheDocument();
+  });
+
+  it('coalesces repeated permission clicks while the system request is pending', async () => {
+    const user = userEvent.setup();
+    window.localStorage.removeItem(ONBOARDING_STATE_STORAGE_KEY);
+    reoWorkspace.readAppPermissionStatus.mockResolvedValue({
+      ok: true,
+      value: {
+        permissions: {
+          microphone: { status: 'not-determined' },
+          camera: { status: 'not-determined' },
+          accessibility: { status: 'not-determined' },
+        },
+      },
+    });
+    const permissionRequest =
+      createDeferred<Awaited<ReturnType<typeof reoWorkspace.requestAppPermission>>>();
+    reoWorkspace.requestAppPermission.mockReturnValue(permissionRequest.promise);
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const dialog = await screen.findByRole('dialog', { name: '设置 Reo 权限' });
+    await user.dblClick(await within(dialog).findByRole('button', { name: '允许麦克风' }));
+
+    expect(reoWorkspace.requestAppPermission).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      permissionRequest.resolve({
+        ok: true,
+        value: {
+          permission: 'microphone',
+          restartRequired: false,
+          status: 'granted',
+        },
+      });
+    });
+  });
+
+  it('opens the permission guide from Record when microphone permission is not granted', async () => {
+    const user = userEvent.setup();
+    reoWorkspace.readAppPermissionStatus.mockResolvedValue({
+      ok: true,
+      value: {
+        permissions: {
+          microphone: { status: 'denied' },
+          camera: { status: 'not-determined' },
+          accessibility: { status: 'not-determined' },
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await user.click(await screen.findByRole('button', { name: '录下来' }));
+
+    expect(await screen.findByRole('dialog', { name: '设置 Reo 权限' })).toBeInTheDocument();
+    expect(screen.getByTestId('permission-guide-row-microphone')).toHaveAttribute(
+      'data-focused',
+      'true'
+    );
+    expect(reoWorkspace.openSystemDraftWorkspace).not.toHaveBeenCalled();
   });
 
   it('moves to a loaded workspace state after successful initialization', async () => {

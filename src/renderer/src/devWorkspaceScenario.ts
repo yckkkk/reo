@@ -664,6 +664,20 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     sendRecordingTranscriptionAudio: () => ok({ accepted: true }),
     finishRecordingTranscription: () => ok({ accepted: true }),
     closeRecordingTranscription: () => ok({ accepted: true }),
+    readAppPermissionStatus: () =>
+      ok({
+        permissions: {
+          microphone: { status: 'granted' as const },
+          camera: { status: 'not-determined' as const },
+          accessibility: { status: 'not-determined' as const },
+        },
+      }),
+    requestAppPermission: (payload: Parameters<ReoWorkspaceBridge['requestAppPermission']>[0]) =>
+      ok({
+        permission: payload.permission,
+        restartRequired: false,
+        status: 'granted' as const,
+      }),
     readVoiceTranscriptionSettings: () =>
       ok({
         settings: {

@@ -590,6 +590,16 @@ export function closeRecordingTranscription(
   return window.reoWorkspace.closeRecordingTranscription(payload);
 }
 
+export function readAppPermissionStatus() {
+  return window.reoWorkspace.readAppPermissionStatus(undefined);
+}
+
+export function requestAppPermission(
+  payload: Parameters<Window['reoWorkspace']['requestAppPermission']>[0]
+) {
+  return window.reoWorkspace.requestAppPermission(payload);
+}
+
 export function readVoiceTranscriptionSettings() {
   return window.reoWorkspace.readVoiceTranscriptionSettings(undefined);
 }
@@ -744,6 +754,10 @@ export type VoiceTranscriptionSettings = Extract<
   Awaited<ReturnType<typeof readVoiceTranscriptionSettings>>,
   { readonly ok: true }
 >['value']['settings'];
+export type AppPermissionStatusSnapshot = Extract<
+  Awaited<ReturnType<typeof readAppPermissionStatus>>,
+  { readonly ok: true }
+>['value']['permissions'];
 export type VoiceTranscriptionSettingsResponseValue = Extract<
   Awaited<ReturnType<typeof readVoiceTranscriptionSettings>>,
   { readonly ok: true }

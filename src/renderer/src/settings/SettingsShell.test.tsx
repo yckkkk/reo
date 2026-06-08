@@ -4,10 +4,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { SettingsShell } from './SettingsShell';
 
 describe('SettingsShell', () => {
-  it('renders the return action, category nav, active voice category, and content area', () => {
+  it('renders the return action, category nav, active section, and content area', () => {
+    const onSectionChange = vi.fn();
+
     render(
-      <SettingsShell onReturnToApp={vi.fn()}>
-        <div>语音内容</div>
+      <SettingsShell
+        activeSection="permissions"
+        onReturnToApp={vi.fn()}
+        onSectionChange={onSectionChange}
+      >
+        <div>权限内容</div>
       </SettingsShell>
     );
 
@@ -27,10 +33,31 @@ describe('SettingsShell', () => {
       'gap-4',
       '[-webkit-app-region:no-drag]'
     );
+    const permissionsCategory = screen.getByRole('button', { name: '权限' });
     const voiceCategory = screen.getByRole('button', { name: '语音' });
-    expect(voiceCategory).toHaveAttribute('aria-current', 'page');
-    expect(voiceCategory).toHaveClass('!bg-secondary', '[-webkit-app-region:no-drag]');
-    expect(screen.getByRole('region', { name: '语音设置' })).toHaveTextContent('语音内容');
+    expect(permissionsCategory).toHaveAttribute('aria-current', 'page');
+    expect(permissionsCategory).toHaveClass('!bg-secondary', '[-webkit-app-region:no-drag]');
+    expect(voiceCategory).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('region', { name: '权限设置' })).toHaveTextContent('权限内容');
+    expect(screen.getByRole('heading', { name: '权限' })).toBeInTheDocument();
+  });
+
+  it('emits section changes through the settings category nav', async () => {
+    const onSectionChange = vi.fn();
+
+    render(
+      <SettingsShell
+        activeSection="permissions"
+        onReturnToApp={vi.fn()}
+        onSectionChange={onSectionChange}
+      >
+        <div />
+      </SettingsShell>
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: '语音' }));
+
+    expect(onSectionChange).toHaveBeenCalledWith('voice');
   });
 
   it('calls onReturnToApp when the return action is clicked', async () => {

@@ -140,6 +140,24 @@ async function flushPromises() {
 function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
   return {
     chooseDirectory: vi.fn(),
+    readAppPermissionStatus: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        permissions: {
+          accessibility: { status: 'not-determined' as const },
+          camera: { status: 'not-determined' as const },
+          microphone: { status: 'granted' as const },
+        },
+      },
+    })),
+    requestAppPermission: vi.fn(async () => ({
+      ok: true as const,
+      value: {
+        permission: 'microphone' as const,
+        restartRequired: false,
+        status: 'granted' as const,
+      },
+    })),
     listMemorySpaces: vi.fn(async () => ({ ok: true as const, value: { memorySpaces: [] } })),
     readSystemDraftWorkspace: vi.fn(async () => ({
       ok: true as const,

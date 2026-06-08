@@ -44,7 +44,9 @@ export default defineConfig({
           },
           include: [
             'src/renderer/src/app-shell/themePreference.test.ts',
+            'src/renderer/src/settings/appPermissionQueries.test.ts',
             'src/renderer/src/settings/voiceSettingsQueries.test.ts',
+            'src/renderer/src/onboarding/onboardingState.test.ts',
             'src/renderer/src/workspace/audioWaveform.test.ts',
             'src/renderer/src/workspace/covers/coverTone.test.ts',
             'src/renderer/src/workspace/mediaRecorderAdapter.test.ts',

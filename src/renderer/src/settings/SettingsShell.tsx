@@ -1,21 +1,33 @@
 import { useEffect, type ReactNode } from 'react';
-import { ArrowLeft, Mic } from 'lucide-react';
+import { ArrowLeft, Mic, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { MIN_SIDEBAR_WIDTH, TITLEBAR_HEIGHT } from '../app-shell/appShellGeometry';
 
+export type SettingsSection = 'permissions' | 'voice';
+
 export type SettingsShellProps = {
+  readonly activeSection?: SettingsSection;
   readonly children: ReactNode;
+  readonly onSectionChange?: (section: SettingsSection) => void;
   readonly onReturnToApp: () => void;
   readonly returnDisabled?: boolean;
 };
 
-const SETTINGS_VOICE_LABEL = '语音';
+const settingsSections = [
+  { icon: ShieldCheck, id: 'permissions', label: '权限' },
+  { icon: Mic, id: 'voice', label: '语音' },
+] as const;
 
 export function SettingsShell({
+  activeSection = 'voice',
   children,
+  onSectionChange,
   onReturnToApp,
   returnDisabled = false,
 }: SettingsShellProps) {
+  const activeSectionLabel =
+    settingsSections.find((section) => section.id === activeSection)?.label ?? '语音';
+
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape' || returnDisabled) {
@@ -62,26 +74,39 @@ export function SettingsShell({
           className="mt-4 flex flex-col gap-4 [-webkit-app-region:no-drag]"
           aria-label="设置类目"
         >
-          <Button
-            type="button"
-            variant="ghostIcon"
-            size="compact"
-            aria-current="page"
-            className="w-full justify-start !bg-secondary px-8 !text-foreground hover:!bg-secondary hover:!text-foreground [-webkit-app-region:no-drag]"
-          >
-            <Mic className="size-16" aria-hidden="true" />
-            {SETTINGS_VOICE_LABEL}
-          </Button>
+          {settingsSections.map((section) => {
+            const SectionIcon = section.icon;
+            const active = section.id === activeSection;
+
+            return (
+              <Button
+                key={section.id}
+                type="button"
+                variant="ghostIcon"
+                size="compact"
+                aria-current={active ? 'page' : undefined}
+                className={
+                  active
+                    ? 'w-full justify-start !bg-secondary px-8 !text-foreground hover:!bg-secondary hover:!text-foreground [-webkit-app-region:no-drag]'
+                    : 'w-full justify-start px-8 text-muted-foreground hover:bg-secondary hover:text-foreground [-webkit-app-region:no-drag]'
+                }
+                onClick={() => onSectionChange?.(section.id)}
+              >
+                <SectionIcon className="size-16" aria-hidden="true" />
+                {section.label}
+              </Button>
+            );
+          })}
         </nav>
       </aside>
 
       <section
-        aria-label="语音设置"
+        aria-label={`${activeSectionLabel}设置`}
         className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-[44px] py-[92px]"
       >
         <div className="flex w-full max-w-[720px] flex-col">
           <h1 className="text-left text-heading-sm font-medium leading-heading-sm">
-            {SETTINGS_VOICE_LABEL}
+            {activeSectionLabel}
           </h1>
           <div className="mt-28 min-h-0">{children}</div>
         </div>

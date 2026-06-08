@@ -56,6 +56,8 @@ import {
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SEGMENT_SUPPLEMENT_DOCUMENT_CHANNEL,
+  WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
+  WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
@@ -198,6 +200,11 @@ import {
   workspaceListSegmentSupplementAttachmentsRequestSchema,
   workspaceSaveAttachmentResponseSchema,
   workspaceListAttachmentsResponseSchema,
+  appPermissionStatusSchema,
+  workspaceReadAppPermissionStatusRequestSchema,
+  workspaceReadAppPermissionStatusResponseSchema,
+  workspaceRequestAppPermissionRequestSchema,
+  workspaceRequestAppPermissionResponseSchema,
   workspaceReadVoiceTranscriptionSettingsRequestSchema,
   workspaceReadVoiceTranscriptionSettingsResponseSchema,
   workspaceReadSystemDraftWorkspaceResponseSchema,
@@ -314,6 +321,7 @@ import {
   type WorkspaceInitializeResponse,
   type WorkspaceOpenSystemDraftWorkspaceResponse,
   type WorkspaceChooseDirectoryResponse,
+  type AppPermissionStatus,
   type WorkspaceErrorEnvelope,
   type WorkspaceSpeechSynthesisBatchTarget,
   type WorkspaceSnapshot,
@@ -495,9 +503,9 @@ import {
 import { readRecentExpressionsFromWorkspaceSources } from './recentExpressions.js';
 
 const nodeRequire = createRequire(import.meta.url);
-const { app, clipboard, dialog, ipcMain, shell } = nodeRequire('electron') as Partial<
-  typeof import('electron')
->;
+const { app, clipboard, dialog, ipcMain, shell, systemPreferences } = nodeRequire(
+  'electron'
+) as Partial<typeof import('electron')>;
 const defaultHandleStore = createWorkspaceHandleStore();
 const defaultWorkspaceFileTruthWatcherRegistry = createWorkspaceFileTruthWatcherRegistry();
 let defaultMemorySpaceRegistry: WorkspaceMemorySpaceRegistry | null = null;
@@ -526,6 +534,11 @@ type OpenPath = (filePath: string) => Promise<string>;
 type OpenExternalUrl = (url: string) => Promise<void>;
 type OpenVoiceTranscriptionProviderConsole = OpenExternalUrl;
 type WriteClipboardText = (text: string) => void;
+type AppPermissionMediaType = 'microphone' | 'camera';
+type GetAppPermissionMediaAccessStatus = (mediaType: AppPermissionMediaType) => AppPermissionStatus;
+type AskAppMediaAccess = (mediaType: AppPermissionMediaType) => Promise<boolean>;
+type GetAppAccessibilityPermissionStatus = () => boolean;
+type RequestAppAccessibilityPermission = () => boolean;
 type VoiceTranscriptionProbe = (apiKey: string) => Promise<VoiceTranscriptionProbeResult>;
 type VoiceSpeechSynthesisProbe = (input: {
   readonly apiKey: string;
@@ -692,6 +705,22 @@ export interface HandleWriteNoteContentOptions extends HandleWorkspaceRequestOpt
 }
 
 export type HandleRecordingTranscriptionControlOptions = HandleWorkspaceRequestOptions;
+
+type HandleReadAppPermissionStatusOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly getMediaAccessStatus?: GetAppPermissionMediaAccessStatus;
+  readonly getAccessibilityPermissionStatus?: GetAppAccessibilityPermissionStatus;
+};
+
+type HandleRequestAppPermissionOptions = WorkspaceIpcBaseOptions & {
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly askForMediaAccess?: AskAppMediaAccess;
+  readonly getMediaAccessStatus?: GetAppPermissionMediaAccessStatus;
+  readonly getAccessibilityPermissionStatus?: GetAppAccessibilityPermissionStatus;
+  readonly requestAccessibilityPermission?: RequestAppAccessibilityPermission;
+};
 
 type HandleVoiceSettingsRequestOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
@@ -954,6 +983,16 @@ function requireElectronClipboardApi(): Pick<typeof import('electron'), 'clipboa
     throw new Error('Electron clipboard API is unavailable');
   }
   return { clipboard };
+}
+
+function requireElectronSystemPreferencesApi(): Pick<
+  typeof import('electron'),
+  'systemPreferences'
+> {
+  if (!systemPreferences) {
+    throw new Error('Electron systemPreferences API is unavailable');
+  }
+  return { systemPreferences };
 }
 
 export async function handleChooseWorkspaceDirectory({
@@ -3462,6 +3501,165 @@ async function openSystemExternalUrl(url: string): Promise<void> {
   await requireElectronShellApi().shell.openExternal(url);
 }
 
+function normalizeAppPermissionStatus(status: unknown): AppPermissionStatus {
+  const parsed = appPermissionStatusSchema.safeParse(status);
+  return parsed.success ? parsed.data : 'unknown';
+}
+
+function readDefaultAppMediaAccessStatus(mediaType: AppPermissionMediaType): AppPermissionStatus {
+  try {
+    return normalizeAppPermissionStatus(
+      requireElectronSystemPreferencesApi().systemPreferences.getMediaAccessStatus(mediaType)
+    );
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function askDefaultAppMediaAccess(mediaType: AppPermissionMediaType): Promise<boolean> {
+  return requireElectronSystemPreferencesApi().systemPreferences.askForMediaAccess(mediaType);
+}
+
+function readDefaultAppAccessibilityPermissionStatus(): boolean {
+  try {
+    return requireElectronSystemPreferencesApi().systemPreferences.isTrustedAccessibilityClient(
+      false
+    );
+  } catch {
+    return false;
+  }
+}
+
+function requestDefaultAppAccessibilityPermission(): boolean {
+  try {
+    return requireElectronSystemPreferencesApi().systemPreferences.isTrustedAccessibilityClient(
+      true
+    );
+  } catch {
+    return false;
+  }
+}
+
+function accessibilityPermissionStatusFromTrusted(trusted: boolean): AppPermissionStatus {
+  return trusted ? 'granted' : 'not-determined';
+}
+
+async function handleReadAppPermissionStatusCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  getMediaAccessStatus = readDefaultAppMediaAccessStatus,
+  getAccessibilityPermissionStatus = readDefaultAppAccessibilityPermissionStatus,
+}: HandleReadAppPermissionStatusOptions): Promise<
+  z.infer<typeof workspaceReadAppPermissionStatusResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadAppPermissionStatusRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readAppPermissionStatus request is invalid',
+      'none-written'
+    );
+  }
+
+  return workspaceReadAppPermissionStatusResponseSchema.parse({
+    ok: true,
+    value: {
+      permissions: {
+        microphone: { status: getMediaAccessStatus('microphone') },
+        camera: { status: getMediaAccessStatus('camera') },
+        accessibility: {
+          status: accessibilityPermissionStatusFromTrusted(getAccessibilityPermissionStatus()),
+        },
+      },
+    },
+  });
+}
+
+async function handleRequestAppPermissionCore({
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  askForMediaAccess = askDefaultAppMediaAccess,
+  getMediaAccessStatus = readDefaultAppMediaAccessStatus,
+  getAccessibilityPermissionStatus = readDefaultAppAccessibilityPermissionStatus,
+  requestAccessibilityPermission = requestDefaultAppAccessibilityPermission,
+}: HandleRequestAppPermissionOptions): Promise<
+  z.infer<typeof workspaceRequestAppPermissionResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceRequestAppPermissionRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'requestAppPermission request is invalid',
+      'none-written'
+    );
+  }
+
+  if (request.data.permission === 'accessibility') {
+    try {
+      requestAccessibilityPermission();
+    } catch {
+      // The bounded response below reports a pending status instead of leaking platform errors.
+    }
+
+    const status = accessibilityPermissionStatusFromTrusted(getAccessibilityPermissionStatus());
+
+    return workspaceRequestAppPermissionResponseSchema.parse({
+      ok: true,
+      value: {
+        permission: request.data.permission,
+        restartRequired: status !== 'granted',
+        status,
+      },
+    });
+  }
+
+  let grantedByPrompt: boolean;
+  try {
+    grantedByPrompt = await askForMediaAccess(request.data.permission);
+  } catch {
+    grantedByPrompt = false;
+  }
+
+  const status = getMediaAccessStatus(request.data.permission);
+
+  return workspaceRequestAppPermissionResponseSchema.parse({
+    ok: true,
+    value: {
+      permission: request.data.permission,
+      restartRequired: grantedByPrompt && status !== 'granted',
+      status,
+    },
+  });
+}
+
 async function handleReadVoiceTranscriptionSettingsCore({
   event,
   input,
@@ -3907,6 +4105,18 @@ export async function handleReadVoiceTranscriptionSettingsForTest(
   options: HandleVoiceSettingsRequestOptions
 ): Promise<z.infer<typeof workspaceReadVoiceTranscriptionSettingsResponseSchema>> {
   return handleReadVoiceTranscriptionSettingsCore(options);
+}
+
+export async function handleReadAppPermissionStatusForTest(
+  options: HandleReadAppPermissionStatusOptions
+): Promise<z.infer<typeof workspaceReadAppPermissionStatusResponseSchema>> {
+  return handleReadAppPermissionStatusCore(options);
+}
+
+export async function handleRequestAppPermissionForTest(
+  options: HandleRequestAppPermissionOptions
+): Promise<z.infer<typeof workspaceRequestAppPermissionResponseSchema>> {
+  return handleRequestAppPermissionCore(options);
 }
 
 export async function handleSetVoiceTranscriptionEnabledForTest(
@@ -8897,6 +9107,24 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       store: voiceSettingsStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL, (event, input) =>
+    handleReadAppPermissionStatusCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL, (event, input) =>
+    handleRequestAppPermissionCore({
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, input) =>

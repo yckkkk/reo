@@ -105,6 +105,8 @@ const workspaceBridgeKeys = [
   'sendRecordingTranscriptionAudio',
   'finishRecordingTranscription',
   'closeRecordingTranscription',
+  'readAppPermissionStatus',
+  'requestAppPermission',
   'readVoiceTranscriptionSettings',
   'setVoiceTranscriptionEnabled',
   'setVoiceSpeechSynthesisSpeaker',
@@ -144,6 +146,8 @@ const applicationScopedBridgeContractKeys = [
   'readSystemDraftWorkspace',
   'openSystemDraftWorkspace',
   'readRecentExpressions',
+  'readAppPermissionStatus',
+  'requestAppPermission',
   'readVoiceTranscriptionSettings',
   'setVoiceTranscriptionEnabled',
   'setVoiceSpeechSynthesisSpeaker',
@@ -162,6 +166,8 @@ test('workspace bridge contract declares application-scoped methods before prelo
       'readSystemDraftWorkspace',
       'openSystemDraftWorkspace',
       'readRecentExpressions',
+      'readAppPermissionStatus',
+      'requestAppPermission',
       'readVoiceTranscriptionSettings',
       'setVoiceTranscriptionEnabled',
       'setVoiceSpeechSynthesisSpeaker',
@@ -1082,6 +1088,10 @@ test('workspace preload bridge maps application-scoped methods to explicit chann
     },
   }) as unknown as ReoWorkspaceBridge;
 
+  await bridge.readAppPermissionStatus(undefined);
+  await bridge.requestAppPermission({ permission: 'microphone' });
+  await bridge.requestAppPermission({ permission: 'camera' });
+  await bridge.requestAppPermission({ permission: 'accessibility' });
   await bridge.readVoiceTranscriptionSettings(undefined);
   await bridge.setVoiceTranscriptionEnabled({ enabled: true });
   await bridge.setVoiceSpeechSynthesisSpeaker({ speaker: 'zh_male_shaonianzixin_uranus_bigtts' });
@@ -1097,6 +1107,10 @@ test('workspace preload bridge maps application-scoped methods to explicit chann
   await bridge.openMarkdownExternalLink({ url: 'https://tiptap.dev/docs' });
 
   assert.deepEqual(calls, [
+    { channel: 'workspace:readAppPermissionStatus', payload: undefined },
+    { channel: 'workspace:requestAppPermission', payload: { permission: 'microphone' } },
+    { channel: 'workspace:requestAppPermission', payload: { permission: 'camera' } },
+    { channel: 'workspace:requestAppPermission', payload: { permission: 'accessibility' } },
     { channel: 'workspace:readVoiceTranscriptionSettings', payload: undefined },
     { channel: 'workspace:setVoiceTranscriptionEnabled', payload: { enabled: true } },
     {
