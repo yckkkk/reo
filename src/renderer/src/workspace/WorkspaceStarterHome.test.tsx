@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import {
   WorkspaceStarterHome,
+  greetingForHour,
   type WorkspaceStarterHomeRecentExpression,
 } from './WorkspaceStarterHome';
 
@@ -14,7 +15,29 @@ const recentExpression: WorkspaceStarterHomeRecentExpression = {
   type: 'note',
 };
 
+describe('greetingForHour', () => {
+  it('maps each hour to its time-of-day greeting at the bucket boundaries', () => {
+    expect(greetingForHour(0)).toBe('晚上好');
+    expect(greetingForHour(4)).toBe('晚上好');
+    expect(greetingForHour(5)).toBe('早上好');
+    expect(greetingForHour(11)).toBe('早上好');
+    expect(greetingForHour(12)).toBe('下午好');
+    expect(greetingForHour(17)).toBe('下午好');
+    expect(greetingForHour(18)).toBe('晚上好');
+    expect(greetingForHour(23)).toBe('晚上好');
+  });
+});
+
 describe('WorkspaceStarterHome', () => {
+  it('renders the time-based greeting and welcome heading above the action tiles', () => {
+    render(<WorkspaceStarterHome recentExpressionsStatus="ready" />);
+
+    expect(screen.getByText('想到的，都留下来')).toBeInTheDocument();
+    expect(
+      screen.getByText((text) => ['早上好', '下午好', '晚上好'].includes(text))
+    ).toBeInTheDocument();
+  });
+
   it('renders loading and empty recent expression states without static fixture rows', () => {
     const { rerender } = render(<WorkspaceStarterHome recentExpressionsStatus="loading" />);
 

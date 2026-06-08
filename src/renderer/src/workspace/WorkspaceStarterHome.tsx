@@ -67,6 +67,16 @@ function expressionTypeTone(type: RecentExpressionType) {
   }
 }
 
+export function greetingForHour(hour: number): string {
+  if (hour >= 5 && hour < 12) {
+    return '早上好';
+  }
+  if (hour >= 12 && hour < 18) {
+    return '下午好';
+  }
+  return '晚上好';
+}
+
 function actionTileClass(disabled: boolean) {
   return cn(
     'group flex min-w-0 flex-col items-center text-center outline-none transition-transform duration-200 ease-out focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -235,40 +245,55 @@ export function WorkspaceStarterHome({
     },
   ];
 
+  const greeting = greetingForHour(new Date().getHours());
+
   return (
-    <section aria-label="首页" className="min-h-0 flex-1 overflow-y-auto bg-background">
-      <div className="mx-auto flex min-h-full w-full max-w-[1120px] flex-col gap-40 px-24 pb-32 pt-28 sm:px-32 lg:px-40">
+    <section
+      aria-label="首页"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+    >
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-[1120px] flex-col px-24 pb-24 pt-12 sm:px-32 lg:px-40">
+        <header className="min-w-0 shrink-0 px-4">
+          <p className="text-body font-medium leading-body text-muted-foreground">{greeting}</p>
+          <h1 className="mt-8 min-w-0 text-heading font-bold leading-heading text-foreground">
+            想到的，都留下来
+          </h1>
+        </header>
+
         <section
           aria-label="表达入口"
-          className="grid grid-cols-2 gap-x-22 gap-y-28 md:grid-cols-4"
+          className="mt-56 grid shrink-0 grid-cols-2 gap-x-22 gap-y-28 md:grid-cols-4"
         >
           {actions.map((action) => (
             <HomeActionTile key={action.id} action={action} />
           ))}
         </section>
 
-        <section aria-labelledby="home-recent-expressions-heading" className="min-w-0 px-4">
-          <h1
+        <section
+          aria-labelledby="home-recent-expressions-heading"
+          className="mt-40 flex min-h-0 min-w-0 flex-1 flex-col px-4"
+        >
+          <h2
             id="home-recent-expressions-heading"
-            className="min-w-0 text-heading-sm font-bold leading-heading-sm text-foreground"
+            className="min-w-0 shrink-0 text-heading-sm font-bold leading-heading-sm text-foreground"
           >
             近期表达
-          </h1>
+          </h2>
           {recentExpressionsSkippedCount > 0 ? (
-            <p className="mt-12 text-ui-sm font-medium leading-ui-sm text-muted-foreground">
+            <p className="mt-12 shrink-0 text-ui-sm font-medium leading-ui-sm text-muted-foreground">
               部分记忆空间暂不可读
             </p>
           ) : null}
           {recentExpressionsStatus === 'loading' ? (
-            <p className="mt-20 min-h-56 rounded-lg py-16 text-ui-sm font-medium leading-ui-sm text-muted-foreground">
+            <p className="mt-20 min-h-56 shrink-0 rounded-lg py-16 text-ui-sm font-medium leading-ui-sm text-muted-foreground">
               正在加载近期表达
             </p>
           ) : recentExpressions.length === 0 ? (
-            <p className="mt-20 min-h-56 rounded-lg py-16 text-ui-sm font-medium leading-ui-sm text-muted-foreground">
+            <p className="mt-20 min-h-56 shrink-0 rounded-lg py-16 text-ui-sm font-medium leading-ui-sm text-muted-foreground">
               {recentExpressionsStatus === 'error' ? '近期表达加载失败' : '暂无近期表达'}
             </p>
           ) : (
-            <ol className="mt-20 flex min-w-0 flex-col gap-8">
+            <ol className="mt-20 flex min-h-0 min-w-0 flex-1 flex-col gap-8 overflow-y-auto">
               {recentExpressions.map((expression) => (
                 <RecentExpressionRow
                   key={expression.id}
