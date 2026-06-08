@@ -388,6 +388,10 @@ describe('WorkspaceTitlebar', () => {
     expect(widgetTab).toHaveClass('h-[30px]');
     expect(widgetTab).toHaveClass('transition-[background-color,color,box-shadow]');
     expect(widgetTab).toHaveClass('bg-secondary');
+    // Icon stays pinned at the pill's right edge (under the cursor); the more
+    // affordance reveals to its left, so revealing it never slides the icon out
+    // from under the pointer.
+    expect(widgetTab).toHaveClass('flex-row-reverse');
 
     const memoryTabButton = within(memoryTab as HTMLElement).getByRole('tab', {
       name: '记忆列表',
@@ -412,7 +416,11 @@ describe('WorkspaceTitlebar', () => {
     expect(moreButton).toHaveAttribute('tabindex', '-1');
     expect(moreButton).toHaveClass('max-w-0');
     expect(moreButton).toHaveClass('group-hover/rail-tab:max-w-20');
-    expect(moreButton).toHaveClass('group-hover/rail-tab:ml-[2px]');
+    // Reveal animates margin-left/right, so the affordance grows from the
+    // icon's left side; the exact gap is cosmetic and intentionally not pinned.
+    expect(moreButton).toHaveClass(
+      'transition-[max-width,margin-left,margin-right,opacity,transform]'
+    );
     expect(moreButton).not.toHaveClass('size-[30px]');
     expect(moreButton).not.toHaveClass('hover:bg-secondary');
   });

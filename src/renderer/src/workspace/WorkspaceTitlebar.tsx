@@ -192,7 +192,7 @@ export function WorkspaceTitlebar({
               aria-controls={WORKSPACE_MEMORY_RAIL_ID}
               aria-expanded={memoryRailOpen}
               aria-label={toggleLabel}
-              className="rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+              className="size-[30px] rounded-sm ![corner-shape:round] text-muted-foreground hover:bg-secondary hover:text-foreground"
               onClick={onToggleMemoryRail}
             >
               <ToggleIcon className="size-16" aria-hidden="true" />
@@ -220,7 +220,7 @@ function WorkspaceCreateMenu({
           size="icon"
           type="button"
           aria-label="新增"
-          className="rounded-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="size-[30px] rounded-sm ![corner-shape:round] text-muted-foreground hover:bg-secondary hover:text-foreground"
         >
           <Plus aria-hidden="true" className="size-16" />
         </Button>
@@ -419,6 +419,7 @@ function WorkspaceRailTabStrip({
         return (
           <WorkspaceRailTabItem
             className={cn(
+              'flex-row-reverse',
               orderedWidgets.length > 1 && 'cursor-grab active:cursor-grabbing',
               dragging && 'scale-[1.02] opacity-40'
             )}
@@ -637,15 +638,22 @@ function WorkspaceRailTabButton({
   );
 }
 
+// Expanded pill geometry (px), icon pinned at the pill's right edge:
+//   [ 7 edge | ⋯ 16 | 4 gap | icon 16 | 7 edge ]
+// 7px edges mirror the icon button's inset (16px glyph centred in a 30px
+// square); 4px is the smallest scale step, fitting the two icons as the
+// innermost, most-related pair. The more button's 20px span centres its 16px
+// glyph (2px inset each side), so it offsets the span and icon insets:
+//   ml = 7 edge − 2 span = 5;  mr = 4 gap − 2 span − 7 icon = −5.
 function workspaceWidgetTabMoreClassName(actionsAccessible: boolean) {
   const visibleClassName =
-    'pointer-events-auto ml-[2px] max-w-20 scale-100 opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:ml-[2px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100';
+    'pointer-events-auto ml-[5px] mr-[-5px] max-w-20 scale-100 opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:ml-[5px] data-[state=open]:mr-[-5px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100';
   const hiddenClassName =
-    'pointer-events-none ml-0 max-w-0 scale-75 opacity-0 group-hover/rail-tab:pointer-events-auto group-hover/rail-tab:ml-[2px] group-hover/rail-tab:max-w-20 group-hover/rail-tab:scale-100 group-hover/rail-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[2px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:ml-[2px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100';
+    'pointer-events-none ml-0 mr-0 max-w-0 scale-75 opacity-0 group-hover/rail-tab:pointer-events-auto group-hover/rail-tab:ml-[5px] group-hover/rail-tab:mr-[-5px] group-hover/rail-tab:max-w-20 group-hover/rail-tab:scale-100 group-hover/rail-tab:opacity-100 focus-visible:pointer-events-auto focus-visible:ml-[5px] focus-visible:mr-[-5px] focus-visible:max-w-20 focus-visible:scale-100 focus-visible:opacity-100 data-[state=open]:pointer-events-auto data-[state=open]:ml-[5px] data-[state=open]:mr-[-5px] data-[state=open]:max-w-20 data-[state=open]:scale-100 data-[state=open]:opacity-100';
 
   return [
     'inline-flex items-center justify-center overflow-hidden',
-    'transition-[max-width,margin-left,opacity,transform] duration-150 ease-out motion-reduce:transition-none',
+    'transition-[max-width,margin-left,margin-right,opacity,transform] duration-150 ease-out motion-reduce:transition-none',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     actionsAccessible ? visibleClassName : hiddenClassName,
   ].join(' ');

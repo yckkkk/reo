@@ -247,7 +247,8 @@ export function MemoryStudioSegmentCard({
               <span>
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-px z-0 block overflow-hidden [backface-visibility:hidden] [transform:translateZ(0)]"
+                  className="pointer-events-none absolute inset-px z-0 block overflow-hidden reo-segment-card-squircle [backface-visibility:hidden] [transform:translateZ(0)]"
+                  data-slot="memory-studio-segment-card-cover-clip"
                 >
                   <img
                     alt=""

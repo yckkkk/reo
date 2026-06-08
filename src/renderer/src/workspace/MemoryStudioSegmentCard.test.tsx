@@ -85,6 +85,16 @@ describe('MemoryStudioSegmentCard', () => {
       throw new Error('segment card should render');
     }
     expect(card.className).not.toMatch(/\bbg-card\b|\bbg-secondary\b|shadow|border/);
+    expect(card).toHaveClass('reo-segment-card-squircle');
+    const coverClip = card.querySelector('[data-slot="memory-studio-segment-card-cover-clip"]');
+    expect(coverClip).toBeInstanceOf(HTMLElement);
+    expect(coverClip).toHaveClass(
+      'inset-px',
+      'overflow-hidden',
+      'reo-segment-card-squircle',
+      '[transform:translateZ(0)]'
+    );
+    expect(coverClip).not.toHaveClass('inset-[-1px]');
     expect(card.querySelector('[data-slot="memory-studio-segment-card-cover"]')).toHaveAttribute(
       'src',
       'reo-attachment://ws_1/segments/seg_custom_cover/cover/session%20poster%231.webp?v=177-42'
