@@ -79,11 +79,10 @@ export function greetingForHour(hour: number): string {
 
 function actionTileClass(disabled: boolean) {
   return cn(
-    'group flex min-w-0 flex-col items-center text-center outline-none transition-transform duration-200 ease-out focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-    'hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+    'flex min-w-0 flex-col items-center text-center outline-none transition-transform duration-200 ease-out focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     disabled
-      ? 'cursor-default opacity-[0.58] hover:translate-y-0 hover:bg-transparent'
-      : 'cursor-pointer'
+      ? 'cursor-default'
+      : 'group cursor-pointer will-change-transform hover:-translate-y-1 motion-reduce:transition-none motion-reduce:hover:translate-y-0'
   );
 }
 
@@ -99,7 +98,7 @@ function HomeActionTile({ action }: { readonly action: HomeAction }) {
       onClick={action.onSelect}
     >
       <span
-        className="reo-squircle relative block aspect-square w-full max-w-[152px] overflow-hidden rounded-[34px] bg-secondary"
+        className="reo-squircle relative block aspect-square w-full max-w-[152px] overflow-hidden rounded-[64px] bg-secondary"
         data-slot={`home-action-icon-slot-${action.id}`}
       >
         <img
@@ -118,10 +117,21 @@ function HomeActionTile({ action }: { readonly action: HomeAction }) {
         />
         <span
           aria-hidden="true"
-          className="absolute inset-0 bg-foreground/0 transition-colors duration-200 ease-out group-hover:bg-foreground/[0.05]"
+          className={cn(
+            'absolute inset-0 bg-foreground/0',
+            disabled
+              ? 'bg-background/30'
+              : 'transition-colors duration-200 ease-out group-hover:bg-foreground/[0.05]'
+          )}
+          data-slot={`home-action-state-overlay-${action.id}`}
         />
       </span>
-      <span className="mt-12 block min-w-0 text-body font-bold leading-body text-foreground">
+      <span
+        className={cn(
+          'mt-12 block min-w-0 text-body font-bold leading-body',
+          disabled ? 'text-muted-foreground' : 'text-foreground'
+        )}
+      >
         {action.label}
       </span>
       <span className="mt-4 block max-w-[188px] text-ui-xs font-medium leading-ui-xs text-muted-foreground">

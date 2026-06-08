@@ -96,6 +96,24 @@ describe('WorkspaceStarterHome', () => {
     }
   });
 
+  it('keeps the disabled capture action out of active hover compositing', () => {
+    render(<WorkspaceStarterHome recentExpressionsStatus="ready" onStartNote={vi.fn()} />);
+
+    const writeAction = screen.getByRole('button', { name: '写下来' });
+    const captureAction = screen.getByRole('button', { name: '拍下来' });
+    const captureOverlay = captureAction.querySelector(
+      '[data-slot="home-action-state-overlay-capture"]'
+    ) as HTMLElement;
+
+    expect(writeAction).toHaveClass('group', 'hover:-translate-y-1');
+    expect(captureAction).toBeDisabled();
+    expect(captureAction).not.toHaveClass('group');
+    expect(captureAction).not.toHaveClass('opacity-[0.58]');
+    expect(captureAction).not.toHaveClass('hover:-translate-y-1');
+    expect(captureOverlay).toHaveClass('bg-background/30');
+    expect(captureOverlay).not.toHaveClass('group-hover:bg-foreground/[0.05]');
+  });
+
   it('renders partial recent expression failures without exposing raw paths', () => {
     render(
       <WorkspaceStarterHome
