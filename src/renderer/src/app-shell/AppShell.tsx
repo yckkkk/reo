@@ -35,6 +35,7 @@ import {
   TITLEBAR_CONTROL_TOP,
   TITLEBAR_HEIGHT,
 } from './appShellGeometry';
+import { AppShellPanelMotionContext } from './appShellPanelMotion';
 import { cycleThemePreference, type ThemeMode, type ThemePreference } from './themePreference';
 
 export type AppShellState = 'expanded' | 'covered';
@@ -45,6 +46,7 @@ const COLLAPSED_PANEL_TITLEBAR_LEFT =
   TITLEBAR_CONTROL_LEFT + TITLEBAR_CONTROL_SIZE + TITLEBAR_CONTROL_GAP - PANEL_TITLEBAR_X;
 const PANEL_MOTION_CLASS =
   'transition-[left,border-radius] duration-200 ease-out motion-reduce:transition-none';
+const PANEL_MOTION_FALLBACK_MS = 260;
 const SIDEBAR_ROW_STATE_CLASS =
   'reo-squircle rounded-md bg-transparent text-muted-foreground transition-colors duration-150 ease-out hover:bg-secondary hover:text-foreground focus-within:bg-secondary focus-within:text-foreground';
 const SIDEBAR_NAV_BUTTON_CLASS =
@@ -124,10 +126,12 @@ export function AppShell({
   memorySpaces = [],
 }: AppShellProps) {
   const [sidebarState, setSidebarState] = React.useState<AppShellState>('expanded');
+  const [panelMotionActive, setPanelMotionActive] = React.useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = React.useState(false);
   const [workspaceMemorySpaceMenuOpen, setWorkspaceMemorySpaceMenuOpen] = React.useState<
     string | null
   >(null);
+  const panelMotionFallbackTimerRef = React.useRef<number | null>(null);
   const suppressWorkspaceMenuCloseAutoFocusRef = React.useRef(false);
   const {
     isResizing: sidebarResizing,
@@ -146,6 +150,7 @@ export function AppShell({
     sidebarState === 'expanded' ? panelLeft : `${COLLAPSED_PANEL_TITLEBAR_LEFT}px`;
   const panelRadius = sidebarState === 'expanded' ? `${PANEL_RADIUS} 0 0 ${PANEL_RADIUS}` : '0px';
   const panelMotionClass = sidebarResizing ? '' : PANEL_MOTION_CLASS;
+  const panelMotionContextValue = React.useMemo(() => ({ panelMotionActive }), [panelMotionActive]);
   const SidebarToggleIcon = sidebarState === 'expanded' ? PanelLeftClose : Menu;
   const sidebarToggleLabel = sidebarState === 'expanded' ? '隐藏侧边栏' : '显示侧边栏';
   const ThemeCycleIcon = THEME_STATE_VIEW[themePreference].icon;
@@ -155,6 +160,42 @@ export function AppShell({
   const homeCurrent = currentSection === 'home';
   const libraryCurrent = currentSection === 'library';
   const anySidebarMenuOpen = workspaceMenuOpen || workspaceMemorySpaceMenuOpen !== null;
+
+  const clearPanelMotionFallbackTimer = React.useCallback(() => {
+    if (panelMotionFallbackTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(panelMotionFallbackTimerRef.current);
+    panelMotionFallbackTimerRef.current = null;
+  }, []);
+
+  const finishPanelMotion = React.useCallback(() => {
+    clearPanelMotionFallbackTimer();
+    setPanelMotionActive(false);
+  }, [clearPanelMotionFallbackTimer]);
+
+  const beginPanelMotion = React.useCallback(() => {
+    if (sidebarResizing) {
+      finishPanelMotion();
+      return;
+    }
+
+    clearPanelMotionFallbackTimer();
+    setPanelMotionActive(true);
+    panelMotionFallbackTimerRef.current = window.setTimeout(
+      finishPanelMotion,
+      PANEL_MOTION_FALLBACK_MS
+    );
+  }, [clearPanelMotionFallbackTimer, finishPanelMotion, sidebarResizing]);
+
+  React.useEffect(() => {
+    if (sidebarResizing) {
+      finishPanelMotion();
+    }
+  }, [finishPanelMotion, sidebarResizing]);
+
+  React.useEffect(() => clearPanelMotionFallbackTimer, [clearPanelMotionFallbackTimer]);
 
   function closeSidebarMenus() {
     setWorkspaceMenuOpen(false);
@@ -209,270 +250,284 @@ export function AppShell({
 
   return (
     <TooltipProvider>
-      <div
-        data-slot="app-shell-root"
-        data-theme={effectiveTheme}
-        className="relative h-screen min-h-0 w-screen overflow-hidden bg-background text-foreground"
-      >
+      <AppShellPanelMotionContext.Provider value={panelMotionContextValue}>
         <div
-          role="banner"
-          aria-label="标题栏"
-          data-slot="app-shell-titlebar"
-          className="pointer-events-auto absolute inset-x-0 top-0 h-[48px] border-0 bg-transparent [-webkit-app-region:drag]"
-          style={{
-            zIndex: 5,
-          }}
+          data-slot="app-shell-root"
+          data-theme={effectiveTheme}
+          className="relative h-screen min-h-0 w-screen overflow-hidden bg-background text-foreground"
         >
           <div
-            role="group"
-            aria-label="窗口控制"
-            data-slot="app-shell-titlebar-controls"
-            className="pointer-events-auto absolute flex items-center gap-8 [-webkit-app-region:no-drag]"
+            role="banner"
+            aria-label="标题栏"
+            data-slot="app-shell-titlebar"
+            className="pointer-events-auto absolute inset-x-0 top-0 h-[48px] border-0 bg-transparent [-webkit-app-region:drag]"
             style={{
-              left: `${TITLEBAR_CONTROL_LEFT}px`,
-              top: `${TITLEBAR_CONTROL_TOP}px`,
+              zIndex: 5,
             }}
           >
-            <Button
-              type="button"
-              variant="ghostIcon"
-              size="icon"
-              aria-label={sidebarToggleLabel}
-              onClick={() => {
-                closeSidebarMenus();
-                setSidebarState(sidebarState === 'expanded' ? 'covered' : 'expanded');
-              }}
-            >
-              <SidebarToggleIcon className="size-16" aria-hidden="true" />
-            </Button>
-          </div>
-          {panelTitlebar ? (
-            <div
-              data-slot="app-shell-panel-titlebar-content"
-              data-sidebar-state={sidebarState}
-              className={`group/panel-titlebar pointer-events-none absolute flex h-[48px] items-center ${panelMotionClass}`}
-              style={{
-                left: panelTitlebarLeft,
-                right: 0,
-                top: `${TITLEBAR_CONTROL_TOP + (TITLEBAR_CONTROL_SIZE - TITLEBAR_HEIGHT) / 2}px`,
-              }}
-            >
-              {panelTitlebar}
-            </div>
-          ) : null}
-        </div>
-
-        <aside
-          aria-label="记忆空间侧边栏"
-          className="absolute inset-y-0 left-0 flex flex-col bg-card px-8 pb-16 pt-[48px]"
-          style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
-        >
-          <nav className="flex flex-col gap-4" aria-label="记忆空间">
-            <Button
-              type="button"
-              variant="secondary"
-              size="compact"
-              aria-current={homeCurrent ? 'page' : undefined}
-              className={sidebarNavButtonClass(homeCurrent)}
-              onClick={handleHome}
-            >
-              <Home className="size-16" aria-hidden="true" />
-              首页
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="compact"
-              aria-current={libraryCurrent ? 'page' : undefined}
-              className={sidebarNavButtonClass(libraryCurrent)}
-              onClick={handleLibrary}
-            >
-              <Orbit className="size-16" aria-hidden="true" />
-              画廊
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="compact"
-              aria-current={draftCurrent ? 'page' : undefined}
-              aria-disabled={onDraft ? undefined : true}
-              disabled={!onDraft}
-              className={cn(
-                sidebarNavButtonClass(draftCurrent),
-                !onDraft &&
-                  'cursor-default disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100'
-              )}
-              onClick={handleDraft}
-            >
-              <FileStack className="size-16" aria-hidden="true" />
-              草稿
-            </Button>
-          </nav>
-
-          <section className="relative mt-28" aria-labelledby="workspace-memory-spaces-heading">
             <div
               role="group"
-              aria-label="记忆空间操作"
-              className="group mb-8 flex items-center justify-between gap-8"
+              aria-label="窗口控制"
+              data-slot="app-shell-titlebar-controls"
+              className="pointer-events-auto absolute flex items-center gap-8 [-webkit-app-region:no-drag]"
+              style={{
+                left: `${TITLEBAR_CONTROL_LEFT}px`,
+                top: `${TITLEBAR_CONTROL_TOP}px`,
+              }}
             >
-              <h2
-                id="workspace-memory-spaces-heading"
-                className="px-8 text-ui-sm font-regular leading-ui-sm text-muted-foreground"
+              <Button
+                type="button"
+                variant="ghostIcon"
+                size="icon"
+                aria-label={sidebarToggleLabel}
+                onClick={() => {
+                  closeSidebarMenus();
+                  beginPanelMotion();
+                  setSidebarState(sidebarState === 'expanded' ? 'covered' : 'expanded');
+                }}
               >
-                记忆空间
-              </h2>
-              {onCreateWorkspace || onOpenLocalWorkspace ? (
-                <div className="relative shrink-0">
-                  <DropdownMenu
-                    open={workspaceMenuOpen}
-                    onOpenChange={(open) => {
-                      if (open) {
-                        suppressWorkspaceMenuCloseAutoFocusRef.current = false;
-                        setWorkspaceMemorySpaceMenuOpen(null);
-                      }
-                      setWorkspaceMenuOpen(open);
-                    }}
-                  >
-                    <DropdownMenuTrigger asChild>
+                <SidebarToggleIcon className="size-16" aria-hidden="true" />
+              </Button>
+            </div>
+            {panelTitlebar ? (
+              <div
+                data-slot="app-shell-panel-titlebar-content"
+                data-sidebar-state={sidebarState}
+                className={`group/panel-titlebar pointer-events-none absolute flex h-[48px] items-center ${panelMotionClass}`}
+                style={{
+                  left: panelTitlebarLeft,
+                  right: 0,
+                  top: `${TITLEBAR_CONTROL_TOP + (TITLEBAR_CONTROL_SIZE - TITLEBAR_HEIGHT) / 2}px`,
+                }}
+              >
+                {panelTitlebar}
+              </div>
+            ) : null}
+          </div>
+
+          <aside
+            aria-label="记忆空间侧边栏"
+            className="absolute inset-y-0 left-0 flex flex-col bg-card px-8 pb-16 pt-[48px]"
+            style={{ width: `${safeSidebarWidth}px`, zIndex: anySidebarMenuOpen ? 4 : 1 }}
+          >
+            <nav className="flex flex-col gap-4" aria-label="记忆空间">
+              <Button
+                type="button"
+                variant="secondary"
+                size="compact"
+                aria-current={homeCurrent ? 'page' : undefined}
+                className={sidebarNavButtonClass(homeCurrent)}
+                onClick={handleHome}
+              >
+                <Home className="size-16" aria-hidden="true" />
+                首页
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="compact"
+                aria-current={libraryCurrent ? 'page' : undefined}
+                className={sidebarNavButtonClass(libraryCurrent)}
+                onClick={handleLibrary}
+              >
+                <Orbit className="size-16" aria-hidden="true" />
+                画廊
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="compact"
+                aria-current={draftCurrent ? 'page' : undefined}
+                aria-disabled={onDraft ? undefined : true}
+                disabled={!onDraft}
+                className={cn(
+                  sidebarNavButtonClass(draftCurrent),
+                  !onDraft &&
+                    'cursor-default disabled:bg-transparent disabled:text-muted-foreground disabled:opacity-100'
+                )}
+                onClick={handleDraft}
+              >
+                <FileStack className="size-16" aria-hidden="true" />
+                草稿
+              </Button>
+            </nav>
+
+            <section className="relative mt-28" aria-labelledby="workspace-memory-spaces-heading">
+              <div
+                role="group"
+                aria-label="记忆空间操作"
+                className="group mb-8 flex items-center justify-between gap-8"
+              >
+                <h2
+                  id="workspace-memory-spaces-heading"
+                  className="px-8 text-ui-sm font-regular leading-ui-sm text-muted-foreground"
+                >
+                  记忆空间
+                </h2>
+                {onCreateWorkspace || onOpenLocalWorkspace ? (
+                  <div className="relative shrink-0">
+                    <DropdownMenu
+                      open={workspaceMenuOpen}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          suppressWorkspaceMenuCloseAutoFocusRef.current = false;
+                          setWorkspaceMemorySpaceMenuOpen(null);
+                        }
+                        setWorkspaceMenuOpen(open);
+                      }}
+                    >
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghostIcon"
+                          size="icon"
+                          aria-label="添加记忆空间"
+                          className={HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS}
+                        >
+                          <FolderPlus className="size-16" aria-hidden="true" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="start"
+                        side="bottom"
+                        aria-label="添加记忆空间菜单"
+                        onCloseAutoFocus={(event) => {
+                          if (suppressWorkspaceMenuCloseAutoFocusRef.current) {
+                            event.preventDefault();
+                            suppressWorkspaceMenuCloseAutoFocusRef.current = false;
+                          }
+                        }}
+                      >
+                        <DropdownMenuItem onSelect={handleCreateWorkspace}>
+                          <FolderPlus
+                            className="size-16 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          创建本地记忆空间
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={handleOpenLocalWorkspace}>
+                          <Folder className="size-16 text-muted-foreground" aria-hidden="true" />
+                          打开本地记忆空间
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="flex flex-col gap-4">
+                {memorySpaces.map((memorySpace) => {
+                  const memorySpaceCurrent =
+                    currentSection === 'workspace' && memorySpace.workspaceId === activeWorkspaceId;
+                  const memorySpaceMenuOpen =
+                    workspaceMemorySpaceMenuOpen === memorySpace.workspaceId;
+
+                  return (
+                    <div
+                      key={memorySpace.workspaceId}
+                      data-slot="workspace-memory-space-item"
+                      className={sidebarMemorySpaceItemClass(memorySpaceCurrent)}
+                    >
                       <Button
                         type="button"
                         variant="ghostIcon"
-                        size="icon"
-                        aria-label="添加记忆空间"
-                        className={HIDDEN_SIDEBAR_ACTION_BUTTON_CLASS}
+                        size="compact"
+                        aria-current={memorySpaceCurrent ? 'page' : undefined}
+                        className="min-w-0 flex-1 shrink justify-start bg-transparent px-8 text-inherit hover:bg-transparent hover:text-inherit"
+                        onClick={() => handleSelectMemorySpace(memorySpace.workspaceId)}
                       >
-                        <FolderPlus className="size-16" aria-hidden="true" />
+                        <Folder className="size-16" aria-hidden="true" />
+                        <span className="min-w-0 flex-1 truncate text-left">
+                          {memorySpace.title}
+                        </span>
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="start"
-                      side="bottom"
-                      aria-label="添加记忆空间菜单"
-                      onCloseAutoFocus={(event) => {
-                        if (suppressWorkspaceMenuCloseAutoFocusRef.current) {
-                          event.preventDefault();
-                          suppressWorkspaceMenuCloseAutoFocusRef.current = false;
-                        }
-                      }}
-                    >
-                      <DropdownMenuItem onSelect={handleCreateWorkspace}>
-                        <FolderPlus className="size-16 text-muted-foreground" aria-hidden="true" />
-                        创建本地记忆空间
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={handleOpenLocalWorkspace}>
-                        <Folder className="size-16 text-muted-foreground" aria-hidden="true" />
-                        打开本地记忆空间
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ) : null}
-            </div>
+                      {onRenameMemorySpace && onRemoveMemorySpace ? (
+                        <MemorySpaceActionsMenu
+                          actionIdentity={{ workspaceId: memorySpace.workspaceId }}
+                          memorySpaceTitle={memorySpace.title}
+                          open={memorySpaceMenuOpen}
+                          onOpenChange={(open) => {
+                            setWorkspaceMenuOpen(false);
+                            setWorkspaceMemorySpaceMenuOpen(open ? memorySpace.workspaceId : null);
+                          }}
+                          onRename={() => handleRenameMemorySpace(memorySpace)}
+                          onRemove={() => handleRemoveMemorySpace(memorySpace)}
+                          triggerClassName={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
+                          triggerLabel={`${memorySpace.title} 更多操作`}
+                        />
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
-            <div className="flex flex-col gap-4">
-              {memorySpaces.map((memorySpace) => {
-                const memorySpaceCurrent =
-                  currentSection === 'workspace' && memorySpace.workspaceId === activeWorkspaceId;
-                const memorySpaceMenuOpen =
-                  workspaceMemorySpaceMenuOpen === memorySpace.workspaceId;
-
-                return (
-                  <div
-                    key={memorySpace.workspaceId}
-                    data-slot="workspace-memory-space-item"
-                    className={sidebarMemorySpaceItemClass(memorySpaceCurrent)}
+            <div role="group" aria-label="侧边栏工具" className="mt-auto flex items-center gap-8">
+              <SidebarSettingsTrigger
+                onOpenSettings={onOpenSettings}
+                onRecordingBlocked={onSettingsBlocked}
+                recordingActive={recordingActive}
+              />
+              <Tooltip>
+                <Button asChild variant="ghostIcon" size="icon">
+                  <TooltipTrigger
+                    type="button"
+                    aria-label={themeCycleLabel}
+                    onClick={onCycleThemePreference}
                   >
-                    <Button
-                      type="button"
-                      variant="ghostIcon"
-                      size="compact"
-                      aria-current={memorySpaceCurrent ? 'page' : undefined}
-                      className="min-w-0 flex-1 shrink justify-start bg-transparent px-8 text-inherit hover:bg-transparent hover:text-inherit"
-                      onClick={() => handleSelectMemorySpace(memorySpace.workspaceId)}
-                    >
-                      <Folder className="size-16" aria-hidden="true" />
-                      <span className="min-w-0 flex-1 truncate text-left">{memorySpace.title}</span>
-                    </Button>
-                    {onRenameMemorySpace && onRemoveMemorySpace ? (
-                      <MemorySpaceActionsMenu
-                        actionIdentity={{ workspaceId: memorySpace.workspaceId }}
-                        memorySpaceTitle={memorySpace.title}
-                        open={memorySpaceMenuOpen}
-                        onOpenChange={(open) => {
-                          setWorkspaceMenuOpen(false);
-                          setWorkspaceMemorySpaceMenuOpen(open ? memorySpace.workspaceId : null);
-                        }}
-                        onRename={() => handleRenameMemorySpace(memorySpace)}
-                        onRemove={() => handleRemoveMemorySpace(memorySpace)}
-                        triggerClassName={HIDDEN_WORKSPACE_ACTION_BUTTON_CLASS}
-                        triggerLabel={`${memorySpace.title} 更多操作`}
-                      />
-                    ) : null}
-                  </div>
-                );
-              })}
+                    <ThemeCycleIcon className="size-16" aria-hidden="true" />
+                  </TooltipTrigger>
+                </Button>
+                <TooltipContent side="right">{themeCycleLabel}</TooltipContent>
+              </Tooltip>
             </div>
-          </section>
 
-          <div role="group" aria-label="侧边栏工具" className="mt-auto flex items-center gap-8">
-            <SidebarSettingsTrigger
-              onOpenSettings={onOpenSettings}
-              onRecordingBlocked={onSettingsBlocked}
-              recordingActive={recordingActive}
+            <Separator
+              aria-label="调整侧边栏宽度"
+              aria-valuemax={MAX_SIDEBAR_WIDTH}
+              aria-valuemin={MIN_SIDEBAR_WIDTH}
+              aria-valuenow={safeSidebarWidth}
+              decorative={false}
+              orientation="vertical"
+              className="absolute right-0 top-0 h-full cursor-col-resize bg-transparent"
+              style={{ width: 8 }}
+              tabIndex={0}
+              {...sidebarResizeHandleProps}
             />
-            <Tooltip>
-              <Button asChild variant="ghostIcon" size="icon">
-                <TooltipTrigger
-                  type="button"
-                  aria-label={themeCycleLabel}
-                  onClick={onCycleThemePreference}
-                >
-                  <ThemeCycleIcon className="size-16" aria-hidden="true" />
-                </TooltipTrigger>
-              </Button>
-              <TooltipContent side="right">{themeCycleLabel}</TooltipContent>
-            </Tooltip>
-          </div>
+          </aside>
 
-          <Separator
-            aria-label="调整侧边栏宽度"
-            aria-valuemax={MAX_SIDEBAR_WIDTH}
-            aria-valuemin={MIN_SIDEBAR_WIDTH}
-            aria-valuenow={safeSidebarWidth}
-            decorative={false}
-            orientation="vertical"
-            className="absolute right-0 top-0 h-full cursor-col-resize bg-transparent"
-            style={{ width: 8 }}
-            tabIndex={0}
-            {...sidebarResizeHandleProps}
-          />
-        </aside>
-
-        <main
-          aria-label="记忆空间内容"
-          className={`absolute flex min-h-0 flex-col overflow-hidden border-0 bg-background ${panelMotionClass}`}
-          style={{
-            borderRadius: panelRadius,
-            bottom: 0,
-            left: panelLeft,
-            right: 0,
-            top: 0,
-            zIndex: 2,
-          }}
-        >
-          <div
-            data-slot="app-shell-panel-titlebar"
-            className="h-[48px] shrink-0"
-            aria-hidden="true"
-          />
-          <div
-            data-slot="app-shell-panel-content"
-            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          <main
+            aria-label="记忆空间内容"
+            data-panel-motion={panelMotionActive ? 'running' : 'idle'}
+            className={`absolute flex min-h-0 flex-col overflow-hidden border-0 bg-background ${panelMotionClass}`}
+            onTransitionEnd={(event) => {
+              if (event.currentTarget === event.target && event.propertyName === 'left') {
+                finishPanelMotion();
+              }
+            }}
+            style={{
+              borderRadius: panelRadius,
+              bottom: 0,
+              left: panelLeft,
+              right: 0,
+              top: 0,
+              zIndex: 2,
+            }}
           >
-            {children}
-          </div>
-        </main>
-      </div>
+            <div
+              data-slot="app-shell-panel-titlebar"
+              className="h-[48px] shrink-0"
+              aria-hidden="true"
+            />
+            <div
+              data-slot="app-shell-panel-content"
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              {children}
+            </div>
+          </main>
+        </div>
+      </AppShellPanelMotionContext.Provider>
     </TooltipProvider>
   );
 }

@@ -1,11 +1,12 @@
 import { QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { voiceSettingsQueryKey } from '@/settings/voiceSettingsQueries';
 import { createVoiceSettingsSnapshot } from '@/settings/voiceSettingsTestFixtures';
 import { createReoQueryClient } from '../queryClient';
+import { WorkspaceFrame } from '../workspace/WorkspaceFrame';
 import { AppShell } from './AppShell';
 import { TITLEBAR_HEIGHT } from './appShellGeometry';
 import {
@@ -15,6 +16,77 @@ import {
 } from './themePreference';
 
 describe('AppShell', () => {
+  function installControllableResizeObserver() {
+    const originalGlobalResizeObserver = globalThis.ResizeObserver;
+    const originalWindowResizeObserver = window.ResizeObserver;
+    const observers: Array<{
+      readonly callback: ResizeObserverCallback;
+      readonly elements: Set<Element>;
+    }> = [];
+
+    class TestResizeObserver {
+      readonly callback: ResizeObserverCallback;
+      readonly elements = new Set<Element>();
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+        observers.push({ callback, elements: this.elements });
+      }
+
+      observe(element: Element) {
+        this.elements.add(element);
+      }
+
+      unobserve(element: Element) {
+        this.elements.delete(element);
+      }
+
+      disconnect() {
+        this.elements.clear();
+      }
+    }
+
+    Object.defineProperty(globalThis, 'ResizeObserver', {
+      configurable: true,
+      value: TestResizeObserver as unknown as typeof ResizeObserver,
+    });
+    Object.defineProperty(window, 'ResizeObserver', {
+      configurable: true,
+      value: TestResizeObserver as unknown as typeof ResizeObserver,
+    });
+
+    return {
+      emit(element: Element, width: number) {
+        const entry = {
+          contentRect: { width },
+          target: element,
+        } as ResizeObserverEntry;
+
+        for (const observer of observers) {
+          if (observer.elements.has(element)) {
+            observer.callback([entry], {} as ResizeObserver);
+          }
+        }
+      },
+      restore() {
+        Object.defineProperty(globalThis, 'ResizeObserver', {
+          configurable: true,
+          value: originalGlobalResizeObserver,
+        });
+        Object.defineProperty(window, 'ResizeObserver', {
+          configurable: true,
+          value: originalWindowResizeObserver,
+        });
+      },
+    };
+  }
+
+  function nextAnimationFrame() {
+    return new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  }
+
   function TestAppShell({
     activeWorkspaceId,
     activeSection,
@@ -99,6 +171,60 @@ describe('AppShell', () => {
       </QueryClientProvider>
     );
   }
+
+  it('keeps the left sidebar animation while deferring workspace width measurement until the panel settles', async () => {
+    const resizeObserver = installControllableResizeObserver();
+
+    try {
+      render(
+        <TestAppShell activeWorkspaceId="ws_reo" activeSection="workspace">
+          <WorkspaceFrame
+            dock={<div aria-label="表达入口" role="region" />}
+            memoryRailOpen
+            rail={<nav aria-label="记忆列表" />}
+          >
+            <div>Workspace stage</div>
+          </WorkspaceFrame>
+        </TestAppShell>
+      );
+
+      const panel = screen.getByRole('main', { name: '记忆空间内容' });
+      const frameBody = document.querySelector('[data-slot="workspace-frame-body"]');
+      expect(frameBody).toBeInstanceOf(HTMLElement);
+      const railResizeHandle = screen.getByRole('separator', { name: '调整记忆列表宽度' });
+
+      act(() => {
+        resizeObserver.emit(frameBody as HTMLElement, 880);
+      });
+      await waitFor(() => expect(railResizeHandle).toHaveAttribute('aria-valuemax', '260'));
+
+      fireEvent.click(screen.getByRole('button', { name: '隐藏侧边栏' }));
+
+      expect(panel).toHaveClass(
+        'transition-[left,border-radius]',
+        'duration-200',
+        'ease-out',
+        'motion-reduce:transition-none'
+      );
+      expect(panel).toHaveAttribute('data-panel-motion', 'running');
+
+      act(() => {
+        resizeObserver.emit(frameBody as HTMLElement, 1140);
+      });
+      await act(async () => {
+        await nextAnimationFrame();
+      });
+
+      expect(railResizeHandle).toHaveAttribute('aria-valuemax', '260');
+
+      fireEvent.transitionEnd(panel, { propertyName: 'left' });
+
+      await waitFor(() => expect(railResizeHandle).toHaveAttribute('aria-valuemax', '520'));
+      expect(panel).toHaveAttribute('data-panel-motion', 'idle');
+    } finally {
+      resizeObserver.restore();
+    }
+  });
 
   it('renders a compact Chinese memory space sidebar', () => {
     render(

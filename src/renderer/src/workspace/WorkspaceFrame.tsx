@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Separator } from '@/components/ui/separator';
 import { useResizableWidth } from '@/hooks/use-resizable-width';
+import { useAppShellPanelMotion } from '../app-shell/appShellPanelMotion';
 import {
   MAX_SIDEBAR_WIDTH,
   MIN_SIDEBAR_WIDTH,
@@ -46,8 +47,13 @@ export function WorkspaceFrame({
   memoryRailOpen,
   rail,
 }: WorkspaceFrameProps) {
+  const { panelMotionActive } = useAppShellPanelMotion();
   const [frameBodyWidth, setFrameBodyWidth] = useState<number | null>(null);
   const frameBodyRef = useRef<HTMLDivElement | null>(null);
+  const panelMotionActiveRef = useRef(panelMotionActive);
+  const hasDeferredFrameBodyWidthRef = useRef(false);
+  const deferredFrameBodyWidthRef = useRef<number | undefined>(undefined);
+  panelMotionActiveRef.current = panelMotionActive;
   const effectiveMaxRailWidth = resolveMemoryRailMaxWidth(frameBodyWidth);
   const {
     isResizing: railResizing,
@@ -79,6 +85,43 @@ export function WorkspaceFrame({
     ? ''
     : 'transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none';
 
+  const commitFrameBodyWidth = useCallback((observedWidth?: number) => {
+    const element = frameBodyRef.current;
+    if (!element) {
+      return;
+    }
+
+    const width = observedWidth ?? element.getBoundingClientRect().width;
+    const nextWidth = width > 0 ? width : null;
+    setFrameBodyWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
+  }, []);
+
+  const syncOrDeferFrameBodyWidth = useCallback(
+    (observedWidth?: number) => {
+      if (panelMotionActiveRef.current) {
+        hasDeferredFrameBodyWidthRef.current = true;
+        if (observedWidth !== undefined) {
+          deferredFrameBodyWidthRef.current = observedWidth;
+        }
+        return;
+      }
+
+      commitFrameBodyWidth(observedWidth);
+    },
+    [commitFrameBodyWidth]
+  );
+
+  useEffect(() => {
+    if (panelMotionActive || !hasDeferredFrameBodyWidthRef.current) {
+      return;
+    }
+
+    const deferredWidth = deferredFrameBodyWidthRef.current;
+    hasDeferredFrameBodyWidthRef.current = false;
+    deferredFrameBodyWidthRef.current = undefined;
+    commitFrameBodyWidth(deferredWidth);
+  }, [commitFrameBodyWidth, panelMotionActive]);
+
   useEffect(() => {
     const element = frameBodyRef.current;
     if (!element) {
@@ -88,12 +131,12 @@ export function WorkspaceFrame({
     let animationFrameId: number | null = null;
     let pendingObservedWidth: number | null = null;
 
-    const syncFrameBodyWidth = (observedWidth?: number) => {
-      const width = observedWidth ?? element.getBoundingClientRect().width;
-      const nextWidth = width > 0 ? width : null;
-      setFrameBodyWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-    };
     const scheduleFrameBodyWidthSync = (observedWidth?: number) => {
+      if (panelMotionActiveRef.current) {
+        syncOrDeferFrameBodyWidth(observedWidth);
+        return;
+      }
+
       if (observedWidth !== undefined) {
         pendingObservedWidth = observedWidth;
       }
@@ -103,11 +146,11 @@ export function WorkspaceFrame({
 
       animationFrameId = window.requestAnimationFrame(() => {
         animationFrameId = null;
-        syncFrameBodyWidth(pendingObservedWidth ?? undefined);
+        syncOrDeferFrameBodyWidth(pendingObservedWidth ?? undefined);
         pendingObservedWidth = null;
       });
     };
-    syncFrameBodyWidth();
+    syncOrDeferFrameBodyWidth();
     const resizeObserver =
       typeof ResizeObserver === 'function'
         ? new ResizeObserver((entries) => {
@@ -125,7 +168,7 @@ export function WorkspaceFrame({
       window.removeEventListener('resize', scheduleWindowResizeSync);
       resizeObserver?.disconnect();
     };
-  }, []);
+  }, [syncOrDeferFrameBodyWidth]);
 
   return (
     <section

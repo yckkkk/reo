@@ -15,8 +15,11 @@ import type {
 export type DevWorkspaceScenarioName = 'memory-studio-rich';
 
 const DEV_SCENARIO_QUERY_PARAM = 'reoScenario';
+const DEV_SCENARIO_SEGMENT_COUNT_QUERY_PARAM = 'reoSegmentCount';
 const DEV_SCENARIO_BRIDGE_MARKER = '__reoDevWorkspaceScenarioBridge';
 const MEMORY_STUDIO_RICH_SCENARIO_ID = 'dev-memory-studio-rich';
+const MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT = 2;
+const MEMORY_STUDIO_RICH_MAX_SEGMENT_COUNT = 300;
 const BASELINE_HASH = 'd'.repeat(64);
 const BASELINE_TIPTAP_HASH = 'e'.repeat(64);
 const CREATED_AT = '2026-05-24T09:00:00.000Z';
@@ -71,6 +74,25 @@ export function readDevWorkspaceScenarioName(
   return scenario === 'memory-studio-rich' ? scenario : null;
 }
 
+export function readDevWorkspaceScenarioSegmentCount(
+  search = typeof window === 'undefined' ? '' : window.location.search
+): number {
+  const value = new URLSearchParams(search).get(DEV_SCENARIO_SEGMENT_COUNT_QUERY_PARAM);
+  if (!value) {
+    return MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT;
+  }
+
+  const count = Number(value);
+  if (!Number.isInteger(count)) {
+    return MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT;
+  }
+
+  return Math.min(
+    MEMORY_STUDIO_RICH_MAX_SEGMENT_COUNT,
+    Math.max(MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT, count)
+  );
+}
+
 export function readAutoOpenDevWorkspaceScenarioName(): DevWorkspaceScenarioName | null {
   if (!import.meta.env.DEV) {
     return null;
@@ -115,7 +137,9 @@ export function installDevWorkspaceScenarioBridge(): DevWorkspaceScenarioName | 
   }
 
   const bridge = markDevWorkspaceScenarioBridge(
-    createDevWorkspaceScenarioBridge(createMemoryStudioRichScenario()),
+    createDevWorkspaceScenarioBridge(
+      createMemoryStudioRichScenario(readDevWorkspaceScenarioSegmentCount())
+    ),
     scenarioName
   );
   Object.defineProperty(window, 'reoWorkspace', {
@@ -161,7 +185,7 @@ type MemoryStudioRichScenario = {
   readonly supplementNoteContent: WorkspaceNoteSegmentSupplementContent;
 };
 
-function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
+function createMemoryStudioRichScenario(segmentCount: number): MemoryStudioRichScenario {
   const audio = createVisibleWaveformWavBytes();
   const audioByteLength = audio.byteLength;
   const audioSegmentContentTabOrder: Array<'segment' | `supplement:${string}`> = [
@@ -169,17 +193,21 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
     'supplement:sup_dev_followup_audio',
     'supplement:sup_dev_followup_note',
   ];
+  const safeSegmentCount = Math.min(
+    MEMORY_STUDIO_RICH_MAX_SEGMENT_COUNT,
+    Math.max(MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT, segmentCount)
+  );
   const memory = {
     memoryId: 'mem_dev_ui_review',
     title: '浏览器调试记忆',
     createdAt: CREATED_AT,
     updatedAt: UPDATED_AT,
-    segmentCount: 3,
-    noteSegmentCount: 1,
+    segmentCount: safeSegmentCount,
+    noteSegmentCount: safeSegmentCount - 1,
     artifactSegmentCount: 0,
-    audioSegmentCount: 2,
-    audioDurationMs: 202_000,
-    audioByteLength: audioByteLength * 2,
+    audioSegmentCount: 1,
+    audioDurationMs: 82_000,
+    audioByteLength,
     hasAudioTranscript: true,
     hasAnyNote: true,
     supplementCount: 2,
@@ -241,10 +269,14 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
     supplementCount: 0,
     supplements: [],
   };
+  const generatedNoteSegments = Array.from(
+    { length: safeSegmentCount - MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT },
+    (_, index) => createGeneratedNoteSegment(index + MEMORY_STUDIO_RICH_BASE_SEGMENT_COUNT, memory)
+  );
   const detail: WorkspaceMemoryDetail = {
     ...memory,
     workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
-    segments: [audioSegment, noteSegment],
+    segments: [audioSegment, noteSegment, ...generatedNoteSegments],
   };
   const workspaceWidget = {
     workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
@@ -423,6 +455,26 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
   };
 }
 
+function createGeneratedNoteSegment(index: number, memory: { readonly memoryId: string }) {
+  const minute = String(index % 60).padStart(2, '0');
+  const title = `压力测试笔记 ${index}`;
+
+  return {
+    workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+    memoryId: memory.memoryId,
+    segmentId: `seg_dev_note_${index}`,
+    type: 'note' as const,
+    title,
+    contentTitle: '正文',
+    createdAt: `2026-05-24T10:${minute}:00.000Z`,
+    updatedAt: `2026-05-24T10:${minute}:30.000Z`,
+    bodyByteLength: byteLength(`${NOTE_BODY}\n\n${title}`),
+    speechSynthesis: MISSING_SPEECH_SYNTHESIS,
+    supplementCount: 0,
+    supplements: [],
+  } satisfies WorkspaceMemoryDetail['segments'][number];
+}
+
 function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): ReoWorkspaceBridge {
   const ok = <TValue>(value: TValue) => Promise.resolve({ ok: true as const, value });
   const unsupported = (message = 'Dev scenario bridge does not implement this action') =>
@@ -558,8 +610,24 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     writeSegmentSupplementNoteDraftBody: () => unsupported(),
     finalizeNoteSegmentDraft: () => unsupported(),
     finalizeSegmentSupplementNoteDraft: () => unsupported(),
-    readSegmentContent: (payload: Parameters<ReoWorkspaceBridge['readSegmentContent']>[0]) =>
-      ok({ ...scenario.noteContent, requestId: payload.requestId }),
+    readSegmentContent: (payload: Parameters<ReoWorkspaceBridge['readSegmentContent']>[0]) => {
+      const segment = scenario.detail.segments.find(
+        (candidate) => candidate.type === 'note' && candidate.segmentId === payload.segmentId
+      );
+      const bodyMarkdown =
+        segment && segment.segmentId !== scenario.noteContent.segmentId
+          ? `${NOTE_BODY}\n\n${segment.title}`
+          : scenario.noteContent.bodyMarkdown;
+
+      return ok({
+        ...scenario.noteContent,
+        requestId: payload.requestId,
+        segmentId: payload.segmentId,
+        title: segment?.contentTitle ?? scenario.noteContent.title,
+        bodyMarkdown,
+        bodyByteLength: byteLength(bodyMarkdown),
+      });
+    },
     readSegmentSupplementContent: (
       payload: Parameters<ReoWorkspaceBridge['readSegmentSupplementContent']>[0]
     ) => ok({ ...scenario.supplementNoteContent, requestId: payload.requestId }),
