@@ -6,8 +6,10 @@ import type {
   WorkspaceMemorySpace,
   WorkspaceNoteSegmentContent,
   WorkspaceNoteSegmentSupplementContent,
+  WorkspaceRecentExpressionItem,
   WorkspaceSession,
   WorkspaceSnapshot,
+  WorkspaceSystemDraftProjection,
 } from './workspace/workspaceApi';
 
 export type DevWorkspaceScenarioName = 'memory-studio-rich';
@@ -151,8 +153,10 @@ type MemoryStudioRichScenario = {
   readonly audioContent: WorkspaceFinalizedAudioSegmentContent;
   readonly audioSupplementContent: WorkspaceFinalizedAudioSegmentSupplementContent;
   readonly detail: WorkspaceMemoryDetail;
+  readonly draft: WorkspaceSystemDraftProjection;
   readonly memorySpace: WorkspaceMemorySpace;
   readonly noteContent: WorkspaceNoteSegmentContent;
+  readonly recentExpressions: readonly WorkspaceRecentExpressionItem[];
   readonly session: WorkspaceSession;
   readonly supplementNoteContent: WorkspaceNoteSegmentSupplementContent;
 };
@@ -264,6 +268,70 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
     memories: [memory],
     widgets: [workspaceWidget],
   };
+  const recentExpressions: readonly WorkspaceRecentExpressionItem[] = [
+    {
+      id: `${MEMORY_STUDIO_RICH_SCENARIO_ID}:${memory.memoryId}:${noteSegment.segmentId}`,
+      workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+      workspaceTitle: snapshot.title,
+      memoryId: memory.memoryId,
+      memoryTitle: memory.title,
+      segmentId: noteSegment.segmentId,
+      objectType: 'segment',
+      contentKind: 'note',
+      title: noteSegment.contentTitle,
+      preview: '页面观察这条笔记用于验证 note segment',
+      cover: { source: 'default' },
+      createdAt: noteSegment.createdAt,
+      updatedAt: noteSegment.updatedAt,
+    },
+    {
+      id: `${MEMORY_STUDIO_RICH_SCENARIO_ID}:${memory.memoryId}:${audioSegment.segmentId}:sup_dev_followup_note`,
+      workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+      workspaceTitle: snapshot.title,
+      memoryId: memory.memoryId,
+      memoryTitle: memory.title,
+      segmentId: audioSegment.segmentId,
+      supplementId: 'sup_dev_followup_note',
+      objectType: 'supplement',
+      contentKind: 'note',
+      title: '补充笔记：界面审查重点',
+      preview: '补充笔记用于验证内容 tab 切换',
+      cover: { source: 'default' },
+      createdAt: '2026-05-24T09:14:00.000Z',
+      updatedAt: '2026-05-24T09:15:00.000Z',
+    },
+    {
+      id: `${MEMORY_STUDIO_RICH_SCENARIO_ID}:${memory.memoryId}:${audioSegment.segmentId}:sup_dev_followup_audio`,
+      workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+      workspaceTitle: snapshot.title,
+      memoryId: memory.memoryId,
+      memoryTitle: memory.title,
+      segmentId: audioSegment.segmentId,
+      supplementId: 'sup_dev_followup_audio',
+      objectType: 'supplement',
+      contentKind: 'audio',
+      title: '第二轮追问录音',
+      preview: '补充录音记录了第二轮观察',
+      cover: { source: 'default' },
+      createdAt: '2026-05-24T09:12:00.000Z',
+      updatedAt: '2026-05-24T09:13:00.000Z',
+    },
+    {
+      id: `${MEMORY_STUDIO_RICH_SCENARIO_ID}:${memory.memoryId}:${audioSegment.segmentId}`,
+      workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+      workspaceTitle: snapshot.title,
+      memoryId: memory.memoryId,
+      memoryTitle: memory.title,
+      segmentId: audioSegment.segmentId,
+      objectType: 'segment',
+      contentKind: 'audio',
+      title: audioSegment.contentTitle,
+      preview: '这是一段用于浏览器调试的真实状态转录',
+      cover: { source: 'default' },
+      createdAt: audioSegment.createdAt,
+      updatedAt: audioSegment.updatedAt,
+    },
+  ];
 
   return {
     audio,
@@ -299,6 +367,17 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       },
     },
     detail,
+    draft: {
+      workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
+      title: '草稿',
+      systemRole: 'draft-space',
+      defaultMemoryId: memory.memoryId,
+      capabilities: {
+        canCreateMemory: true,
+        canRemove: false,
+        canRename: false,
+      },
+    },
     memorySpace: {
       workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
       title: snapshot.title,
@@ -320,6 +399,7 @@ function createMemoryStudioRichScenario(): MemoryStudioRichScenario {
       baselineTiptapContentHash: BASELINE_TIPTAP_HASH,
       speechSynthesis: MISSING_SPEECH_SYNTHESIS,
     },
+    recentExpressions,
     session: {
       workspaceHandle: 'dev-scenario-workspace-handle',
       workspaceId: MEMORY_STUDIO_RICH_SCENARIO_ID,
@@ -357,6 +437,21 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
   return {
     chooseDirectory: () => ok({ status: 'canceled' as const }),
     listMemorySpaces: () => ok({ memorySpaces: [scenario.memorySpace] }),
+    readSystemDraftWorkspace: () => ok({ draft: scenario.draft }),
+    openSystemDraftWorkspace: () =>
+      ok({
+        ...scenario.session,
+        defaultMemoryId: scenario.draft.defaultMemoryId,
+        draft: scenario.draft,
+      }),
+    readRecentExpressions: (payload: Parameters<ReoWorkspaceBridge['readRecentExpressions']>[0]) =>
+      ok({
+        items: scenario.recentExpressions.slice(
+          0,
+          payload.limit ?? scenario.recentExpressions.length
+        ),
+        skipped: [],
+      }),
     initializeWorkspace: () => ok(scenario.session),
     openWorkspace: () => ok(scenario.session),
     openMemorySpace: (payload: Parameters<ReoWorkspaceBridge['openMemorySpace']>[0]) =>

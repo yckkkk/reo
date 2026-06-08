@@ -145,7 +145,7 @@ P0-P6 是 audio + note + artifact first slice 基础表达的 enabling phase。R
 - **.reo/REO.md + users.md 模板与 skills 目录**：Reo 托管 `.reo/REO.md` 和官方 skills；root `AGENTS.md` 只作为一次性指针或用户自带规则存在，不作为 Reo 更新目标。Workspace root 的 `users.md` 模板由 Reo 出厂 + 首次启动引导用户填写，承担"用户是谁 / 长期目标 / 偏好"的个人 context 层。默认 skills 分两层：原子 skill 共 8 项（引导 / 回顾 / 整理总结 / runtime widget 生成 + 默认洞察 / 价值澄清 / 二阶思考 / 逆向思考），use-xxx 组合 skill 共 3 项（`use-学习闭环` / `use-记忆回顾循环` / `use-内容创作支援`）。skill 组合是 agent 责任，不是用户责任。skills 是 Reo 对外差异化的核心承担物——Flomo 付费 AI 视角在 Reo 都是 skills 自定义免费。
 - **Prompt-bridge UI**：Workspace、Memory、Segment、SegmentSupplement、runtime widget 的 Entity More 菜单上统一 `agent 操作 ▸` 子菜单，prompt 复制到剪贴板。结构允许未来 agent 内嵌时无重构演化。
 - **Shared Generative Runtime**：作品和 widget 共用的 runtime object 能力层。作品挂载在 Segment / SegmentSupplement；当前 widget 首个挂载点是 Workspace rail，未来可扩展到 Home、Memory panel/tab 等位置。Runtime 默认支持完整 Web app 能力、每对象 origin、可见 JSON state、`window.reo` typed bridge、agent prompt action、模板和脚本；Reo 不提供作品 key/token/value 管理层。日历、时间线、成长册、关系曲线、概念时间线等都应复用同一 runtime，不重建 widget 专用能力层。
-- **Gallery**：Workspace 级别独立页面，与 Home / Loaded Workspace 同级。Gallery 内部走马灯艺术 tab + 列表 tab；走马灯艺术 tab 跨模态混合呈现（录音 + 视频 + 照片节奏感切换），是 craft 不变量的核心承担页之一。
+- **Gallery 深化**：当前 Gallery 已作为 AppShell 顶层 audio/note 球形流落地。长期轨道是在保留当前跨记忆空间回顾入口的基础上，扩展到跨模态混合呈现、清晰列表视图和更完整的走马灯 / 回顾 mechanics；这些深化必须继续复用同一 Memory / Segment / SegmentSupplement 真源，不建立第二套 Gallery 数据模型。
 - **作品 Segment / SegmentSupplement 深化**：agent 生成的报告、工具、仪表盘、复习表、待办、游戏、原型和其它小型 Web app 以 `artifact` 产品类型落到现有 Segment / SegmentSupplement 信息架构，并复用当前 Shared Generative Runtime 能力层继续扩展 craft 与模板质量。
 
 实施时序与完成门槛由该轨道启动时的 initiative 与 spec 定义。本路线图只确立轨道存在和范围。

@@ -28,6 +28,7 @@ import {
   type WorkspaceRecentExpressionItem,
   type WorkspaceRecentExpressionSkipped,
 } from './workspaceApi';
+import type { WorkspaceContentKind } from '../../../workspace-contract/workspace-contract';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
 const WORKSPACE_CONTENT_QUERY_GC_TIME_MS = 5 * 60_000;
@@ -974,23 +975,48 @@ export function recentExpressionsQueryRootKey() {
   return ['workspace', 'recent-expressions'] as const;
 }
 
-export function recentExpressionsQueryKey({ limit }: { readonly limit?: number } = {}) {
-  return [...recentExpressionsQueryRootKey(), limit ?? 'default'] as const;
+function canonicalRecentExpressionContentKinds(
+  contentKinds: readonly WorkspaceContentKind[] | undefined
+): readonly WorkspaceContentKind[] | undefined {
+  return contentKinds ? [...new Set(contentKinds)].sort() : undefined;
+}
+
+export function recentExpressionsQueryKey({
+  contentKinds,
+  limit,
+}: { readonly contentKinds?: readonly WorkspaceContentKind[]; readonly limit?: number } = {}) {
+  const canonicalContentKinds = canonicalRecentExpressionContentKinds(contentKinds);
+  return [
+    ...recentExpressionsQueryRootKey(),
+    limit ?? 'default',
+    canonicalContentKinds?.join(',') ?? 'all',
+  ] as const;
 }
 
 export function recentExpressionsQueryOptions({
+  contentKinds,
   enabled = true,
   limit,
-}: { readonly enabled?: boolean; readonly limit?: number } = {}) {
+}: {
+  readonly contentKinds?: readonly WorkspaceContentKind[];
+  readonly enabled?: boolean;
+  readonly limit?: number;
+} = {}) {
+  const canonicalContentKinds = canonicalRecentExpressionContentKinds(contentKinds);
   return queryOptions({
     enabled,
-    queryKey:
-      limit === undefined ? recentExpressionsQueryKey() : recentExpressionsQueryKey({ limit }),
+    queryKey: recentExpressionsQueryKey({
+      ...(canonicalContentKinds ? { contentKinds: canonicalContentKinds } : {}),
+      ...(limit !== undefined ? { limit } : {}),
+    }),
     queryFn: async (): Promise<{
       readonly items: readonly WorkspaceRecentExpressionItem[];
       readonly skipped: readonly WorkspaceRecentExpressionSkipped[];
     }> => {
-      const result = await readRecentExpressions(limit === undefined ? {} : { limit });
+      const result = await readRecentExpressions({
+        ...(canonicalContentKinds ? { contentKinds: [...canonicalContentKinds] } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+      });
 
       if (!result.ok) {
         throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载近期表达。'));

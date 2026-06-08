@@ -69,7 +69,7 @@
 - Sidebar 左下角设置入口由 App 拥有的 app mode 切换驱动：非录音状态点击「设置」进入 settings mode，录音状态点击保持当前 app mode 并使用 root toast 提示先完成或关闭录音。Settings trigger 读取 app-scoped `['settings', 'voice']` 查询，且仅在 ASR 或 TTS split validation code 为 `auth` 时在齿轮图标上叠加凭证失效红点；settings snapshot 未知、`ok` 或 `network` 时不显示红点。AppShell 只暴露 settings trigger，不持有应用 route state。
 - 当前 `AppShell` 有 48px 无边框 titlebar shell slot；titlebar 保持透明 Electron drag region，不画分隔线。窗口控制和 sidebar hide/show control 属于该层。
 - AppShell root 和主内容 panel 使用 `bg-background`；左侧 sidebar 使用 `bg-card`；两者在交界处直接相邻，不增加 underlay、合成层、左侧投影或额外边界。
-- AppShell sidebar 顶层 IA 顺序是 `首页`、`画廊`、`草稿`，然后是普通 `记忆空间` 列表。`草稿` 是固定 system Draft 入口，不渲染在普通 memory space list 中；`画廊` 当前是顶层 placeholder 页面。首页、画廊、草稿和 Memory Space list row 共用 32px 高度、`reo-squircle rounded-md`、`bg-secondary text-foreground` 选中填充；inactive/hover/focus-within 只在同一 row recipe 上改变灰阶，不让 Memory Space list item 维护第二套 active 填充形态。
+- AppShell sidebar 顶层 IA 顺序是 `首页`、`画廊`、`草稿`，然后是普通 `记忆空间` 列表。`草稿` 是固定 system Draft 入口，不渲染在普通 memory space list 中；`画廊` 是顶层全局录音/笔记画廊，只消费 recent expression feed 的 audio/note Segment 与 SegmentSupplement，使用所属 Segment cover、标题和正文摘要渲染球形瀑布流，不展示作品，也不显示额外页面标题或说明文案。画廊用骨架卡片填补不足 50 个的球面槽位，用户在非真实内容卡片区域拖拽时可横向旋转球面；hover/click hit-test 先按球面行模型定位，再只在当前行及相邻行选择可见前景卡片。首页、画廊、草稿和 Memory Space list row 共用 32px 高度、`reo-squircle rounded-md`、`bg-secondary text-foreground` 选中填充；inactive/hover/focus-within 只在同一 row recipe 上改变灰阶，不让 Memory Space list item 维护第二套 active 填充形态。
 - 主内容 panel 同步保留 48px panel titlebar slot；panel titlebar 只是 page panel 内的高度占位，不建立独立实色 surface。
 - Sidebar hide/show control 使用 AppShell 内部几何常量定位，对齐原生 macOS traffic-light 行；这些数值不进入全局 design token。
 - Sidebar 宽度可拖拽，最小 240px，最大 520px；covered 状态是主内容面板的 `left` 归零并覆盖 sidebar。

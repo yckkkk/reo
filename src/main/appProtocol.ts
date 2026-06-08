@@ -33,7 +33,9 @@ type AttachmentRootResolution =
     }
   | { readonly ok: false };
 
-type AttachmentRootResolver = (workspaceId: string) => AttachmentRootResolution;
+type AttachmentRootResolver = (
+  workspaceId: string
+) => AttachmentRootResolution | Promise<AttachmentRootResolution>;
 
 const denyAttachmentRoot: AttachmentRootResolver = () => ({ ok: false });
 const denyArtifactRoot: ArtifactRootResolver = () => ({ ok: false });
@@ -41,6 +43,7 @@ const denyArtifactRoot: ArtifactRootResolver = () => ({ ok: false });
 export interface RegisterAppShellProtocolOptions {
   readonly resolveArtifactRoot?: ArtifactRootResolver;
   readonly resolveAttachmentRoot?: AttachmentRootResolver;
+  readonly resolveCoverRoot?: AttachmentRootResolver;
 }
 
 export function registerAppShellScheme(): void {
@@ -120,6 +123,7 @@ export function registerAppShellProtocol(): void {
 export function registerAppShellProtocolWithOptions({
   resolveArtifactRoot,
   resolveAttachmentRoot,
+  resolveCoverRoot,
 }: RegisterAppShellProtocolOptions): void {
   if (protocolRegistered) {
     return;
@@ -150,7 +154,8 @@ export function registerAppShellProtocolWithOptions({
     }
     const resolved = await resolveAttachmentProtocolRequest(
       request.url,
-      resolveAttachmentRoot ?? denyAttachmentRoot
+      resolveAttachmentRoot ?? denyAttachmentRoot,
+      resolveCoverRoot ?? resolveAttachmentRoot ?? denyAttachmentRoot
     );
     if (!resolved.ok) {
       return new Response('Not found', { status: 404 });
@@ -207,7 +212,8 @@ function getArtifactVendorRootPath(): string {
 
 async function resolveAttachmentProtocolRequest(
   requestUrl: string,
-  resolveAttachmentRoot: AttachmentRootResolver
+  resolveAttachmentRoot: AttachmentRootResolver,
+  resolveCoverRoot: AttachmentRootResolver = resolveAttachmentRoot
 ): Promise<
   | {
       readonly ok: true;
@@ -229,19 +235,18 @@ async function resolveAttachmentProtocolRequest(
   }
 
   const workspaceId = parsed.hostname;
-  const root = resolveAttachmentRoot(workspaceId);
-  if (!root.ok) {
-    return { ok: false };
-  }
-
   const segments = decodeAttachmentPathSegments(parsed.pathname);
   if (!segments) {
     return { ok: false };
   }
   if (segments[0] === 'memories' && segments.length === 4 && segments[2] === 'cover') {
+    const attachmentRoot = await resolveAttachmentRoot(workspaceId);
+    if (!attachmentRoot.ok) {
+      return { ok: false };
+    }
     try {
       const memoryDirectoryPath = await resolveMemoryDirectory(
-        root.canonicalRoot,
+        attachmentRoot.canonicalRoot,
         segments[1] ?? ''
       );
       const resolved = await resolveMemoryCoverFile({
@@ -265,9 +270,13 @@ async function resolveAttachmentProtocolRequest(
     return { ok: false };
   }
   if (segments.length === 4 && segments[2] === 'cover') {
+    const coverRoot = await resolveCoverRoot(workspaceId);
+    if (!coverRoot.ok) {
+      return { ok: false };
+    }
     try {
       const { segmentDirectory } = await resolveFinalizedSegmentDirectoryFromManifest({
-        rootPath: root.canonicalRoot,
+        rootPath: coverRoot.canonicalRoot,
         workspaceId,
         segmentId: segments[1] ?? '',
       });
@@ -288,9 +297,13 @@ async function resolveAttachmentProtocolRequest(
       return { ok: false };
     }
   }
+  const attachmentRoot = await resolveAttachmentRoot(workspaceId);
+  if (!attachmentRoot.ok) {
+    return { ok: false };
+  }
   if (segments.length === 3) {
     const resolved = await resolveNoteSegmentAttachmentFile({
-      rootPath: root.canonicalRoot,
+      rootPath: attachmentRoot.canonicalRoot,
       workspaceId,
       segmentId: segments[1] ?? '',
       filename: segments[2] ?? '',
@@ -307,7 +320,7 @@ async function resolveAttachmentProtocolRequest(
   }
   if (segments.length === 5 && segments[2] === 'supplements') {
     const resolved = await resolveNoteSegmentSupplementAttachmentFile({
-      rootPath: root.canonicalRoot,
+      rootPath: attachmentRoot.canonicalRoot,
       workspaceId,
       segmentId: segments[1] ?? '',
       supplementId: segments[3] ?? '',

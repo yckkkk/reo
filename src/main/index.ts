@@ -32,6 +32,7 @@ import {
   closeAllWorkspaceHandles,
   registerWorkspaceIpc,
   resolveActiveWorkspaceRootForProtocol,
+  resolveWorkspaceCoverRootForProtocol,
 } from './workspaceIpc.js';
 import { bindWorkspaceHandleLifecycle } from './workspaceHandleLifecycle.js';
 
@@ -161,6 +162,7 @@ app
     registerAppShellProtocolWithOptions({
       resolveAttachmentRoot: resolveActiveWorkspaceRootForProtocol,
       resolveArtifactRoot: resolveActiveWorkspaceRootForProtocol,
+      resolveCoverRoot: resolveWorkspaceCoverRootForProtocol,
     });
     createWindow();
 

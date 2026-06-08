@@ -186,6 +186,9 @@ import {
   workspaceSnapshotQueryKey,
 } from './workspace/workspaceQueries';
 
+const HOME_RECENT_EXPRESSION_LIMIT = 12;
+const LIBRARY_RECENT_EXPRESSION_FETCH_LIMIT = 300;
+
 type WorkspaceView =
   | { readonly name: 'home' }
   | { readonly name: 'workspace-stage' }
@@ -1003,8 +1006,14 @@ export function App() {
   const recentExpressionsQuery = useQuery(
     recentExpressionsQueryOptions({
       enabled:
-        appMode === 'app' && workspaceView.name === 'home' && systemDraftWorkspaceQuery.isSuccess,
-      limit: 12,
+        appMode === 'app' &&
+        (workspaceView.name === 'home' || workspaceView.name === 'library') &&
+        systemDraftWorkspaceQuery.isSuccess,
+      limit:
+        workspaceView.name === 'library'
+          ? LIBRARY_RECENT_EXPRESSION_FETCH_LIMIT
+          : HOME_RECENT_EXPRESSION_LIMIT,
+      ...(workspaceView.name === 'library' ? { contentKinds: ['audio', 'note'] } : {}),
     })
   );
   const voiceSettingsQuery = useQuery(voiceSettingsQueryOptions());
@@ -2666,7 +2675,14 @@ export function App() {
           activeSection={workspaceView.name === 'library' ? 'library' : 'home'}
         >
           {workspaceView.name === 'library' ? (
-            <WorkspaceLibraryPage />
+            <WorkspaceLibraryPage
+              expressions={recentExpressionItems}
+              expressionsStatus={homeRecentExpressionsStatus}
+              skippedCount={recentExpressionsQuery.data?.skipped.length ?? 0}
+              onOpenExpression={(expression) => {
+                void openRecentExpression(expression);
+              }}
+            />
           ) : (
             <WorkspaceStarterHome
               onOpenRecentExpression={handleOpenRecentExpression}

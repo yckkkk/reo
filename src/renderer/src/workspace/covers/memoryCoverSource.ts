@@ -104,7 +104,7 @@ export function resolveSegmentCoverImageSource({
   segment,
   workspaceId,
 }: {
-  readonly segment: WorkspaceSegmentProjection;
+  readonly segment: Pick<WorkspaceSegmentProjection, 'cover' | 'segmentId'>;
   readonly workspaceId: string;
 }): string {
   if (segment.cover?.source === 'custom') {

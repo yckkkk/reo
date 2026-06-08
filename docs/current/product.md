@@ -28,7 +28,7 @@ Reo 的价值在跨模态主题容器中长期成立。典型 Memory 形态：
 
 Workspace 是用户选择的文件空间根；Memory、Segment 和 SegmentSupplement 是用户内容文件空间节点：稳定 id 负责身份，文件夹名称负责用户可见命名，Markdown/frontmatter 承载语义镜像，`.reo/objects/*` manifest 承载技术完整性。用户在文件管理器里直接重命名合法内容节点后，Reo 重新读取时按文件夹名称投影 UI；用户重命名 Workspace root 后，Reo 通过 stable workspaceId 重新定位已导入记忆空间。
 
-当前已实现的 Segment 类型是 `audio`、`note` 和 `artifact`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充、`note` 笔记补充和 `artifact` 作品补充；当前已实现的 Workspace-level runtime object 是 `widget`，首个挂载点是右侧 rail。`artifact` 的用户可见名是作品，首个入口技术是 `html`，创建和更新都通过 prompt-bridge 让外部 agent 写入文件。作品和 widget 都是用户拥有的小型 Web app：bundle 使用 `entry.html`、`runtime.json`、`state.json` 和 `assets/`，可使用普通 Web 网络、browser storage 和显式 `window.reo` bridge。`photo`、`video`、`imported_file` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Shared Generative Runtime 是当前作品和 widget runtime 的能力层；Home/Memory 级 widget 挂载 UI 仍需独立 spec。Gallery 走马灯渲染同样需要独立 spec 才能进入 runtime。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note + artifact first slice 是 enabling phase，不是 Reo 终局形态。
+当前已实现的 Segment 类型是 `audio`、`note` 和 `artifact`；当前已实现的 SegmentSupplement 类型是 `audio` 录音补充、`note` 笔记补充和 `artifact` 作品补充；当前已实现的 Workspace-level runtime object 是 `widget`，首个挂载点是右侧 rail。`artifact` 的用户可见名是作品，首个入口技术是 `html`，创建和更新都通过 prompt-bridge 让外部 agent 写入文件。作品和 widget 都是用户拥有的小型 Web app：bundle 使用 `entry.html`、`runtime.json`、`state.json` 和 `assets/`，可使用普通 Web 网络、browser storage 和显式 `window.reo` bridge。`photo`、`video`、`imported_file` 和其他 Segment / SegmentSupplement 类型进入 runtime 前必须先定义文件合同、IPC contract、查询更新和恢复路径。Shared Generative Runtime 是当前作品和 widget runtime 的能力层；Home/Memory 级 widget 挂载 UI 仍需独立 spec。Gallery 当前已落地为 AppShell 顶层 audio/note 球形流；跨模态回顾、双 tab 或更完整走马灯 mechanics 属于长期 Gallery 轨道。**Reo 完整产品形态需要多模态 Segment 类型全部实现**；当前 audio + note + artifact first slice 是 enabling phase，不是 Reo 终局形态。
 
 Reo 的核心目标是让 agent 与用户共同围绕主题积累跨模态材料，并把材料转化成只属于用户的作品。用户负责表达、思考、判断，agent 负责筛选、整理、深化、生成、引导用户用最合适的模态做下一步补充（补录音 / 拍照 / 写笔记 / 上传文件）。原始材料不被假设为资产，价值在 agent 与用户共同筛选、深化、转化成作品之后才出现。SegmentSupplement 既是用户主动的多模态补充，也是 agent 引导更深表达的载体。
 
@@ -70,12 +70,7 @@ Home 当前是全局入口 shell，不承载 Workspace 内的 Memory 导航，�
 
 ### Gallery 定位
 
-Gallery 是 Workspace 级别独立页面，承载跨 Memory 的沉浸式回顾和清晰信息呈现。Gallery 内部两个 tab：
-
-- **走马灯艺术 tab**：沉浸式记忆走马灯，记忆片段的录音 / 视频 / 图片以视觉听觉节奏感呈现和消失。走马灯艺术 tab 是 craft 不变量的核心承担页之一。
-- **列表 tab**：跨 Memory 的清晰信息呈现，承担资料库式的清单查阅职责。
-
-Gallery 当前不是 runtime surface，也不是 AppShell 当前 route。落地由独立 spec 处理；本节只记录信息架构定位。
+Gallery 是 AppShell 顶层页面，承载跨记忆空间的沉浸式回顾。当前 Gallery 只展示 finalized audio/note Segment 与 SegmentSupplement，不展示 artifact；视觉形态是球形瀑布流，卡片使用所属 Segment cover、标题和正文摘要，点击后打开来源记忆空间并聚焦对应对象。Gallery 不是 runtime surface。
 
 ### Loaded Workspace
 

@@ -7,6 +7,7 @@ import {
   ensureSystemDraftWorkspace,
   getSystemDraftWorkspaceRootPath,
   getSystemDraftWorkspaceStorePath,
+  resolveSystemDraftWorkspaceRootForRead,
   SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
   SYSTEM_DRAFT_TITLE,
   SYSTEM_DRAFT_WORKSPACE_ID,
@@ -113,6 +114,67 @@ test('ensureSystemDraftWorkspace rejects an unsafe symlink Draft root', async ()
       appDataDir,
       now: () => '2026-06-06T20:45:00.000-07:00',
     });
+
+    assert.equal(result.ok, false);
+    if (result.ok) {
+      return;
+    }
+    assert.equal(result.error.code, 'ERR_WORKSPACE_UNSAFE_PATH');
+    assert.equal((await lstat(rootPath)).isSymbolicLink(), true);
+  } finally {
+    await cleanup(appDataDir);
+    await cleanup(outside);
+  }
+});
+
+test('resolveSystemDraftWorkspaceRootForRead returns the canonical safe Draft root', async () => {
+  const appDataDir = await makeAppDataDir();
+  try {
+    const ensured = await ensureSystemDraftWorkspace({
+      appDataDir,
+      now: () => '2026-06-06T20:45:00.000-07:00',
+    });
+    assert.equal(ensured.ok, true);
+
+    const result = await resolveSystemDraftWorkspaceRootForRead(appDataDir);
+
+    assert.equal(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+    assert.equal(result.canonicalRoot, await realpath(getSystemDraftWorkspaceRootPath(appDataDir)));
+  } finally {
+    await cleanup(appDataDir);
+  }
+});
+
+test('resolveSystemDraftWorkspaceRootForRead rejects a missing Draft root without creating it', async () => {
+  const appDataDir = await makeAppDataDir();
+  try {
+    const rootPath = getSystemDraftWorkspaceRootPath(appDataDir);
+
+    const result = await resolveSystemDraftWorkspaceRootForRead(appDataDir);
+
+    assert.equal(result.ok, false);
+    if (result.ok) {
+      return;
+    }
+    assert.equal(result.error.code, 'ERR_WORKSPACE_ROOT_MISSING');
+    await assert.rejects(lstat(rootPath));
+  } finally {
+    await cleanup(appDataDir);
+  }
+});
+
+test('resolveSystemDraftWorkspaceRootForRead rejects an unsafe symlink Draft root', async () => {
+  const appDataDir = await makeAppDataDir();
+  const outside = await makeAppDataDir();
+  try {
+    const rootPath = getSystemDraftWorkspaceRootPath(appDataDir);
+    await mkdir(path.dirname(rootPath), { recursive: true });
+    await symlink(outside, rootPath);
+
+    const result = await resolveSystemDraftWorkspaceRootForRead(appDataDir);
 
     assert.equal(result.ok, false);
     if (result.ok) {

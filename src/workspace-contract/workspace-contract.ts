@@ -50,6 +50,7 @@ export const VOICE_SPEECH_SYNTHESIS_RESOURCE_ID = 'seed-tts-2.0' as const;
 export const VOICE_SPEECH_SYNTHESIS_SAMPLE_RATE = 24000 as const;
 export const WORKSPACE_CONTENT_KINDS = ['audio', 'note', 'artifact'] as const;
 export type WorkspaceContentKind = (typeof WORKSPACE_CONTENT_KINDS)[number];
+export const WORKSPACE_RECENT_EXPRESSIONS_MAX_LIMIT = 300;
 export const FINALIZE_TRANSCRIPTION_ATTEMPTS = [
   'failed',
   'never',
@@ -878,7 +879,12 @@ export const workspaceOpenSystemDraftWorkspaceResponseSchema = z.discriminatedUn
 ]);
 
 export const workspaceReadRecentExpressionsRequestSchema = z.strictObject({
-  limit: z.number().int().min(1).max(50).optional(),
+  contentKinds: z
+    .array(z.enum(WORKSPACE_CONTENT_KINDS))
+    .min(1)
+    .max(WORKSPACE_CONTENT_KINDS.length)
+    .optional(),
+  limit: z.number().int().min(1).max(WORKSPACE_RECENT_EXPRESSIONS_MAX_LIMIT).optional(),
 });
 
 const workspaceRecentExpressionBaseSchema = z.strictObject({
@@ -891,6 +897,7 @@ const workspaceRecentExpressionBaseSchema = z.strictObject({
   contentKind: z.enum(WORKSPACE_CONTENT_KINDS),
   title: z.string(),
   preview: z.string().optional(),
+  cover: workspaceCoverProjectionSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

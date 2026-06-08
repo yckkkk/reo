@@ -1510,6 +1510,29 @@ describe('App', () => {
 
   it('opens the workspace library page from the sidebar', async () => {
     const user = userEvent.setup();
+    reoWorkspace.readRecentExpressions.mockResolvedValue({
+      ok: true,
+      value: {
+        items: [
+          {
+            id: 'recent-gallery-note',
+            workspaceId: 'ws_system_draft',
+            workspaceTitle: '草稿',
+            memoryId: 'mem_system_draft',
+            memoryTitle: '草稿',
+            segmentId: 'seg_gallery_note',
+            contentKind: 'note',
+            objectType: 'segment',
+            title: '产品判断笔记',
+            preview: '整理今日产品判断。',
+            cover: { source: 'default', templateId: 'cover-01' },
+            createdAt: '2026-06-06T20:55:00.000Z',
+            updatedAt: '2026-06-06T21:00:00.000Z',
+          },
+        ],
+        skipped: [],
+      },
+    });
     render(
       <ReoQueryProvider>
         <App />
@@ -1518,8 +1541,23 @@ describe('App', () => {
 
     await user.click(screen.getByRole('button', { name: '画廊' }));
 
-    expect(screen.getByRole('heading', { name: '画廊' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(reoWorkspace.readRecentExpressions).toHaveBeenLastCalledWith({
+        contentKinds: ['audio', 'note'],
+        limit: 300,
+      })
+    );
+    expect(screen.getByLabelText('录音和笔记')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '今天想记录些什么？' })).not.toBeInTheDocument();
+    const galleryCard = await screen.findByRole('button', {
+      name: '打开内容 产品判断笔记',
+    });
+    expect(galleryCard).toHaveTextContent('整理今日产品判断。');
+
+    galleryCard.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(reoWorkspace.openSystemDraftWorkspace).toHaveBeenCalledOnce());
   });
 
   it('opens the protected system Draft workspace from the sidebar without listing it as a normal memory space', async () => {

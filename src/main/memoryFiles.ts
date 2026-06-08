@@ -58,6 +58,7 @@ import {
   ARTIFACT_RUNTIME_MANIFEST_FILE,
 } from './artifactUrl.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
+import { plainTextFromMarkdown } from './markdownPlainText.js';
 import {
   readFileSpaceNodeCoverProjectionFromDirectory,
   readMemoryCoverProjectionFromDirectory,
@@ -102,8 +103,10 @@ import {
   workspaceSegmentContentTabOrderItemSchema,
   type WorkspaceError,
   type WorkspaceErrorEnvelope,
+  type WorkspaceContentKind,
   type WorkspaceMemoryCoverProjection,
   type WorkspaceMemoryDetailProjection,
+  type WorkspaceRecentExpressionItem,
   type WorkspaceSegmentContentTabOrderItem,
   type WorkspaceSegmentSupplementProjection,
   type WorkspaceSegmentProjection,
@@ -2757,6 +2760,215 @@ export function extractSegmentTranscript(markdownContent: string): string {
   const bodyStart = heading.index + heading[0].length;
   const body = removeHtmlComments(markdownContent.slice(bodyStart));
   return body.replace(/^\r?\n/, '').replace(/\s+$/, '');
+}
+
+const FINALIZED_EXPRESSION_PREVIEW_GRAPHEME_LIMIT = 24;
+
+export type RecentExpressionItemsFromFileTruthRead = {
+  readonly items: readonly RecentExpressionItemFromFileTruth[];
+  readonly skippedMemoryCount: number;
+};
+
+export type RecentExpressionCoverTarget = {
+  readonly segmentDirectory: string;
+  readonly templateId?: WorkspaceDefaultCoverTemplateId | undefined;
+};
+
+export type RecentExpressionItemFromFileTruth = WorkspaceRecentExpressionItem & {
+  readonly coverTarget: RecentExpressionCoverTarget;
+};
+
+function markdownBodyPreview(markdownContent: string): string | undefined {
+  const normalized = plainTextFromMarkdown(markdownContent);
+  if (!normalized) {
+    return undefined;
+  }
+
+  const graphemes = Array.from(normalized);
+  if (graphemes.length <= FINALIZED_EXPRESSION_PREVIEW_GRAPHEME_LIMIT) {
+    return normalized;
+  }
+  return `${graphemes.slice(0, FINALIZED_EXPRESSION_PREVIEW_GRAPHEME_LIMIT).join('')}...`;
+}
+
+export async function readRecentExpressionCoverProjection({
+  segmentDirectory,
+  templateId,
+}: RecentExpressionCoverTarget): Promise<WorkspaceCoverProjection> {
+  return coverProjectionWithDefaultTemplate({
+    cover: await readFileSpaceNodeCoverProjectionFromDirectory(segmentDirectory),
+    templateId,
+  });
+}
+
+async function readRecentSupplementPreview({
+  memoryId,
+  rootPath,
+  segmentId,
+  supplementId,
+}: {
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+}): Promise<string | undefined> {
+  try {
+    const supplementDirectory = await segmentSupplementDirectory(
+      rootPath,
+      memoryId,
+      segmentId,
+      supplementId
+    );
+    const supplementDirectoryIdentity = await readDirectoryIdentity(supplementDirectory);
+    const supplement = await readFinalizedSegmentSupplementMetadata(
+      rootPath,
+      supplementDirectory,
+      supplementDirectoryIdentity
+    );
+    if (supplement.kind === 'artifact') {
+      return undefined;
+    }
+    return markdownBodyPreview(
+      supplement.kind === 'audio'
+        ? extractSegmentTranscript(supplement.markdownContent)
+        : supplement.markdownContent
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+export async function readRecentExpressionItemsFromFileTruth({
+  contentKinds,
+  rootPath,
+  workspaceId,
+  workspaceTitle,
+}: {
+  readonly contentKinds?: readonly WorkspaceContentKind[] | undefined;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly workspaceTitle: string;
+}): Promise<MemoryFilesResult<RecentExpressionItemsFromFileTruthRead>> {
+  try {
+    const allowedKinds = contentKinds ? new Set<WorkspaceContentKind>(contentKinds) : null;
+    const memoriesDirectory = await resolveSafeWorkspaceChild(
+      rootPath,
+      path.join(rootPath, 'memories')
+    );
+    const entries = await readExistingDirectoryEntries(memoriesDirectory);
+    const items: RecentExpressionItemFromFileTruth[] = [];
+    let skippedMemoryCount = 0;
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      try {
+        const memoryDirectoryPath = await resolveSafeWorkspaceChild(
+          rootPath,
+          path.join(memoriesDirectory, entry.name)
+        );
+        const memory = await readMemoryFileTruthFromDirectory(rootPath, memoryDirectoryPath);
+        const fileTruths = await listValidFinalizedSegmentFileTruthsFromMemoryDirectory({
+          rootPath,
+          memoryId: memory.memoryId,
+          memoryDirectoryPath,
+          repairFileSpaceCandidates: false,
+        });
+
+        for (const fileTruth of fileTruths) {
+          if (fileTruth.metadata.workspaceId !== workspaceId) {
+            continue;
+          }
+          const supplements = await listValidSegmentSupplementsFromDirectory({
+            rootPath,
+            workspaceId,
+            memoryId: memory.memoryId,
+            segmentId: fileTruth.segmentId,
+            recordingDirectory: fileTruth.recordingDirectory,
+            repairFileSpaceCandidates: false,
+          });
+          const segmentKind = fileTruth.metadata.kind;
+          const segmentAllowed = !allowedKinds || allowedKinds.has(segmentKind);
+          const allowedSupplements = supplements.filter(
+            (supplement) => !allowedKinds || allowedKinds.has(supplement.type)
+          );
+          if (!segmentAllowed && allowedSupplements.length === 0) {
+            continue;
+          }
+
+          const coverTarget: RecentExpressionCoverTarget = {
+            segmentDirectory: fileTruth.recordingDirectory,
+            templateId: fileTruth.metadata.defaultCoverTemplateId,
+          };
+          const segmentTitle = titleFromFileSpaceDirectoryName({
+            nodeId: fileTruth.segmentId,
+            directoryName: path.basename(fileTruth.recordingDirectory),
+            metadataTitle: fileTruth.metadata.title,
+          });
+          const segmentPreview = markdownBodyPreview(
+            isAudioSegmentFileTruth(fileTruth)
+              ? extractSegmentTranscript(fileTruth.metadata.markdownContent)
+              : fileTruth.metadata.markdownContent
+          );
+
+          if (segmentAllowed) {
+            items.push({
+              id: `${workspaceId}:${memory.memoryId}:${fileTruth.segmentId}`,
+              workspaceId,
+              workspaceTitle,
+              memoryId: memory.memoryId,
+              memoryTitle: memory.title,
+              segmentId: fileTruth.segmentId,
+              objectType: 'segment',
+              contentKind: segmentKind,
+              title: fileTruth.metadata.contentTitle ?? segmentTitle,
+              coverTarget,
+              ...(segmentPreview ? { preview: segmentPreview } : {}),
+              createdAt: fileTruth.metadata.createdAt,
+              updatedAt: fileTruth.metadata.updatedAt ?? fileTruth.metadata.finalizedAt,
+            });
+          }
+
+          for (const supplement of allowedSupplements) {
+            const supplementPreview = await readRecentSupplementPreview({
+              memoryId: memory.memoryId,
+              rootPath,
+              segmentId: fileTruth.segmentId,
+              supplementId: supplement.supplementId,
+            });
+            items.push({
+              id: `${workspaceId}:${memory.memoryId}:${fileTruth.segmentId}:${supplement.supplementId}`,
+              workspaceId,
+              workspaceTitle,
+              memoryId: memory.memoryId,
+              memoryTitle: memory.title,
+              segmentId: fileTruth.segmentId,
+              supplementId: supplement.supplementId,
+              objectType: 'supplement',
+              contentKind: supplement.type,
+              title: supplement.title,
+              coverTarget,
+              ...(supplementPreview ? { preview: supplementPreview } : {}),
+              createdAt: supplement.createdAt,
+              updatedAt: supplement.updatedAt,
+            });
+          }
+        }
+      } catch {
+        skippedMemoryCount += 1;
+      }
+    }
+
+    return { ok: true, value: { items, skippedMemoryCount } };
+  } catch (error) {
+    return memoryFilesError(
+      error,
+      'ERR_WORKSPACE_ROOT_MISSING',
+      'Recent expressions could not be read',
+      'none-written'
+    );
+  }
 }
 
 function removeHtmlComments(markdownContent: string): string {

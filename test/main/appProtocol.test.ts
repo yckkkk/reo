@@ -180,7 +180,7 @@ test('privileged schemes register reo-app, reo-attachment, and reo-render before
   assert.equal(artifactScheme?.privileges.get('stream'), true);
 });
 
-test('main bootstrap wires attachment and artifact protocol roots to the active workspace', () => {
+test('main bootstrap keeps attachments and artifacts active-only while covers can resolve globally', () => {
   const protocolOptions = readObjectArgumentPropertiesForCall(
     'src/main/index.ts',
     'registerAppShellProtocolWithOptions'
@@ -191,6 +191,52 @@ test('main bootstrap wires attachment and artifact protocol roots to the active 
     'resolveActiveWorkspaceRootForProtocol'
   );
   assert.equal(protocolOptions.get('resolveArtifactRoot'), 'resolveActiveWorkspaceRootForProtocol');
+  assert.equal(protocolOptions.get('resolveCoverRoot'), 'resolveWorkspaceCoverRootForProtocol');
+});
+
+test('attachment protocol keeps Memory covers active-only and uses global roots for Segment covers', () => {
+  const sourceText = readFileSync('src/main/appProtocol.ts', 'utf8');
+  const memoryCoverRoute = sourceText.indexOf("segments[0] === 'memories'");
+  const segmentCoverRoute = sourceText.indexOf(
+    "if (segments.length === 4 && segments[2] === 'cover')"
+  );
+  const noteAttachmentRoute = sourceText.indexOf('segments.length === 3');
+
+  assert.notEqual(memoryCoverRoute, -1);
+  assert.notEqual(segmentCoverRoute, -1);
+  assert.notEqual(noteAttachmentRoute, -1);
+  assert.ok(memoryCoverRoute < noteAttachmentRoute);
+  assert.ok(segmentCoverRoute < noteAttachmentRoute);
+  const memoryRouteText = sourceText.slice(memoryCoverRoute, segmentCoverRoute);
+  const segmentRouteText = sourceText.slice(segmentCoverRoute, noteAttachmentRoute);
+
+  assert.match(
+    memoryRouteText,
+    /const attachmentRoot = await resolveAttachmentRoot\(workspaceId\)/
+  );
+  assert.doesNotMatch(memoryRouteText, /resolveCoverRoot\(workspaceId\)/);
+  assert.match(segmentRouteText, /const coverRoot = await resolveCoverRoot\(workspaceId\)/);
+});
+
+test('global cover root resolver revalidates registry roots and caches short-lived results', () => {
+  const sourceText = readFileSync('src/main/workspaceIpc.ts', 'utf8');
+  const resolverStart = sourceText.indexOf(
+    'export async function resolveWorkspaceCoverRootForProtocol'
+  );
+  const resolverEnd = sourceText.indexOf('function createWorkspaceId');
+  assert.notEqual(resolverStart, -1);
+  assert.notEqual(resolverEnd, -1);
+  const resolverText = sourceText.slice(resolverStart, resolverEnd);
+
+  assert.match(resolverText, /workspaceCoverRootCache\.get\(workspaceId\)/);
+  assert.match(resolverText, /workspaceCoverRootCache\.set\(workspaceId,/);
+  assert.match(resolverText, /workspaceCoverRootInFlight\.get\(workspaceId\)/);
+  assert.match(resolverText, /workspaceCoverRootInFlight\.set\(workspaceId,/);
+  assert.match(resolverText, /resolveMemorySpacePaths\(workspaceId,/);
+  assert.doesNotMatch(
+    resolverText,
+    /registered\s*\?\s*\{\s*ok:\s*true,\s*canonicalRoot:\s*registered\.rootPath/
+  );
 });
 
 test('attachment protocol response keeps attachments no-store and caches versioned covers', () => {

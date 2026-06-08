@@ -76,6 +76,33 @@ export function isSystemDraftDefaultMemoryId(memoryId: string): boolean {
   return memoryId === SYSTEM_DRAFT_DEFAULT_MEMORY_ID;
 }
 
+export async function resolveSystemDraftWorkspaceRootForRead(
+  appDataDir: string
+): Promise<{ readonly ok: true; readonly canonicalRoot: string } | WorkspaceErrorEnvelope> {
+  const rootPath = getSystemDraftWorkspaceRootPath(appDataDir);
+  const safeAppData = await assertSafeDirectory(appDataDir);
+  if (!safeAppData.ok) {
+    return safeAppData;
+  }
+
+  const parentDirectory = path.dirname(rootPath);
+  const safeParent = await assertExistingSafeDirectory(parentDirectory, {
+    missingMessage: 'System Draft workspace root is missing',
+  });
+  if (!safeParent.ok) {
+    return safeParent;
+  }
+
+  const safeRoot = await assertExistingSafeDirectory(rootPath, {
+    missingMessage: 'System Draft workspace root is missing',
+  });
+  if (!safeRoot.ok) {
+    return safeRoot;
+  }
+
+  return resolveDraftRootContainment(appDataDir, rootPath);
+}
+
 export async function ensureSystemDraftWorkspace({
   appDataDir,
   now,
@@ -174,13 +201,7 @@ async function ensureSafeDraftRoot(
   if (!safeRoot.ok) {
     return safeRoot;
   }
-  const appDataRealPath = await realpath(appDataDir);
-  const rootRealPath = await realpath(rootPath);
-  const relative = path.relative(appDataRealPath, rootRealPath);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'System Draft workspace root is unsafe');
-  }
-  return { ok: true, canonicalRoot: rootRealPath };
+  return resolveDraftRootContainment(appDataDir, rootPath);
 }
 
 async function assertSafeDirectory(
@@ -195,6 +216,37 @@ async function assertSafeDirectory(
   } catch {
     return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'System Draft directory is unsafe');
   }
+}
+
+async function assertExistingSafeDirectory(
+  directoryPath: string,
+  { missingMessage }: { readonly missingMessage: string }
+): Promise<{ readonly ok: true } | WorkspaceErrorEnvelope> {
+  try {
+    const entry = await lstat(directoryPath);
+    if (!entry.isDirectory() || entry.isSymbolicLink()) {
+      return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'System Draft directory is unsafe');
+    }
+    return { ok: true };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return workspaceError('ERR_WORKSPACE_ROOT_MISSING', missingMessage, 'none-written');
+    }
+    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'System Draft directory is unsafe');
+  }
+}
+
+async function resolveDraftRootContainment(
+  appDataDir: string,
+  rootPath: string
+): Promise<{ readonly ok: true; readonly canonicalRoot: string } | WorkspaceErrorEnvelope> {
+  const appDataRealPath = await realpath(appDataDir);
+  const rootRealPath = await realpath(rootPath);
+  const relative = path.relative(appDataRealPath, rootRealPath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'System Draft workspace root is unsafe');
+  }
+  return { ok: true, canonicalRoot: rootRealPath };
 }
 
 async function readOrCreateSystemDraftStore({

@@ -484,6 +484,7 @@ import {
   ensureSystemDraftWorkspace,
   isSystemDraftDefaultMemoryId,
   isSystemDraftWorkspaceId,
+  resolveSystemDraftWorkspaceRootForRead,
   SYSTEM_DRAFT_DEFAULT_MEMORY_ROLE,
   SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
   SYSTEM_DRAFT_TITLE,
@@ -501,6 +502,18 @@ const defaultHandleStore = createWorkspaceHandleStore();
 const defaultWorkspaceFileTruthWatcherRegistry = createWorkspaceFileTruthWatcherRegistry();
 let defaultMemorySpaceRegistry: WorkspaceMemorySpaceRegistry | null = null;
 const defaultRecordingTranscriptionSessions = createRecordingTranscriptionSessionRegistry();
+const COVER_ROOT_CACHE_TTL_MS = 2_000;
+type WorkspaceCoverRootResolution =
+  | {
+      readonly ok: true;
+      readonly canonicalRoot: string;
+    }
+  | WorkspaceErrorEnvelope;
+const workspaceCoverRootCache = new Map<
+  string,
+  { readonly expiresAt: number; readonly resolution: WorkspaceCoverRootResolution }
+>();
+const workspaceCoverRootInFlight = new Map<string, Promise<WorkspaceCoverRootResolution>>();
 
 interface ShowOpenDirectoryDialogResult {
   readonly canceled: boolean;
@@ -1307,6 +1320,7 @@ async function handleReadRecentExpressionsCore({
   }
 
   const feed = await readRecentExpressionsFromWorkspaceSources({
+    ...(request.data.contentKinds ? { contentKinds: request.data.contentKinds } : {}),
     limit: request.data.limit ?? 12,
     sources,
   });
@@ -2730,6 +2744,76 @@ export function resolveActiveWorkspaceRootForProtocol(workspaceId: string):
     }
   | WorkspaceErrorEnvelope {
   return defaultHandleStore.resolveActiveRoot({ workspaceId });
+}
+
+export async function resolveWorkspaceCoverRootForProtocol(
+  workspaceId: string
+): Promise<WorkspaceCoverRootResolution> {
+  const activeRoot = defaultHandleStore.resolveActiveRoot({ workspaceId });
+  if (activeRoot.ok) {
+    return activeRoot;
+  }
+
+  const cached = workspaceCoverRootCache.get(workspaceId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.resolution;
+  }
+
+  const inFlight = workspaceCoverRootInFlight.get(workspaceId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const resolutionPromise = resolveInactiveWorkspaceCoverRootForProtocol(workspaceId)
+    .then((resolution) => {
+      workspaceCoverRootCache.set(workspaceId, {
+        expiresAt: Date.now() + COVER_ROOT_CACHE_TTL_MS,
+        resolution,
+      });
+      return resolution;
+    })
+    .finally(() => {
+      workspaceCoverRootInFlight.delete(workspaceId);
+    });
+  workspaceCoverRootInFlight.set(workspaceId, resolutionPromise);
+  return resolutionPromise;
+}
+
+async function resolveInactiveWorkspaceCoverRootForProtocol(
+  workspaceId: string
+): Promise<WorkspaceCoverRootResolution> {
+  if (isSystemDraftWorkspaceId(workspaceId)) {
+    const appDataDir = defaultAppDataDir();
+    if (typeof appDataDir !== 'string') {
+      return appDataDir;
+    }
+    return resolveSystemDraftWorkspaceRootForRead(appDataDir);
+  }
+
+  const resolved = await resolveMemorySpacePaths(workspaceId, {
+    registry: getDefaultMemorySpaceRegistry(),
+  });
+  if (resolved.ok) {
+    return { ok: true, canonicalRoot: resolved.value.rootAbsolute };
+  }
+  if (resolved.code === 'ERR_WORKSPACE_ROOT_MISSING') {
+    return workspaceError(
+      'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+      'Memory space was not found',
+      'none-written'
+    );
+  }
+  if (
+    resolved.code === 'ERR_WORKSPACE_METADATA_INVALID' ||
+    resolved.code === 'ERR_WORKSPACE_UNSAFE_PATH'
+  ) {
+    return workspaceError(resolved.code, 'Memory space root is unavailable', 'none-written');
+  }
+  return workspaceError(
+    'ERR_WORKSPACE_ROOT_MISSING',
+    'Memory space root is unavailable',
+    'none-written'
+  );
 }
 
 function createWorkspaceId(): string {

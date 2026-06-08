@@ -1,21 +1,17 @@
-import path from 'node:path';
-import { z } from 'zod';
-import { readMemoryDetailFromFileTruth } from './memoryFiles.js';
-import { readWorkspaceSnapshotFromFileTruth } from './workspaceFiles.js';
-import { readBoundedJsonNoFollow } from './workspaceJsonFile.js';
+import {
+  readRecentExpressionCoverProjection,
+  readRecentExpressionItemsFromFileTruth,
+  type RecentExpressionItemFromFileTruth,
+} from './memoryFiles.js';
 import type {
+  WorkspaceContentKind,
   WorkspaceErrorCode,
   WorkspaceRecentExpressionItem,
   WorkspaceRecentExpressionSkipped,
 } from '../workspace-contract/workspace-contract.js';
 
-const MAX_OBJECT_MANIFEST_BYTES = 65_536;
-const objectManifestTimesSchema = z
-  .object({
-    createdAt: z.string(),
-    updatedAt: z.string(),
-  })
-  .passthrough();
+const RETURN_ITEM_HYDRATION_CONCURRENCY = 12;
+const SOURCE_READ_CONCURRENCY = 3;
 
 export interface RecentExpressionWorkspaceSource {
   readonly rootPath: string;
@@ -24,7 +20,9 @@ export interface RecentExpressionWorkspaceSource {
 }
 
 export interface ReadRecentExpressionsFromWorkspaceSourcesOptions {
+  readonly contentKinds?: readonly WorkspaceContentKind[] | undefined;
   readonly limit: number;
+  readonly readCover?: typeof readRecentExpressionCoverProjection;
   readonly sources: readonly RecentExpressionWorkspaceSource[];
 }
 
@@ -34,105 +32,97 @@ export interface RecentExpressionFeed {
 }
 
 export async function readRecentExpressionsFromWorkspaceSources({
+  contentKinds,
   limit,
+  readCover = readRecentExpressionCoverProjection,
   sources,
 }: ReadRecentExpressionsFromWorkspaceSourcesOptions): Promise<RecentExpressionFeed> {
-  const items: WorkspaceRecentExpressionItem[] = [];
+  const candidates: RecentExpressionCandidate[] = [];
   const skipped: WorkspaceRecentExpressionSkipped[] = [];
 
-  for (const source of sources) {
-    const snapshot = await readWorkspaceSnapshotFromFileTruth({
+  const sourceReads = await readSourcesWithConcurrency(sources, async (source) => {
+    const items = await readRecentExpressionItemsFromFileTruth({
+      ...(contentKinds ? { contentKinds } : {}),
       rootPath: source.rootPath,
       workspaceId: source.workspaceId,
+      workspaceTitle: source.workspaceTitle,
     });
-    if (!snapshot.ok) {
-      skipped.push(skippedSource(source, skipReasonForWorkspaceError(snapshot.error.code)));
-      continue;
+    if (!items.ok) {
+      return {
+        candidates: [],
+        skipped: [skippedSource(source, skipReasonForWorkspaceError(items.error.code))],
+      };
     }
+    const sourceSkipped =
+      items.value.skippedMemoryCount > 0 ? [skippedSource(source, 'read-error')] : [];
+    return {
+      candidates: items.value.items.map((item) => ({
+        ...item,
+      })),
+      skipped: sourceSkipped,
+    };
+  });
 
-    for (const memory of snapshot.snapshot.memories) {
-      const detail = await readMemoryDetailFromFileTruth({
-        rootPath: source.rootPath,
-        workspaceId: source.workspaceId,
-        memoryId: memory.memoryId,
-      });
-      if (!detail.ok) {
-        skipped.push(skippedSource(source, skipReasonForWorkspaceError(detail.error.code)));
-        break;
-      }
-
-      for (const segment of detail.value.segments) {
-        const segmentTimes = await readObjectManifestTimes({
-          fallback: { createdAt: segment.createdAt, updatedAt: segment.updatedAt },
-          kind: 'segments',
-          objectId: segment.segmentId,
-          rootPath: source.rootPath,
-        });
-        items.push({
-          id: `${source.workspaceId}:${memory.memoryId}:${segment.segmentId}`,
-          workspaceId: source.workspaceId,
-          workspaceTitle: source.workspaceTitle,
-          memoryId: memory.memoryId,
-          memoryTitle: memory.title,
-          segmentId: segment.segmentId,
-          objectType: 'segment',
-          contentKind: segment.type,
-          title: segment.contentTitle ?? segment.title,
-          createdAt: segmentTimes.createdAt,
-          updatedAt: segmentTimes.updatedAt,
-        });
-
-        for (const supplement of segment.supplements) {
-          const supplementTimes = await readObjectManifestTimes({
-            fallback: { createdAt: supplement.createdAt, updatedAt: supplement.updatedAt },
-            kind: 'supplements',
-            objectId: supplement.supplementId,
-            rootPath: source.rootPath,
-          });
-          items.push({
-            id: `${source.workspaceId}:${memory.memoryId}:${segment.segmentId}:${supplement.supplementId}`,
-            workspaceId: source.workspaceId,
-            workspaceTitle: source.workspaceTitle,
-            memoryId: memory.memoryId,
-            memoryTitle: memory.title,
-            segmentId: segment.segmentId,
-            supplementId: supplement.supplementId,
-            objectType: 'supplement',
-            contentKind: supplement.type,
-            title: supplement.title,
-            createdAt: supplementTimes.createdAt,
-            updatedAt: supplementTimes.updatedAt,
-          });
-        }
-      }
-    }
+  for (const sourceRead of sourceReads) {
+    skipped.push(...sourceRead.skipped);
+    candidates.push(...sourceRead.candidates);
   }
 
+  const limitedCandidates = candidates
+    .sort(compareRecentExpressionItems)
+    .slice(0, Math.max(0, limit));
+  const items = await hydrateCandidateReturnItems(limitedCandidates, readCover);
+
   return {
-    items: items.sort(compareRecentExpressionItems).slice(0, Math.max(0, limit)),
+    items,
     skipped,
   };
 }
 
-async function readObjectManifestTimes({
-  fallback,
-  kind,
-  objectId,
-  rootPath,
-}: {
-  readonly fallback: { readonly createdAt: string; readonly updatedAt: string };
-  readonly kind: 'segments' | 'supplements';
-  readonly objectId: string;
-  readonly rootPath: string;
-}): Promise<{ readonly createdAt: string; readonly updatedAt: string }> {
-  const result = await readBoundedJsonNoFollow({
-    filePath: path.join(rootPath, '.reo', 'objects', kind, `${objectId}.json`),
-    maxBytes: MAX_OBJECT_MANIFEST_BYTES,
-    schema: objectManifestTimesSchema,
-  });
-  return result.status === 'ok'
-    ? { createdAt: result.value.createdAt, updatedAt: result.value.updatedAt }
-    : fallback;
+type RecentExpressionCandidate = RecentExpressionItemFromFileTruth;
+
+async function readSourcesWithConcurrency<Result>(
+  sources: readonly RecentExpressionWorkspaceSource[],
+  readSource: (source: RecentExpressionWorkspaceSource) => Promise<Result>
+): Promise<readonly Result[]> {
+  const results: Result[] = new Array(sources.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(SOURCE_READ_CONCURRENCY, sources.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < sources.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await readSource(sources[index]!);
+      }
+    })
+  );
+
+  return results;
+}
+
+async function hydrateCandidateReturnItems(
+  candidates: readonly RecentExpressionCandidate[],
+  readCover: typeof readRecentExpressionCoverProjection
+): Promise<readonly WorkspaceRecentExpressionItem[]> {
+  const items: WorkspaceRecentExpressionItem[] = new Array(candidates.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(RETURN_ITEM_HYDRATION_CONCURRENCY, candidates.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < candidates.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const { coverTarget, ...candidate } = candidates[index]!;
+        const cover = await readCover(coverTarget);
+        items[index] = { ...candidate, cover };
+      }
+    })
+  );
+
+  return items;
 }
 
 function compareRecentExpressionItems(
