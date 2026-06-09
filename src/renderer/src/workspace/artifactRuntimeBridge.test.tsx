@@ -672,6 +672,159 @@ describe('artifact runtime bridge', () => {
     );
   });
 
+  it('routes runtime media playback reads through the existing expression playback read', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readExpressionPlaybackAudio = vi.fn<
+      Window['reoWorkspace']['readExpressionPlaybackAudio']
+    >(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        ...(payload.supplementId ? { supplementId: payload.supplementId } : {}),
+        kind: payload.kind,
+        audio: new Uint8Array([1, 2, 3]),
+        mimeType: payload.kind === 'note-speech' ? 'audio/mpeg' : 'audio/webm',
+      },
+    }));
+
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          readExpressionPlaybackAudio,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    for (const request of [
+      {
+        requestId: 'req-media-audio-segment',
+        method: 'media.readPlaybackAudio',
+        payload: { memoryId: 'mem_bridge', segmentId: 'seg_audio', kind: 'audio' },
+      },
+      {
+        requestId: 'req-media-audio-supplement',
+        method: 'media.readPlaybackAudio',
+        payload: {
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_audio',
+          supplementId: 'sup_audio',
+          kind: 'audio',
+        },
+      },
+      {
+        requestId: 'req-media-speech-segment',
+        method: 'media.readPlaybackAudio',
+        payload: { memoryId: 'mem_bridge', segmentId: 'seg_note', kind: 'note-speech' },
+      },
+      {
+        requestId: 'req-media-speech-supplement',
+        method: 'media.readPlaybackAudio',
+        payload: {
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_note',
+          supplementId: 'sup_note',
+          kind: 'note-speech',
+        },
+      },
+      {
+        requestId: 'req-media-invalid-kind',
+        method: 'media.readPlaybackAudio',
+        payload: { memoryId: 'mem_bridge', segmentId: 'seg_note', kind: 'artifact' },
+      },
+    ]) {
+      handler(
+        messageEvent({
+          data: {
+            source: 'reo-render',
+            type: 'request',
+            ...request,
+          },
+          origin,
+          source: runtimeWindow,
+        })
+      );
+    }
+    await flushBridge();
+
+    expect(readExpressionPlaybackAudio).toHaveBeenCalledTimes(4);
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(1, {
+      requestId: 'req-media-audio-segment',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_audio',
+      kind: 'audio',
+    });
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(2, {
+      requestId: 'req-media-audio-supplement',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_audio',
+      supplementId: 'sup_audio',
+      kind: 'audio',
+    });
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(3, {
+      requestId: 'req-media-speech-segment',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_note',
+      kind: 'note-speech',
+    });
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(4, {
+      requestId: 'req-media-speech-supplement',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_note',
+      supplementId: 'sup_note',
+      kind: 'note-speech',
+    });
+
+    const responses = (runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([payload]) => payload
+    );
+    expect(responses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: 'req-media-audio-segment',
+          ok: true,
+          value: { audio: new Uint8Array([1, 2, 3]), mimeType: 'audio/webm' },
+        }),
+        expect.objectContaining({
+          requestId: 'req-media-speech-supplement',
+          ok: true,
+          value: { audio: new Uint8Array([1, 2, 3]), mimeType: 'audio/mpeg' },
+        }),
+        expect.objectContaining({
+          requestId: 'req-media-invalid-kind',
+          ok: false,
+          error: expect.objectContaining({ code: 'ERR_REO_RUNTIME_INVALID_REQUEST' }),
+        }),
+      ])
+    );
+  });
+
   it('routes workspace widget bridge calls without changing the active rail tab', async () => {
     const src = workspaceWidgetRuntimeUrl({
       workspaceId: 'ws_bridge',

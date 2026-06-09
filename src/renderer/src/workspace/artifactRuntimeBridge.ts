@@ -31,6 +31,7 @@ type RuntimeApi = Partial<
     | 'copyArtifactAgentPrompt'
     | 'copyWidgetAgentPrompt'
     | 'readArtifactRuntimeState'
+    | 'readExpressionPlaybackAudio'
     | 'updateSegmentSupplementTitle'
     | 'updateSegmentTitle'
     | 'updateWidgetTitle'
@@ -181,6 +182,17 @@ function objectSelectionTarget(payload: unknown): ArtifactRuntimeObjectSelection
   return { memoryId, segmentId, supplementId };
 }
 
+function requiredPlaybackKind(payload: unknown): 'audio' | 'note-speech' {
+  const kind = requiredString(payload, 'kind');
+  if (kind !== 'audio' && kind !== 'note-speech') {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_INVALID_REQUEST',
+      'kind must be audio or note-speech'
+    );
+  }
+  return kind;
+}
+
 function requireRecord(payload: unknown, key: string): Record<string, unknown> {
   const value = isRecord(payload) ? payload[key] : undefined;
   if (!isRecord(value)) {
@@ -190,6 +202,23 @@ function requireRecord(payload: unknown, key: string): Record<string, unknown> {
     );
   }
   return value;
+}
+
+function playbackAudioResult(value: unknown) {
+  if (
+    !isRecord(value) ||
+    !(value['audio'] instanceof Uint8Array) ||
+    typeof value['mimeType'] !== 'string'
+  ) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_BRIDGE_FAILED',
+      'Reo runtime media response was invalid'
+    );
+  }
+  return {
+    audio: value['audio'],
+    mimeType: value['mimeType'],
+  };
 }
 
 function runtimeTargetPayload({
@@ -440,6 +469,25 @@ async function handleRuntimeRequest(
       );
     }
     return object;
+  }
+
+  if (request.method === 'media.readPlaybackAudio') {
+    const memoryId = requiredString(request.payload, 'memoryId');
+    const segmentId = requiredString(request.payload, 'segmentId');
+    const supplementId = optionalString(request.payload, 'supplementId');
+    const kind = requiredPlaybackKind(request.payload);
+    const value = await unwrapResult(
+      await (api.readExpressionPlaybackAudio?.({
+        requestId: request.requestId,
+        workspaceId: workspaceSession.workspaceId,
+        memoryId,
+        segmentId,
+        ...(supplementId ? { supplementId } : {}),
+        kind,
+      } as Parameters<Window['reoWorkspace']['readExpressionPlaybackAudio']>[0]) ??
+        missingApi(request.method))
+    );
+    return playbackAudioResult(value);
   }
 
   if (request.method === 'mutations.updateTitle') {

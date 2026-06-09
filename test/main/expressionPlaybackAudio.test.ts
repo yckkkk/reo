@@ -159,6 +159,66 @@ test('resolveExpressionPlaybackAudio reads ready note speech by resolved root', 
   });
 });
 
+test('resolveExpressionPlaybackAudio reads ready note supplement speech by resolved root', async () => {
+  const noteSupplementSpeechCalls: unknown[] = [];
+
+  const result = await resolveExpressionPlaybackAudio({
+    request: {
+      ...audioRequest,
+      kind: 'note-speech',
+      supplementId: 'sup_1',
+    },
+    rootPath: '/root',
+    readSupplementProjection: async () => ({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      type: 'note',
+      title: '补充笔记',
+      createdAt: '2026-06-06T20:00:00.000-07:00',
+      updatedAt: '2026-06-06T20:20:00.000-07:00',
+      bodyByteLength: 64,
+      speechSynthesis: {
+        status: 'ready',
+        audioByteLength: 6,
+        contentHash: 'content_hash_2',
+        speaker: 'zh_female_vv_uranus_bigtts',
+        updatedAt: '2026-06-06T20:30:00.000-07:00',
+      },
+    }),
+    readNoteSupplementSpeech: async (input) => {
+      noteSupplementSpeechCalls.push(input);
+      return {
+        ok: true,
+        audio: new Uint8Array([10, 11]),
+        audioByteLength: 2,
+        contentHash: 'content_hash_2',
+        mimeType: 'audio/mpeg',
+      };
+    },
+  });
+
+  assert.deepEqual(noteSupplementSpeechCalls, [
+    {
+      rootPath: '/root',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      contentHash: 'content_hash_2',
+      audioByteLength: 6,
+      speaker: 'zh_female_vv_uranus_bigtts',
+      updatedAt: '2026-06-06T20:30:00.000-07:00',
+    },
+  ]);
+  assert.deepEqual(result, {
+    ok: true,
+    audio: new Uint8Array([10, 11]),
+    mimeType: 'audio/mpeg',
+  });
+});
+
 test('resolveExpressionPlaybackAudio normalizes segment audio projection failures', async () => {
   const result = await resolveExpressionPlaybackAudio({
     request: audioRequest,

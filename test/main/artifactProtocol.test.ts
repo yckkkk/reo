@@ -234,6 +234,91 @@ test('artifact vendor bridge exposes workspace object selection as a narrow ui m
   assert.equal(result.selected, true);
 });
 
+test('artifact vendor bridge exposes runtime media playback audio as a narrow method', async () => {
+  const source = await readFile(
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-render', 'bridge.js'),
+    'utf8'
+  );
+  const listeners: ((event: { data: unknown; source: unknown }) => void)[] = [];
+  let outbound: Record<string, unknown> | null = null;
+  const parentWindow = {
+    postMessage(payload: unknown) {
+      outbound = payload as Record<string, unknown>;
+    },
+  };
+  let timeoutId = 0;
+  const fakeWindow = {
+    parent: parentWindow,
+    addEventListener(type: string, callback: (event: { data: unknown; source: unknown }) => void) {
+      if (type === 'message') {
+        listeners.push(callback);
+      }
+    },
+    setTimeout() {
+      timeoutId += 1;
+      return timeoutId;
+    },
+    clearTimeout() {},
+  } as {
+    readonly parent: typeof parentWindow;
+    readonly addEventListener: (
+      type: string,
+      callback: (event: { data: unknown; source: unknown }) => void
+    ) => void;
+    readonly setTimeout: () => number;
+    readonly clearTimeout: () => void;
+    reo?: {
+      media: {
+        readPlaybackAudio: (input: {
+          readonly memoryId: string;
+          readonly segmentId: string;
+          readonly supplementId?: string;
+          readonly kind: 'audio' | 'note-speech';
+        }) => Promise<unknown>;
+      };
+    };
+  };
+
+  runInNewContext(source, { window: fakeWindow });
+  assert.ok(fakeWindow.reo);
+  const read = fakeWindow.reo.media.readPlaybackAudio({
+    memoryId: 'mem_media',
+    segmentId: 'seg_media',
+    supplementId: 'sup_media',
+    kind: 'audio',
+  });
+  assert.equal(outbound?.['method'], 'media.readPlaybackAudio');
+  const payload = outbound?.['payload'] as
+    | {
+        readonly memoryId?: unknown;
+        readonly segmentId?: unknown;
+        readonly supplementId?: unknown;
+        readonly kind?: unknown;
+      }
+    | undefined;
+  assert.equal(payload?.memoryId, 'mem_media');
+  assert.equal(payload?.segmentId, 'seg_media');
+  assert.equal(payload?.supplementId, 'sup_media');
+  assert.equal(payload?.kind, 'audio');
+  const requestId = outbound?.['requestId'];
+  const listener = listeners[0];
+  assert.ok(listener);
+  listener({
+    data: {
+      source: 'reo-host',
+      type: 'response',
+      requestId,
+      ok: true,
+      value: { mimeType: 'audio/webm', audio: new Uint8Array([1, 2, 3]) },
+    },
+    source: parentWindow,
+  });
+
+  const result = (await read) as { readonly mimeType?: unknown; readonly audio?: unknown };
+  assert.equal(result.mimeType, 'audio/webm');
+  assert.deepEqual(result.audio, new Uint8Array([1, 2, 3]));
+});
+
 test('artifact runtime URLs keep per-object hosts ASCII-safe without losing object identity', () => {
   const segmentUrl = artifactSegmentRuntimeUrl({
     workspaceId: 'ws_Mixed_空间',

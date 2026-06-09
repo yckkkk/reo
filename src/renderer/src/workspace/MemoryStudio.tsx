@@ -111,6 +111,7 @@ import {
 import {
   copyArtifactAgentPrompt,
   readArtifactRuntimeState,
+  readExpressionPlaybackAudio,
   saveSegmentSupplementTranscript,
   saveTranscript,
   updateSegmentContentTabOrder,
@@ -2480,6 +2481,7 @@ function ArtifactPreviewPanel({
     () => ({
       copyArtifactAgentPrompt,
       readArtifactRuntimeState,
+      readExpressionPlaybackAudio,
       updateSegmentSupplementTitle,
       updateSegmentTitle,
       writeArtifactRuntimeState,

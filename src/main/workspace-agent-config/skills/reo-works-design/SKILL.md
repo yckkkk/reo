@@ -162,6 +162,7 @@ Diagram：SVG 默认 `rx="4"`；只有真正 pill 标签才用更大圆角。连
 
 - 普通 Web 网络、CDN、远程图片、远程字体、`fetch`、XHR、WebSocket、表单和下载可以使用；第三方 API 仍受浏览器 CORS 限制。
 - 可以使用 inline CSS、inline JS、data/blob 图片、网络资源，或 `assets/` 下的本地资源。
+- 可以用 `window.reo.media.readPlaybackAudio` 读取 Reo 已有录音或 ready 笔记语音 bytes；媒体播放器是作品或 Widget 自己的 UI 和状态，不是 Reo host 状态。
 - 不使用 Node、Electron、raw filesystem path、`file://`、symlink 或 `.reo/` 内部文件。
 - 不存储凭证、绝对路径、本机用户名、token 或用户没有要求展示的隐私内容。
 

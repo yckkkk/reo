@@ -18,6 +18,7 @@ The script creates `window.reo`. All methods return Promises. On Reo errors, the
 - `window.reo.workspace.read()` for current workspace summary, all Memory summaries, current Memory summary, target identity and current object projection.
 - `window.reo.content.readMemoryDetail()` for the current Memory detail, or `window.reo.content.readMemoryDetail({ memoryId })` after reading `workspace.memories` when a work needs another Memory detail.
 - `window.reo.content.readCurrentObject()` for the current Reo object projection without raw paths.
+- `window.reo.media.readPlaybackAudio({ memoryId, segmentId, supplementId?, kind })` for existing current-workspace recording audio (`kind: "audio"`) or ready note speech (`kind: "note-speech"`).
 - `window.reo.mutations.updateTitle({ title })` for the current work title.
 - `window.reo.ui.requestFullscreen()` to ask the host preview to expand.
 - `window.reo.ui.selectMemory({ memoryId })` for workspace rail widgets that need to switch the main content Memory after reading `workspace.memories`; this keeps the widget tab active and does not make the widget become Memory content.
@@ -45,11 +46,28 @@ await window.reo.ui.selectObject({ memoryId, segmentId, supplementId });
 
 Do not use `memory.id`; that field is not part of the runtime workspace summary contract.
 
+## Playback audio
+
+Use this only to read bytes for audio that already exists in Reo. It does not generate speech, expose transcripts or provide a player.
+
+```js
+const media = await window.reo.media.readPlaybackAudio({
+  memoryId,
+  segmentId,
+  kind: "audio",
+});
+const url = URL.createObjectURL(new Blob([media.audio], { type: media.mimeType }));
+audio.src = url;
+```
+
+Works and widgets own the `<audio>` element, Blob URL lifecycle, progress UI, error display and any playback state.
+
 ## Boundaries
 
 - Do not call Electron, Node, preload internals or raw filesystem paths.
 - Do not invent methods outside documented `window.reo` groups.
 - Reo bridge mutations are typed product actions, not a generic file bridge.
+- Reo media reads do not create speech, manage playback state, provide a queue or choose a player design.
 - Artifact works cannot write arbitrary note bodies through `window.reo`; use agent prompt actions when a work needs a broader Reo content edit.
 - Workspace rail widgets cannot create, rename, reorder or delete widgets through `window.reo`; use agent prompt actions and the workspace file contract for broader edits.
 - Network, CDN and browser APIs are allowed; browser CORS rules still apply.

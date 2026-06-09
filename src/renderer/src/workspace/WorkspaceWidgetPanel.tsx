@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import {
   copyWidgetAgentPrompt,
   readArtifactRuntimeState,
+  readExpressionPlaybackAudio,
   updateWidgetTitle,
   writeArtifactRuntimeState,
   type WorkspaceSession,
@@ -85,6 +86,7 @@ export function WorkspaceWidgetPanel({
     () => ({
       copyWidgetAgentPrompt,
       readArtifactRuntimeState,
+      readExpressionPlaybackAudio,
       updateWidgetTitle,
       writeArtifactRuntimeState,
     }),

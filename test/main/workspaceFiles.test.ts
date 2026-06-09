@@ -1007,6 +1007,7 @@ test('managed reo-works skill defines artifact file creation without external re
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /用户未指定风格时默认按 `reo-works-design`/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /readPlaybackAudio/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/file-contract\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/workflows\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/runtime-contract-check\.md/);
@@ -1059,6 +1060,7 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /mount: workspace-rail/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /window\.reo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /bridge\.js/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /readPlaybackAudio/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /they do not reload the host iframe/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /scaffold-runtime\.mjs/);
@@ -1108,6 +1110,11 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   );
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /ui\.selectMemory/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /ui\.selectObject/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /media\.readPlaybackAudio/
+  );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /note-speech/);
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
     /readMemoryDetail\(\{ memoryId \}\)/
@@ -1380,6 +1387,7 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /CDN/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /window\.reo/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /readPlaybackAudio/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /240px 到 520px rail/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /不要把所有作品锁死到同一个固定高度/);
   assert.equal(

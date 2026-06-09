@@ -105,6 +105,16 @@
         return call('content.readCurrentObject');
       },
     },
+    media: {
+      readPlaybackAudio: function (input) {
+        return call('media.readPlaybackAudio', {
+          memoryId: input && input.memoryId,
+          segmentId: input && input.segmentId,
+          supplementId: input && input.supplementId,
+          kind: input && input.kind,
+        });
+      },
+    },
     mutations: {
       updateTitle: function (input) {
         return call('mutations.updateTitle', input);

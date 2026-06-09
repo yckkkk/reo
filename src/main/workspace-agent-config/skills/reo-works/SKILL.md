@@ -95,6 +95,7 @@ Agent-created runtime work supplement. Entry: `entry.html`.
 - 作品内可以有 DOM 交互、过滤、排序、计算、切换、表单、下载和普通 Web 网络。
 - 由 slider/stepper/拖动/缩放/切换驱动图表的可交互作品按 source→derive→render 反应式模型组织：1-2 个独立源变量 → 纯 derive() → render；先读 `skills/reo-works-design/references/explorables.md` 与可运行的 `skills/reo-works-design/examples/`，把范例当起点而非天花板。
 - 作品需要 Reo state、content、mutation、fullscreen 或 agent prompt action 时，使用 `window.reo` documented bridge；不要发明其他宿主 API。
+- 作品需要播放 Reo 里已有录音或 ready 笔记语音时，用 `window.reo.media.readPlaybackAudio` 读取 bytes；播放器 UI、Blob URL 生命周期、错误显示和状态由作品自己实现。
 - 如果使用第三方库，优先选择浏览器/CDN 可直接运行的方式；第三方 API 是否可用取决于浏览器 CORS。
 
 ## 验证
