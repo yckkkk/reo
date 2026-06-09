@@ -56,6 +56,7 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -151,6 +152,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     readRecentExpressions: (payload) =>
       invoke<WorkspaceBridgeResponse<'readRecentExpressions'>>(
         WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
+        payload
+      ),
+    readExpressionPlaybackAudio: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readExpressionPlaybackAudio'>>(
+        WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
         payload
       ),
     initializeWorkspace: (payload) =>

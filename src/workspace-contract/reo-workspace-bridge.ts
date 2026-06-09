@@ -85,6 +85,8 @@ import type {
   WorkspaceReadFinalizedAudioSegmentSupplementResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
+  WorkspaceReadExpressionPlaybackAudioRequest,
+  WorkspaceReadExpressionPlaybackAudioResponse,
   WorkspaceReadRecentExpressionsRequest,
   WorkspaceReadRecentExpressionsResponse,
   WorkspaceReadAppPermissionStatusRequest,
@@ -198,6 +200,9 @@ export interface ReoWorkspaceBridge {
   readonly readRecentExpressions: (
     payload: WorkspaceReadRecentExpressionsRequest
   ) => Promise<WorkspaceReadRecentExpressionsResponse>;
+  readonly readExpressionPlaybackAudio: (
+    payload: WorkspaceReadExpressionPlaybackAudioRequest
+  ) => Promise<WorkspaceReadExpressionPlaybackAudioResponse>;
   readonly initializeWorkspace: (
     payload: WorkspaceInitializeRequest
   ) => Promise<WorkspaceInitializeResponse>;

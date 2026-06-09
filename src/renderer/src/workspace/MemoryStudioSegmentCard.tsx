@@ -2,20 +2,14 @@ import { format } from 'date-fns';
 import { AppWindow, Ellipsis, FileText } from 'lucide-react';
 import {
   forwardRef,
-  useEffect,
-  useState,
   type ComponentPropsWithoutRef,
   type CSSProperties,
   type ReactNode,
 } from 'react';
 import { ReoCardSurface } from '@/components/ui/card-surface';
-import {
-  coverToneRequiresImageSampling,
-  coverToneStyle,
-  fallbackCoverToneForSource,
-  resolveCoverToneForImageSource,
-} from './covers/coverTone';
+import { coverToneStyle } from './covers/coverTone';
 import { resolveSegmentCoverImageSource } from './covers/memoryCoverSource';
+import { useCoverToneForImageSource } from './covers/useCoverToneForImageSource';
 import { byteLengthLabel } from './memoryLabels';
 import type { WorkspaceMemoryDetail } from './workspaceApi';
 
@@ -47,14 +41,6 @@ const MEMORY_STUDIO_SEGMENT_SELECTED_OUTSET_RATIO = segmentRatio(
 const MEMORY_STUDIO_SEGMENT_SELECTED_TOP_OUTSET_RATIO = segmentRatio(
   MEMORY_STUDIO_SEGMENT_SELECTED_SCALE_DELTA
 );
-
-type WindowWithIdleCallback = Window & {
-  readonly requestIdleCallback?: (
-    callback: () => void,
-    options?: { readonly timeout: number }
-  ) => number;
-  readonly cancelIdleCallback?: (handle: number) => void;
-};
 
 export const MEMORY_STUDIO_SEGMENT_CARD_AXIS_TOP_CLASS =
   'top-[calc(var(--memory-studio-segment-selected-top-outset)+(var(--memory-studio-segment-card-size)/2)-20px)]';
@@ -160,7 +146,7 @@ export function MemoryStudioSegmentCard({
   const segmentIsAudio = isAudioMemorySegment(segment);
   const segmentIsArtifact = isArtifactMemorySegment(segment);
   const coverSource = resolveSegmentCoverImageSource({ segment, workspaceId });
-  const [coverTone, setCoverTone] = useState(() => fallbackCoverToneForSource(coverSource));
+  const coverTone = useCoverToneForImageSource(coverSource);
   const selectionX = segmentSelectionX(selectionPlacement);
   const itemStyle: MemoryStudioSegmentItemStyle = {
     ...(coverToneStyle(coverTone) as Record<`--${string}`, string>),
@@ -171,38 +157,6 @@ export function MemoryStudioSegmentCard({
     '--memory-studio-segment-card-y': selected ? MEMORY_STUDIO_SEGMENT_CARD_SELECTED_Y : '0px',
     ...MEMORY_STUDIO_SEGMENT_ITEM_STYLE,
   };
-
-  useEffect(() => {
-    let cancelled = false;
-    setCoverTone(fallbackCoverToneForSource(coverSource));
-    if (!coverToneRequiresImageSampling(coverSource)) {
-      return undefined;
-    }
-    let idleCallbackHandle: number | null = null;
-    let timeoutHandle: number | null = null;
-    const loadTone = () => {
-      void resolveCoverToneForImageSource(coverSource).then((nextTone) => {
-        if (!cancelled) {
-          setCoverTone(nextTone);
-        }
-      });
-    };
-    const idleWindow = window as WindowWithIdleCallback;
-    if (idleWindow.requestIdleCallback) {
-      idleCallbackHandle = idleWindow.requestIdleCallback(loadTone, { timeout: 600 });
-    } else {
-      timeoutHandle = window.setTimeout(loadTone, 0);
-    }
-    return () => {
-      cancelled = true;
-      if (idleCallbackHandle !== null) {
-        idleWindow.cancelIdleCallback?.(idleCallbackHandle);
-      }
-      if (timeoutHandle !== null) {
-        window.clearTimeout(timeoutHandle);
-      }
-    };
-  }, [coverSource]);
 
   return (
     <div

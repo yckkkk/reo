@@ -71,6 +71,10 @@ import {
   noteContentHash,
   readNoteSpeechSynthesisProjectionFromManifest,
 } from './noteSpeechSynthesisProjection.js';
+import {
+  recentExpressionSegmentPlayback,
+  recentExpressionSupplementPlayback,
+} from './recentExpressionPlayback.js';
 import type { WorkspaceReviewEntryInput } from './workspaceReviewReport.js';
 import {
   fsyncCurrentWorkspaceDirectoryBestEffort,
@@ -2913,6 +2917,10 @@ export async function readRecentExpressionItemsFromFileTruth({
           );
 
           if (segmentAllowed) {
+            const playback = await recentExpressionSegmentPlayback({
+              metadata: fileTruth.metadata,
+              objectDirectory: fileTruth.recordingDirectory,
+            });
             items.push({
               id: `${workspaceId}:${memory.memoryId}:${fileTruth.segmentId}`,
               workspaceId,
@@ -2925,12 +2933,14 @@ export async function readRecentExpressionItemsFromFileTruth({
               title: fileTruth.metadata.contentTitle ?? segmentTitle,
               coverTarget,
               ...(segmentPreview ? { preview: segmentPreview } : {}),
+              ...(playback ? { playback } : {}),
               createdAt: fileTruth.metadata.createdAt,
               updatedAt: fileTruth.metadata.updatedAt ?? fileTruth.metadata.finalizedAt,
             });
           }
 
           for (const supplement of allowedSupplements) {
+            const playback = recentExpressionSupplementPlayback(supplement);
             const supplementPreview = await readRecentSupplementPreview({
               memoryId: memory.memoryId,
               rootPath,
@@ -2950,6 +2960,7 @@ export async function readRecentExpressionItemsFromFileTruth({
               title: supplement.title,
               coverTarget,
               ...(supplementPreview ? { preview: supplementPreview } : {}),
+              ...(playback ? { playback } : {}),
               createdAt: supplement.createdAt,
               updatedAt: supplement.updatedAt,
             });

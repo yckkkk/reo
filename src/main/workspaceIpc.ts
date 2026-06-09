@@ -59,6 +59,7 @@ import {
   WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
   WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+  WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
@@ -182,6 +183,8 @@ import {
   workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema,
   workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
+  workspaceReadExpressionPlaybackAudioRequestSchema,
+  workspaceReadExpressionPlaybackAudioResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
   workspaceReadRecentExpressionsRequestSchema,
@@ -402,6 +405,7 @@ import {
   writeNoteSegmentDraftBody,
   writeSegmentSupplementNoteDraftBody,
 } from './noteDrafts.js';
+import { resolveExpressionPlaybackAudio } from './expressionPlaybackAudio.js';
 import {
   listNoteSegmentAttachments,
   listNoteSegmentSupplementAttachments,
@@ -585,6 +589,7 @@ type ResolveSegmentSupplementPaths = (
 type MaybePromise<T> = T | Promise<T>;
 
 export interface RegisterWorkspaceIpcOptions {
+  readonly appDataDir?: string;
   readonly expectedSession: Session | object;
   readonly expectedSessionKey: string;
   readonly isTrustedUrl: (url: string) => boolean;
@@ -778,6 +783,14 @@ type HandleOpenSystemDraftWorkspaceOptions = HandleReadSystemDraftWorkspaceOptio
 };
 
 type HandleReadRecentExpressionsOptions = WorkspaceIpcBaseOptions & {
+  readonly appDataDir?: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly now?: () => string;
+};
+
+type HandleReadExpressionPlaybackAudioOptions = WorkspaceIpcBaseOptions & {
   readonly appDataDir?: string;
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
@@ -1380,6 +1393,124 @@ export async function handleReadRecentExpressionsForTest(
   options: HandleReadRecentExpressionsOptions
 ): Promise<z.infer<typeof workspaceReadRecentExpressionsResponseSchema>> {
   return handleReadRecentExpressionsCore(options);
+}
+
+async function resolveExpressionPlaybackRootPath({
+  appDataDir,
+  memorySpaceRegistry,
+  now,
+  workspaceId,
+}: {
+  readonly appDataDir?: string | undefined;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly now: () => string;
+  readonly workspaceId: string;
+}): Promise<{ readonly ok: true; readonly rootPath: string } | WorkspaceErrorEnvelope> {
+  if (workspaceId === SYSTEM_DRAFT_WORKSPACE_ID) {
+    const ensuredDraft = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+    return ensuredDraft.ok ? { ok: true, rootPath: ensuredDraft.value.rootPath } : ensuredDraft;
+  }
+
+  try {
+    const resolved = await resolveMemorySpacePaths(workspaceId, {
+      registry: memorySpaceRegistry,
+    });
+    if (resolved.ok) {
+      return { ok: true, rootPath: resolved.value.rootAbsolute };
+    }
+    if (resolved.code === 'ERR_WORKSPACE_ROOT_MISSING') {
+      return workspaceError(
+        'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+        'Expression workspace could not be resolved'
+      );
+    }
+    if (
+      resolved.code === 'ERR_WORKSPACE_METADATA_INVALID' ||
+      resolved.code === 'ERR_WORKSPACE_UNSAFE_PATH'
+    ) {
+      return workspaceError(resolved.code, 'Expression workspace root is unavailable');
+    }
+    return workspaceError('ERR_WORKSPACE_ROOT_MISSING', 'Expression workspace root is unavailable');
+  } catch (error) {
+    return workspaceMemorySpaceRegistryReadError(error);
+  }
+}
+
+async function handleReadExpressionPlaybackAudioCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleReadExpressionPlaybackAudioOptions): Promise<
+  z.infer<typeof workspaceReadExpressionPlaybackAudioResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadExpressionPlaybackAudioRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readExpressionPlaybackAudio request is invalid'
+    );
+  }
+
+  const root = await resolveExpressionPlaybackRootPath({
+    appDataDir,
+    memorySpaceRegistry,
+    now,
+    workspaceId: request.data.workspaceId,
+  });
+  if (!root.ok) {
+    return root;
+  }
+
+  const result = await resolveExpressionPlaybackAudio({
+    request: request.data,
+    rootPath: root.rootPath,
+  });
+
+  return workspaceReadExpressionPlaybackAudioResponseSchema.parse(
+    result.ok
+      ? {
+          ok: true,
+          value: {
+            requestId: request.data.requestId,
+            workspaceId: request.data.workspaceId,
+            memoryId: request.data.memoryId,
+            segmentId: request.data.segmentId,
+            ...(request.data.supplementId ? { supplementId: request.data.supplementId } : {}),
+            kind: request.data.kind,
+            audio: result.audio,
+            mimeType: result.mimeType,
+          },
+        }
+      : result
+  );
+}
+
+export async function handleReadExpressionPlaybackAudio(
+  options: HandleReadExpressionPlaybackAudioOptions
+): Promise<z.infer<typeof workspaceReadExpressionPlaybackAudioResponseSchema>> {
+  return handleReadExpressionPlaybackAudioCore(options);
+}
+
+export async function handleReadExpressionPlaybackAudioForTest(
+  options: HandleReadExpressionPlaybackAudioOptions
+): Promise<z.infer<typeof workspaceReadExpressionPlaybackAudioResponseSchema>> {
+  return handleReadExpressionPlaybackAudioCore(options);
 }
 
 async function handleRemoveMemorySpaceCore({
@@ -8417,6 +8548,7 @@ export async function handleFinishRecordingTranscriptionForTest(
 }
 
 export function registerWorkspaceIpc({
+  appDataDir,
   expectedSession,
   expectedSessionKey,
   isTrustedUrl,
@@ -8604,6 +8736,7 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL, (event, input) =>
     handleReadSystemDraftWorkspace({
+      ...(appDataDir ? { appDataDir } : {}),
       event,
       input,
       expectedSession,
@@ -8616,6 +8749,7 @@ export function registerWorkspaceIpc({
       event,
       WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
       await handleOpenSystemDraftWorkspace({
+        ...(appDataDir ? { appDataDir } : {}),
         event,
         input,
         expectedSession,
@@ -8627,11 +8761,24 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, (event, input) =>
     handleReadRecentExpressions({
+      ...(appDataDir ? { appDataDir } : {}),
       event,
       input,
       expectedSession,
       expectedSessionKey,
       isTrustedUrl,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, (event, input) =>
+    handleReadExpressionPlaybackAudio({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, async (event, input) =>

@@ -47,6 +47,7 @@ describe('App', () => {
     readSystemDraftWorkspace: vi.fn(),
     openSystemDraftWorkspace: vi.fn(),
     readRecentExpressions: vi.fn(),
+    readExpressionPlaybackAudio: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
@@ -488,6 +489,19 @@ describe('App', () => {
       ok: true,
       value: { items: [], skipped: [] },
     });
+    reoWorkspace.readExpressionPlaybackAudio.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        ...(payload.supplementId ? { supplementId: payload.supplementId } : {}),
+        kind: payload.kind,
+        audio: new Uint8Array([1, 2, 3]),
+        mimeType: payload.kind === 'note-speech' ? 'audio/mpeg' : 'audio/webm',
+      },
+    }));
     reoWorkspace.openMemorySpaceAgentsFile.mockResolvedValue({ ok: true });
     reoWorkspace.openMemoryDocument.mockResolvedValue({ ok: true });
     reoWorkspace.openSegmentDocument.mockResolvedValue({ ok: true });
@@ -1814,6 +1828,82 @@ describe('App', () => {
       await screen.findByRole('button', { name: '选择片段 产品判断笔记' })
     ).toBeInTheDocument();
     expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+  });
+
+  it('projects Home recent expression covers and handle-less playback refs', async () => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:home-recent-expression-note-speech'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    reoWorkspace.readRecentExpressions.mockResolvedValue({
+      ok: true,
+      value: {
+        items: [
+          {
+            id: 'recent-cover-note',
+            workspaceId: 'ws_system_draft',
+            workspaceTitle: '草稿',
+            memoryId: 'mem_system_draft',
+            memoryTitle: '草稿',
+            segmentId: 'seg_recent_note',
+            contentKind: 'note',
+            objectType: 'segment',
+            title: '产品判断笔记',
+            preview: '整理今日产品判断。',
+            createdAt: '2026-06-06T20:55:00.000Z',
+            updatedAt: '2026-06-06T21:00:00.000Z',
+            cover: {
+              source: 'custom',
+              filename: 'ready speech.webp',
+              version: '177-42',
+            },
+            playback: { kind: 'note-speech' },
+          },
+        ],
+        skipped: [],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(await screen.findByText('产品判断笔记')).toBeInTheDocument();
+    const icon = document.querySelector<HTMLElement>(
+      '[data-slot="home-recent-expression-icon"][data-expression-id="recent-cover-note"]'
+    );
+    if (!(icon instanceof HTMLElement)) {
+      throw new Error('Expected recent expression icon.');
+    }
+    const cover = icon.querySelector<HTMLImageElement>(
+      '[data-slot="home-recent-expression-cover"]'
+    );
+    expect(cover?.getAttribute('src')).toBe(
+      'reo-attachment://ws_system_draft/segments/seg_recent_note/cover/ready%20speech.webp?v=177-42'
+    );
+
+    fireEvent.pointerEnter(icon);
+    fireEvent.click(screen.getByRole('button', { name: '播放 产品判断笔记' }));
+
+    await waitFor(() => expect(reoWorkspace.readExpressionPlaybackAudio).toHaveBeenCalledOnce());
+    const playbackRequest = reoWorkspace.readExpressionPlaybackAudio.mock.calls[0]?.[0];
+    expect(playbackRequest).toEqual(
+      expect.objectContaining({
+        workspaceId: 'ws_system_draft',
+        memoryId: 'mem_system_draft',
+        segmentId: 'seg_recent_note',
+        kind: 'note-speech',
+      })
+    );
+    expect(playbackRequest).not.toHaveProperty('workspaceHandle');
   });
 
   it('refreshes Home recent expressions after finalizing a Home Draft Note', async () => {

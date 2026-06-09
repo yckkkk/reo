@@ -55,8 +55,7 @@ Confirmed with product owner before design:
   needed for cover backgrounds.
 - The internal byte readers are already **root-based** and reusable:
   - Recording audio: `readFinalizedAudioSegmentAudio({ rootPath, memoryId,
-    segmentId, expectedAudioByteLength, expectedAudioHash })` (recordingDrafts.ts)
-    + a supplement variant.
+segmentId, expectedAudioByteLength, expectedAudioHash })` (recordingDrafts.ts) - a supplement variant.
   - Note speech audio: `readNoteSpeechAudio({ rootPath, … })` (noteDrafts.ts).
 - BUT the existing audio-read **IPC wrappers** are handle-scoped: each resolves
   `handle.canonicalRoot` and rejects when `request.workspaceId !== handle.workspaceId`.
@@ -103,13 +102,13 @@ Confirmed with product owner before design:
 
 **Derived presentation (only meaningful when `playable`):**
 
-| Condition | scrim | glyph | control |
-|---|---|---|---|
-| idle, not hovered | hidden | shown | none |
-| idle, hovered | shown | hidden | ▶ |
-| loading | shown | hidden | spinner |
-| playing (active) | shown | hidden | ⏸ (stays ⏸ even when hover leaves) |
-| paused (active) | shown | hidden | ▶ |
+| Condition         | scrim  | glyph  | control                            |
+| ----------------- | ------ | ------ | ---------------------------------- |
+| idle, not hovered | hidden | shown  | none                               |
+| idle, hovered     | shown  | hidden | ▶                                  |
+| loading           | shown  | hidden | spinner                            |
+| playing (active)  | shown  | hidden | ⏸ (stays ⏸ even when hover leaves) |
+| paused (active)   | shown  | hidden | ▶                                  |
 
 **Invariants:**
 
@@ -152,8 +151,8 @@ compute `playback` for each emitted item:
 - audio supplement → `{ kind: 'audio', durationMs: supplement.durationMs }` (the
   audio supplement projection already carries `durationMs`).
 - note segment → reuse `readNoteSpeechSynthesisProjectionFromManifest({
-  currentContentHash: noteContentHash(metadata.markdownContent), manifest: metadata,
-  objectDirectory: fileTruth.recordingDirectory })`; emit `{ kind: 'note-speech' }`
+currentContentHash: noteContentHash(metadata.markdownContent), manifest: metadata,
+objectDirectory: fileTruth.recordingDirectory })`; emit `{ kind: 'note-speech' }`
   only when status === `ready`, else omit.
 - note supplement → no `speechSynthesis` on the projection → not playable → omit.
 - artifact (segment or supplement) → omit.
@@ -161,7 +160,7 @@ compute `playback` for each emitted item:
 **(b) New handle-less playback-read IPC** — `workspace:readExpressionPlaybackAudio`:
 
 - Request: `{ workspaceId, memoryId, segmentId, supplementId?, kind:'audio'|'note-speech',
-  requestId }` (+ the standard trust/session envelope the recent-expressions read uses).
+requestId }` (+ the standard trust/session envelope the recent-expressions read uses).
 - Handler: resolve `rootPath` the same way the recent-expressions handler does
   (system draft → ensured draft root; else `memorySpaceRegistry.resolveMemorySpace`).
   Then dispatch to the existing root-based reader:
@@ -172,7 +171,7 @@ compute `playback` for each emitted item:
     (audioByteLength/hash, or speech byteLength) to the reader; the renderer does
     not carry identity.
 - Response: `{ requestId (echoed), workspaceId, memoryId, segmentId, supplementId?,
-  kind, audio: Uint8Array, mimeType }` (`audio/webm` for `audio`, `audio/mpeg` for
+kind, audio: Uint8Array, mimeType }` (`audio/webm` for `audio`, `audio/mpeg` for
   `note-speech`). Path safety is enforced by the same `resolveSafeWorkspaceChild`
   the internal readers already use.
 - Preload exposes one new bridge method `readExpressionPlaybackAudio(payload)`.
@@ -187,7 +186,7 @@ export, colocated test):
   `activeRef`, and `playState`. Exposes `toggle(ref)` and `stop()`.
   `loadSource(ref)` calls the one new bridge method
   `readExpressionPlaybackAudio({ workspaceId, memoryId, segmentId, supplementId?,
-  kind, requestId })`, validates the echoed `requestId`/identity, wraps the bytes
+kind, requestId })`, validates the echoed `requestId`/identity, wraps the bytes
   in a `Blob` of the returned `mimeType`, and returns an object URL. The last
   loaded ref's object URL is cached and revoked on switch/unmount (replaying the
   same paused item does not refetch).

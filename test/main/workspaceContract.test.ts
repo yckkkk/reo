@@ -24,6 +24,7 @@ import {
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+  WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
   WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
@@ -82,6 +83,7 @@ import {
   workspaceDeleteSegmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceRecentExpressionItemSchema,
   workspaceReadRecentExpressionsResponseSchema,
   workspaceReadSystemDraftWorkspaceResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
@@ -108,6 +110,9 @@ import {
   workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
   workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema,
   workspaceSegmentSupplementIdRequestSchema,
+  workspacePlaybackSourceSchema,
+  workspaceReadExpressionPlaybackAudioRequestSchema,
+  workspaceReadExpressionPlaybackAudioResponseSchema,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
@@ -422,6 +427,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readFinalizedAudioSegmentSupplement',
     'workspace:readFinalizedAudioSegmentAudio',
     'workspace:readFinalizedAudioSegmentSupplementAudio',
+    'workspace:readExpressionPlaybackAudio',
     'workspace:createRecordingDraft',
     'workspace:createSegmentSupplementRecordingDraft',
     'workspace:createNoteSegmentDraft',
@@ -556,6 +562,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
       'workspace:readFinalizedAudioSegmentSupplementAudio',
     ],
+    [WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, 'workspace:readExpressionPlaybackAudio'],
     [WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio'],
     [WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL, 'workspace:cloneRecordingDraftPrefix'],
     [WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle'],
@@ -3004,6 +3011,122 @@ test('recent expression feed contract carries cross-space object identity and re
       },
     })
   );
+});
+
+test('recent expression playback source contract accepts audio and ready note speech only', () => {
+  assert.deepEqual(workspacePlaybackSourceSchema.parse({ kind: 'audio', durationMs: 1200 }), {
+    kind: 'audio',
+    durationMs: 1200,
+  });
+  assert.deepEqual(workspacePlaybackSourceSchema.parse({ kind: 'note-speech' }), {
+    kind: 'note-speech',
+  });
+  assert.equal(workspacePlaybackSourceSchema.safeParse({ kind: 'artifact' }).success, false);
+
+  const itemWithoutPlayback = workspaceRecentExpressionItemSchema.parse({
+    id: 'recent_ws_1_seg_1',
+    workspaceId: 'ws_1',
+    workspaceTitle: '灵感库',
+    memoryId: 'mem_1',
+    memoryTitle: '产品想法',
+    segmentId: 'seg_1',
+    objectType: 'segment',
+    contentKind: 'note',
+    title: '一个新想法',
+    createdAt: '2026-06-06T20:00:00.000-07:00',
+    updatedAt: '2026-06-06T20:10:00.000-07:00',
+  });
+  assert.equal('playback' in itemWithoutPlayback, false);
+
+  const itemWithPlayback = workspaceRecentExpressionItemSchema.parse({
+    id: 'recent_ws_1_seg_2',
+    workspaceId: 'ws_1',
+    workspaceTitle: '灵感库',
+    memoryId: 'mem_1',
+    memoryTitle: '产品想法',
+    segmentId: 'seg_2',
+    objectType: 'segment',
+    contentKind: 'audio',
+    title: '录音',
+    playback: { kind: 'audio', durationMs: 10 },
+    createdAt: '2026-06-06T20:00:00.000-07:00',
+    updatedAt: '2026-06-06T20:10:00.000-07:00',
+  });
+  assert.equal(itemWithPlayback.playback?.kind, 'audio');
+});
+
+test('expression playback audio contract reads handle-less audio by durable identity', () => {
+  assert.deepEqual(
+    workspaceReadExpressionPlaybackAudioRequestSchema.parse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'req_1',
+    }),
+    {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'req_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceReadExpressionPlaybackAudioRequestSchema.parse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      kind: 'note-speech',
+      requestId: 'req_2',
+    }),
+    {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      kind: 'note-speech',
+      requestId: 'req_2',
+    }
+  );
+  assert.equal(
+    workspaceReadExpressionPlaybackAudioRequestSchema.safeParse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'artifact',
+      requestId: 'req_3',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceReadExpressionPlaybackAudioRequestSchema.safeParse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+    }).success,
+    false
+  );
+
+  const response = workspaceReadExpressionPlaybackAudioResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'req_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      audio: new Uint8Array([1, 2, 3]),
+      mimeType: 'audio/webm',
+    },
+  });
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal(response.value.audio.byteLength, 3);
+    assert.equal(response.value.mimeType, 'audio/webm');
+  }
 });
 
 test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot, and no rootPath', () => {

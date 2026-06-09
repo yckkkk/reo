@@ -124,6 +124,17 @@ export const workspaceCoverProjectionSchema = z.discriminatedUnion('source', [
 ]);
 export const workspaceMemoryCoverProjectionSchema = workspaceCoverProjectionSchema;
 
+export const workspacePlaybackSourceSchema = z.discriminatedUnion('kind', [
+  z.strictObject({
+    kind: z.literal('audio'),
+    durationMs: z.number().int().nonnegative().optional(),
+  }),
+  z.strictObject({
+    kind: z.literal('note-speech'),
+    durationMs: z.number().int().nonnegative().optional(),
+  }),
+]);
+
 export const workspaceChooseDirectoryResultSchema = z.discriminatedUnion('status', [
   z.strictObject({
     status: z.literal('selected'),
@@ -946,6 +957,7 @@ const workspaceRecentExpressionBaseSchema = z.strictObject({
   title: z.string(),
   preview: z.string().optional(),
   cover: workspaceCoverProjectionSchema.optional(),
+  playback: workspacePlaybackSourceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1482,6 +1494,15 @@ const workspaceSegmentEntityRequestSchema = workspaceMemoryEntityRequestSchema
     segmentId: segmentIdSchema,
   })
   .strict();
+
+export const workspaceReadExpressionPlaybackAudioRequestSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  segmentId: segmentIdSchema,
+  supplementId: supplementIdSchema.optional(),
+  kind: z.enum(['audio', 'note-speech']),
+  requestId: z.string().min(1),
+});
 
 export const workspaceResetSegmentCoverRequestSchema = workspaceSegmentEntityRequestSchema;
 
@@ -2027,6 +2048,23 @@ export const workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema = z
     workspaceErrorEnvelopeSchema,
   ]
 );
+
+export const workspaceReadExpressionPlaybackAudioResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      requestId: z.string().min(1),
+      workspaceId: z.string().min(1),
+      memoryId: memoryIdSchema,
+      segmentId: segmentIdSchema,
+      supplementId: supplementIdSchema.optional(),
+      kind: z.enum(['audio', 'note-speech']),
+      audio: z.instanceof(Uint8Array),
+      mimeType: z.string().min(1),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
 
 export const workspaceCreateRecordingDraftResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -2634,6 +2672,7 @@ export type WorkspaceOpenSystemDraftWorkspaceResponse = z.infer<
 export type WorkspaceReadRecentExpressionsRequest = z.infer<
   typeof workspaceReadRecentExpressionsRequestSchema
 >;
+export type WorkspacePlaybackSource = z.infer<typeof workspacePlaybackSourceSchema>;
 export type WorkspaceRecentExpressionItem = z.infer<typeof workspaceRecentExpressionItemSchema>;
 export type WorkspaceRecentExpressionSkipped = z.infer<
   typeof workspaceRecentExpressionSkippedSchema
@@ -3014,6 +3053,12 @@ export type WorkspaceReadFinalizedAudioSegmentAudioResponse = z.infer<
 >;
 export type WorkspaceReadFinalizedAudioSegmentSupplementAudioResponse = z.infer<
   typeof workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema
+>;
+export type WorkspaceReadExpressionPlaybackAudioRequest = z.infer<
+  typeof workspaceReadExpressionPlaybackAudioRequestSchema
+>;
+export type WorkspaceReadExpressionPlaybackAudioResponse = z.infer<
+  typeof workspaceReadExpressionPlaybackAudioResponseSchema
 >;
 export type WorkspaceReadSegmentSpeechAudioResponse = z.infer<
   typeof workspaceReadSegmentSpeechAudioResponseSchema

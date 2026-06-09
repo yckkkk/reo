@@ -43,19 +43,19 @@ React + Tailwind + shadcn, Vitest + Testing Library.
 
 ## File Structure
 
-| File | Responsibility | Change |
-|---|---|---|
-| `src/workspace-contract/workspace-contract.ts` | shared schemas/types | add `WorkspacePlaybackSource`, `playback` on recent-expr item, playback-read request/response |
-| `src/workspace-contract/workspace-channels.ts` | channel constants | add `WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL` |
-| `src/main/recentExpressionPlayback.ts` (new) | derive playback descriptor + resolve playback bytes | new helpers, unit-tested |
-| `src/main/memoryFiles.ts` | recent-expr file-truth read | populate `playback` on emitted items |
-| `src/main/workspaceIpc.ts` | IPC handlers | add `handleReadExpressionPlaybackAudio` + register channel |
-| `src/preload/workspaceBridge.ts` | preload bridge | add `readExpressionPlaybackAudio` method |
-| `src/renderer/src/types/reoWorkspace.d.ts` | renderer bridge typing | add method signature |
-| `src/renderer/src/components/ui/media-playback-control.tsx` (new) | presentational ▶/⏸/spinner + scrim | new, tested |
-| `src/renderer/src/components/ui/useMediaPlaybackController.ts` (new) | single-active `<audio>` controller | new, tested |
-| `src/renderer/src/workspace/WorkspaceStarterHome.tsx` | Home recent list UI | cover background, row restructure, consume controller |
-| `src/renderer/src/App.tsx` | map contract → home row | project `coverImageSrc` + `playback` ref |
+| File                                                                 | Responsibility                                      | Change                                                                                        |
+| -------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `src/workspace-contract/workspace-contract.ts`                       | shared schemas/types                                | add `WorkspacePlaybackSource`, `playback` on recent-expr item, playback-read request/response |
+| `src/workspace-contract/workspace-channels.ts`                       | channel constants                                   | add `WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL`                                        |
+| `src/main/recentExpressionPlayback.ts` (new)                         | derive playback descriptor + resolve playback bytes | new helpers, unit-tested                                                                      |
+| `src/main/memoryFiles.ts`                                            | recent-expr file-truth read                         | populate `playback` on emitted items                                                          |
+| `src/main/workspaceIpc.ts`                                           | IPC handlers                                        | add `handleReadExpressionPlaybackAudio` + register channel                                    |
+| `src/preload/workspaceBridge.ts`                                     | preload bridge                                      | add `readExpressionPlaybackAudio` method                                                      |
+| `src/renderer/src/types/reoWorkspace.d.ts`                           | renderer bridge typing                              | add method signature                                                                          |
+| `src/renderer/src/components/ui/media-playback-control.tsx` (new)    | presentational ▶/⏸/spinner + scrim                  | new, tested                                                                                   |
+| `src/renderer/src/components/ui/useMediaPlaybackController.ts` (new) | single-active `<audio>` controller                  | new, tested                                                                                   |
+| `src/renderer/src/workspace/WorkspaceStarterHome.tsx`                | Home recent list UI                                 | cover background, row restructure, consume controller                                         |
+| `src/renderer/src/App.tsx`                                           | map contract → home row                             | project `coverImageSrc` + `playback` ref                                                      |
 
 ---
 
@@ -64,12 +64,14 @@ React + Tailwind + shadcn, Vitest + Testing Library.
 ### Task 1.1: `WorkspacePlaybackSource` schema + `playback` on recent-expr item
 
 **Files:**
+
 - Modify: `src/workspace-contract/workspace-contract.ts`
 - Test: `src/workspace-contract/workspace-contract.test.ts` (or the existing nearest contract test; match where recent-expression schemas are tested)
 
 - [ ] **Step 1: Write failing tests**
 
 Assert the new schema and field:
+
 - `workspacePlaybackSourceSchema.parse({ kind: 'audio', durationMs: 1200 })` → ok.
 - `workspacePlaybackSourceSchema.parse({ kind: 'note-speech' })` → ok.
 - `workspacePlaybackSourceSchema.safeParse({ kind: 'artifact' })` → `success === false`.
@@ -108,6 +110,7 @@ Export the type beside `WorkspaceRecentExpressionItem` (line ~2637):
 ### Task 1.2: Playback-read IPC request/response schemas + channel
 
 **Files:**
+
 - Modify: `src/workspace-contract/workspace-channels.ts`
 - Modify: `src/workspace-contract/workspace-contract.ts`
 - Test: same contract test file
@@ -139,6 +142,7 @@ Export the type beside `WorkspaceRecentExpressionItem` (line ~2637):
 - [ ] **Step 5: Commit** — `feat(contract): add readExpressionPlaybackAudio channel + schemas`.
 
 ### Phase 1 gate
+
 - [ ] `npx tsc --noEmit` (or repo typecheck script) passes.
 - [ ] Run `/review` then `/simplify` on the Phase 1 diff; address findings.
 - [ ] Append `implementation-notes.md` entry.
@@ -150,6 +154,7 @@ Export the type beside `WorkspaceRecentExpressionItem` (line ~2637):
 ### Task 2.1: `recentExpressionSegmentPlayback` / `…SupplementPlayback` helpers
 
 **Files:**
+
 - Create: `src/main/recentExpressionPlayback.ts`
 - Test: `src/main/recentExpressionPlayback.test.ts`
 
@@ -189,29 +194,31 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 ### Task 2.2: Populate `playback` in `readRecentExpressionItemsFromFileTruth`
 
 **Files:**
+
 - Modify: `src/main/memoryFiles.ts` (`readRecentExpressionItemsFromFileTruth`, ~2841–2972; segment push ~2916, supplement push ~2940)
 - Test: extend the existing recent-expressions main test (locate via
   `rg "readRecentExpressionItemsFromFileTruth|readRecentExpressionsFromWorkspaceSources" -l src`); if a file-truth fixture test exists, add cases there.
 
 - [ ] **Step 1: Write failing test** — using the existing recent-expressions
-  fixture harness, assert that a finalized **audio** segment yields an item with
-  `playback: { kind:'audio', durationMs }`, a finalized **artifact** yields no
-  `playback`, and a **note** with synthesized ready speech yields
-  `playback: { kind:'note-speech' }` while a note without speech yields none.
+      fixture harness, assert that a finalized **audio** segment yields an item with
+      `playback: { kind:'audio', durationMs }`, a finalized **artifact** yields no
+      `playback`, and a **note** with synthesized ready speech yields
+      `playback: { kind:'note-speech' }` while a note without speech yields none.
 
 - [ ] **Step 2: Run RED** — fails (no `playback` on items).
 
 - [ ] **Step 3: Implement** — call `recentExpressionSegmentPlayback({ metadata:
-  fileTruth.metadata, objectDirectory: fileTruth.recordingDirectory })` and spread
-  `...(playback ? { playback } : {})` into the segment item; call
-  `recentExpressionSupplementPlayback(supplement)` and spread into the supplement
-  item. `RecentExpressionItemFromFileTruth` already extends
-  `WorkspaceRecentExpressionItem`, which now carries `playback?`, so no type change.
+fileTruth.metadata, objectDirectory: fileTruth.recordingDirectory })` and spread
+      `...(playback ? { playback } : {})` into the segment item; call
+      `recentExpressionSupplementPlayback(supplement)` and spread into the supplement
+      item. `RecentExpressionItemFromFileTruth` already extends
+      `WorkspaceRecentExpressionItem`, which now carries `playback?`, so no type change.
 
 - [ ] **Step 4: Run GREEN** — pass.
 - [ ] **Step 5: Commit** — `feat(main): attach playback descriptor to recent expressions`.
 
 ### Phase 2 gate
+
 - [ ] Targeted: `npx vitest run src/main/recentExpressionPlayback src/main/<recent-expr test>`.
 - [ ] `/review` + `/simplify` on Phase 2 diff; fix findings.
 - [ ] `implementation-notes.md` entry.
@@ -223,13 +230,14 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 ### Task 3.1: `resolveExpressionPlaybackAudio` (root resolution + reader dispatch)
 
 **Files:**
+
 - Modify: `src/main/recentExpressionPlayback.ts` (or a sibling `expressionPlaybackAudio.ts` if it keeps files focused)
 - Test: `src/main/recentExpressionPlayback.test.ts`
 
 - [ ] **Step 1: Write failing tests** — with injected dependencies
-  (`resolveRootPath`, `readSegmentAudio`, `readSupplementAudio`, `readNoteSpeech`):
+      (`resolveRootPath`, `readSegmentAudio`, `readSupplementAudio`, `readNoteSpeech`):
 - `kind:'audio'`, no `supplementId` → calls `readSegmentAudio({ rootPath, memoryId,
-  segmentId, … })`, returns `{ audio, mimeType: 'audio/webm' }`.
+segmentId, … })`, returns `{ audio, mimeType: 'audio/webm' }`.
 - `kind:'audio'`, with `supplementId` → calls `readSupplementAudio(...)`.
 - `kind:'note-speech'`, segment → calls `readNoteSpeech(...)`, `mimeType: 'audio/mpeg'`.
 - root resolver returns null → returns a `ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND`
@@ -239,10 +247,10 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 - [ ] **Step 2: Run RED** — fails.
 
 - [ ] **Step 3: Implement** — resolve identity (audioByteLength/hash or speech
-  byteLength) by reading the manifest, then dispatch to the existing root-based
-  readers: `readFinalizedAudioSegmentAudio` / `readFinalizedAudioSegmentSupplementAudio`
-  (recordingDrafts.ts), `readNoteSpeechAudio` (noteDrafts.ts). Return
-  `{ ok:true, audio, mimeType }` or the reader's error.
+      byteLength) by reading the manifest, then dispatch to the existing root-based
+      readers: `readFinalizedAudioSegmentAudio` / `readFinalizedAudioSegmentSupplementAudio`
+      (recordingDrafts.ts), `readNoteSpeechAudio` (noteDrafts.ts). Return
+      `{ ok:true, audio, mimeType }` or the reader's error.
 
 - [ ] **Step 4: Run GREEN** — pass.
 - [ ] **Step 5: Commit** — `feat(main): resolve expression playback audio by registry root`.
@@ -250,24 +258,25 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 ### Task 3.2: IPC handler + channel registration
 
 **Files:**
+
 - Modify: `src/main/workspaceIpc.ts` (add `handleReadExpressionPlaybackAudioCore`
   modeled on `handleReadRecentExpressionsCore` ~1299 for root resolution +
   trust/session envelope; register near the other audio handlers ~9718)
 - Test: extend the workspace IPC test that covers recent expressions / audio reads.
 
 - [ ] **Step 1: Write failing test** — given a fixture registry with one memory
-  space + system draft, invoking the handler with a valid audio segment request
-  returns `ok:true` with bytes and `mimeType`; an unknown `workspaceId` returns the
-  not-found error; `workspaceId === SYSTEM_DRAFT_WORKSPACE_ID` resolves the ensured
-  draft root.
+      space + system draft, invoking the handler with a valid audio segment request
+      returns `ok:true` with bytes and `mimeType`; an unknown `workspaceId` returns the
+      not-found error; `workspaceId === SYSTEM_DRAFT_WORKSPACE_ID` resolves the ensured
+      draft root.
 
 - [ ] **Step 2: Run RED** — fails (handler/channel absent).
 
 - [ ] **Step 3: Implement** — parse via the request schema, run the same trust/
-  session guard the recent-expressions handler uses, resolve `rootPath` (system
-  draft vs `memorySpaceRegistry.resolveMemorySpace`), call
-  `resolveExpressionPlaybackAudio`, return the parsed response schema. Register the
-  channel with `registerWorkspaceIpcHandler(WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, …)`.
+      session guard the recent-expressions handler uses, resolve `rootPath` (system
+      draft vs `memorySpaceRegistry.resolveMemorySpace`), call
+      `resolveExpressionPlaybackAudio`, return the parsed response schema. Register the
+      channel with `registerWorkspaceIpcHandler(WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, …)`.
 
 - [ ] **Step 4: Run GREEN** — pass.
 - [ ] **Step 5: Commit** — `feat(main): add readExpressionPlaybackAudio IPC handler`.
@@ -275,20 +284,22 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 ### Task 3.3: Preload bridge method + renderer typing
 
 **Files:**
+
 - Modify: `src/preload/workspaceBridge.ts` (import channel; add
   `readExpressionPlaybackAudio: (payload) => invoke<…>(WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, payload)` beside `readFinalizedAudioSegmentAudio` ~380)
 - Modify: `src/renderer/src/types/reoWorkspace.d.ts` (add the method signature using the contract request/response types)
 - Test: the preload bridge exposure test (match the existing one that asserts each method maps to its channel)
 
 - [ ] **Step 1: Write failing test** — assert `bridge.readExpressionPlaybackAudio`
-  invokes `WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL` with the payload.
+      invokes `WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL` with the payload.
 - [ ] **Step 2: Run RED** — fails.
 - [ ] **Step 3: Implement** — add the method + channel to the registry list used by
-  the bridge; add the d.ts signature.
+      the bridge; add the d.ts signature.
 - [ ] **Step 4: Run GREEN** — pass.
 - [ ] **Step 5: Commit** — `feat(preload): expose readExpressionPlaybackAudio`.
 
 ### Phase 3 gate
+
 - [ ] Targeted: IPC + preload tests; `tsc --noEmit`.
 - [ ] Re-check `docs/current/electron.md` per spec; add a stable note only if warranted.
 - [ ] `/review` + `/simplify`; fix findings.
@@ -301,11 +312,12 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 ### Task 4.1: `MediaPlaybackControl` (presentational)
 
 **Files:**
+
 - Create: `src/renderer/src/components/ui/media-playback-control.tsx`
 - Test: `src/renderer/src/components/ui/media-playback-control.test.tsx`
 
 - [ ] **Step 1: Write failing tests** — props `{ playable, hovered, playState,
-  onToggle, label }`. Assert the spec table:
+onToggle, label }`. Assert the spec table:
   - `playable:false` → renders nothing interactive (no control button).
   - `playable, !hovered, idle` → no control (parent shows glyph).
   - `playable, hovered, idle` → ▶ button present (aria-label 播放).
@@ -316,19 +328,20 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 
 - [ ] **Step 2: Run RED** — fails.
 - [ ] **Step 3: Implement** — pure component; derive visibility from the table.
-  Render scrim + ▶/⏸/spinner with tokenized classes (no raw colors — see
-  `[[colors-must-be-tokens]]`); `~150ms ease-out` transitions matching the row.
+      Render scrim + ▶/⏸/spinner with tokenized classes (no raw colors — see
+      `[[colors-must-be-tokens]]`); `~150ms ease-out` transitions matching the row.
 - [ ] **Step 4: Run GREEN** — pass.
 - [ ] **Step 5: Commit** — `feat(ui): add MediaPlaybackControl`.
 
 ### Task 4.2: `useMediaPlaybackController` (single-active `<audio>`)
 
 **Files:**
+
 - Create: `src/renderer/src/components/ui/useMediaPlaybackController.ts`
 - Test: `src/renderer/src/components/ui/useMediaPlaybackController.test.tsx`
 
 - [ ] **Step 1: Write failing tests** (mock `loadSource` + the `<audio>` element via
-  a ref injected into the hook, or assert through a tiny harness component):
+      a ref injected into the hook, or assert through a tiny harness component):
   - initial: `activeId === null`, `playState === 'idle'`.
   - `toggle('A')` → `loadSource('A')` called once → `playState` transitions
     `loading` → `playing`; `activeId === 'A'`.
@@ -340,12 +353,13 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 
 - [ ] **Step 2: Run RED** — fails.
 - [ ] **Step 3: Implement** — one `<audio>` (or `Audio()` instance held in a ref),
-  `activeId`, `playState`; `toggle(id)` implements the transitions above; revoke the
-  cached object URL on switch/unmount. Returns `{ activeId, playState, toggle, stop }`.
+      `activeId`, `playState`; `toggle(id)` implements the transitions above; revoke the
+      cached object URL on switch/unmount. Returns `{ activeId, playState, toggle, stop }`.
 - [ ] **Step 4: Run GREEN** — pass.
 - [ ] **Step 5: Commit** — `feat(ui): add useMediaPlaybackController`.
 
 ### Phase 4 gate
+
 - [ ] Targeted: `npx vitest run src/renderer/src/components/ui/media-playback-control src/renderer/src/components/ui/useMediaPlaybackController`.
 - [ ] Re-check `docs/current/frontend.md`; add a stable note for the new primitive only if warranted.
 - [ ] `/review` + `/simplify`; fix findings.
@@ -358,16 +372,17 @@ Keep the speech-status read injectable for tests; default to the real reader fro
 ### Task 5.1: Extend home row type + map projection
 
 **Files:**
+
 - Modify: `src/renderer/src/workspace/WorkspaceStarterHome.tsx`
   (`WorkspaceStarterHomeRecentExpression`)
 - Modify: `src/renderer/src/App.tsx` (`mapRecentExpressionToHomeRow` ~294)
 - Test: extend the existing App map test (locate via `rg "mapRecentExpressionToHomeRow" src/renderer`)
 
 - [ ] **Step 1: Write failing test** — `mapRecentExpressionToHomeRow(item)` projects
-  `coverImageSrc` (via `resolveSegmentCoverImageSource({ segment: { cover: item.cover,
-  segmentId: item.segmentId }, workspaceId: item.workspaceId })`) and, when
-  `item.playback` exists, a `playback: { kind, ref: { workspaceId, memoryId,
-  segmentId, supplementId? } }`; when absent, no `playback`.
+      `coverImageSrc` (via `resolveSegmentCoverImageSource({ segment: { cover: item.cover,
+segmentId: item.segmentId }, workspaceId: item.workspaceId })`) and, when
+      `item.playback` exists, a `playback: { kind, ref: { workspaceId, memoryId,
+segmentId, supplementId? } }`; when absent, no `playback`.
 
 - [ ] **Step 2: Run RED** — fails.
 - [ ] **Step 3: Implement** — extend the row type:
@@ -400,6 +415,7 @@ Populate it in `mapRecentExpressionToHomeRow`.
 ### Task 5.2: Cover background + row restructure + control wiring
 
 **Files:**
+
 - Modify: `src/renderer/src/workspace/WorkspaceStarterHome.tsx`
   (`RecentExpressionTypeIcon` ~144, `RecentExpressionRow` ~182, list render)
 - Test: `src/renderer/src/workspace/WorkspaceStarterHome.test.tsx` (extend if present, else create)
@@ -432,6 +448,7 @@ Populate it in `mapRecentExpressionToHomeRow`.
 - [ ] **Step 5: Commit** — `feat(home): cover-fill icons with hover play/pause`.
 
 ### Phase 5 gate
+
 - [ ] Targeted: `npx vitest run src/renderer/src/workspace/WorkspaceStarterHome src/renderer/src/App` (map test).
 - [ ] `/review` + `/simplify`; fix findings.
 - [ ] `implementation-notes.md` entry.
@@ -441,14 +458,14 @@ Populate it in `mapRecentExpressionToHomeRow`.
 ## Phase 6 — Closeout
 
 - [ ] Re-check `docs/current/data.md`, `electron.md`, `frontend.md`; compress only
-  stable conclusions per the doc red lines (interface change to recent-expression
-  contract; new IPC/preload surface; new reusable primitive).
+      stable conclusions per the doc red lines (interface change to recent-expression
+      contract; new IPC/preload surface; new reusable primitive).
 - [ ] Real Electron runtime visual verification (`/run` or dev app):
   - cover backgrounds render for note / audio / artifact rows;
   - hover a recording → ▶ → click plays → ⏸ → pointer-leave stays ⏸ → click pauses;
   - hover a ready-speech note → plays speech; a note without ready speech shows no control;
   - starting a second item stops the first; playback end returns to idle.
-  Capture screenshots + a short interaction note into this spec folder.
+    Capture screenshots + a short interaction note into this spec folder.
 - [ ] `npm run verify:quick` once; record evidence in `implementation-notes.md`.
 - [ ] superpowers:finishing-a-development-branch to decide merge/PR.
 

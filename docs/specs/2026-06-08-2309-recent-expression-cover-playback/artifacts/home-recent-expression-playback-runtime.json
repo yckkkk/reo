@@ -1,0 +1,93 @@
+{
+  "runtime": "REMOTE_DEBUGGING_PORT=9233 npm run dev",
+  "url": "http://localhost:5183/",
+  "viewport": {
+    "width": 1200,
+    "height": 820
+  },
+  "screenshots": [
+    "docs/specs/2026-06-08-2309-recent-expression-cover-playback/artifacts/home-recent-expression-hover-play-runtime.png",
+    "docs/specs/2026-06-08-2309-recent-expression-cover-playback/artifacts/home-recent-expression-playing-runtime.png"
+  ],
+  "hoverEvidence": {
+    "state": "hover-play",
+    "iconId": "ws_system_draft:mem_system_draft:seg_20260607063804_6629018d",
+    "buttonLabel": "播放 笔记8",
+    "buttonDisabled": false,
+    "iconClass": "reo-squircle relative isolate grid size-[34px] shrink-0 place-items-center overflow-hidden rounded-full bg-primary",
+    "controlClass": "absolute inset-0 flex items-center justify-center rounded-[inherit] bg-transparent text-foreground transition-opacity duration-150 ease-out z-[3]",
+    "buttonClass": "reo-squircle inline-flex size-28 items-center justify-center rounded-full bg-card/95 text-card-foreground shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:bg-muted disabled:text-muted-foreground",
+    "glyphClass": "relative z-[2] grid size-full place-items-center text-[rgb(var(--recent-expression-glyph-r)_var(--recent-expression-glyph-g)_var(--recent-expression-glyph-b)/0.92)] drop-shadow-sm transition-opacity duration-150 ease-out opacity-0",
+    "scrimClass": "pointer-events-none absolute inset-0 z-[1] transition-colors duration-150 ease-out bg-background/30",
+    "iconRect": {
+      "x": 300,
+      "y": 495.4921875,
+      "width": 34,
+      "height": 34
+    },
+    "buttonRect": {
+      "x": 303,
+      "y": 498.4921875,
+      "width": 28,
+      "height": 28
+    },
+    "controlBackground": "rgba(0, 0, 0, 0)",
+    "buttonBackground": "oklab(0.210329 0.00161358 -0.00563219 / 0.95)"
+  },
+  "playingEvidence": {
+    "state": "playing",
+    "iconId": "ws_system_draft:mem_system_draft:seg_20260607063804_6629018d",
+    "buttonLabel": "暂停 笔记8",
+    "buttonDisabled": false,
+    "iconClass": "reo-squircle relative isolate grid size-[34px] shrink-0 place-items-center overflow-hidden rounded-full bg-primary",
+    "controlClass": "absolute inset-0 flex items-center justify-center rounded-[inherit] bg-transparent text-foreground transition-opacity duration-150 ease-out z-[3]",
+    "buttonClass": "reo-squircle inline-flex size-28 items-center justify-center rounded-full bg-card/95 text-card-foreground shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:bg-muted disabled:text-muted-foreground",
+    "glyphClass": "relative z-[2] grid size-full place-items-center text-[rgb(var(--recent-expression-glyph-r)_var(--recent-expression-glyph-g)_var(--recent-expression-glyph-b)/0.92)] drop-shadow-sm transition-opacity duration-150 ease-out opacity-0",
+    "scrimClass": "pointer-events-none absolute inset-0 z-[1] transition-colors duration-150 ease-out bg-background/30",
+    "iconRect": {
+      "x": 300,
+      "y": 495.4921875,
+      "width": 34,
+      "height": 34
+    },
+    "buttonRect": {
+      "x": 303,
+      "y": 498.4921875,
+      "width": 28,
+      "height": 28
+    },
+    "controlBackground": "rgba(0, 0, 0, 0)",
+    "buttonBackground": "oklab(0.210329 0.00161358 -0.00563219 / 0.95576)"
+  },
+  "pausedHoverEvidence": {
+    "state": "paused-hover",
+    "iconId": "ws_system_draft:mem_system_draft:seg_20260607063804_6629018d",
+    "buttonLabel": "播放 笔记8",
+    "buttonDisabled": false,
+    "iconClass": "reo-squircle relative isolate grid size-[34px] shrink-0 place-items-center overflow-hidden rounded-full bg-primary",
+    "controlClass": "absolute inset-0 flex items-center justify-center rounded-[inherit] bg-transparent text-foreground transition-opacity duration-150 ease-out z-[3]",
+    "buttonClass": "reo-squircle inline-flex size-28 items-center justify-center rounded-full bg-card/95 text-card-foreground shadow-none outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-wait disabled:bg-muted disabled:text-muted-foreground",
+    "glyphClass": "relative z-[2] grid size-full place-items-center text-[rgb(var(--recent-expression-glyph-r)_var(--recent-expression-glyph-g)_var(--recent-expression-glyph-b)/0.92)] drop-shadow-sm transition-opacity duration-150 ease-out opacity-0",
+    "scrimClass": "pointer-events-none absolute inset-0 z-[1] transition-colors duration-150 ease-out bg-background/30",
+    "iconRect": {
+      "x": 300,
+      "y": 495.4921875,
+      "width": 34,
+      "height": 34
+    },
+    "buttonRect": {
+      "x": 303,
+      "y": 498.4921875,
+      "width": 28,
+      "height": 28
+    },
+    "controlBackground": "rgba(0, 0, 0, 0)",
+    "buttonBackground": "oklab(0.210329 0.00161358 -0.00563219 / 0.951933)"
+  },
+  "leaveEvidence": {
+    "state": "paused-after-leave",
+    "playbackButtonVisible": false,
+    "glyphClass": "relative z-[2] grid size-full place-items-center text-[rgb(var(--recent-expression-glyph-r)_var(--recent-expression-glyph-g)_var(--recent-expression-glyph-b)/0.92)] drop-shadow-sm transition-opacity duration-150 ease-out opacity-100",
+    "scrimClass": "pointer-events-none absolute inset-0 z-[1] bg-background/0 transition-colors duration-150 ease-out"
+  }
+}

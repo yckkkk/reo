@@ -9,6 +9,7 @@ const workspaceBridgeKeys = [
   'readSystemDraftWorkspace',
   'openSystemDraftWorkspace',
   'readRecentExpressions',
+  'readExpressionPlaybackAudio',
   'initializeWorkspace',
   'openWorkspace',
   'openMemorySpace',
@@ -146,6 +147,7 @@ const applicationScopedBridgeContractKeys = [
   'readSystemDraftWorkspace',
   'openSystemDraftWorkspace',
   'readRecentExpressions',
+  'readExpressionPlaybackAudio',
   'readAppPermissionStatus',
   'requestAppPermission',
   'readVoiceTranscriptionSettings',
@@ -166,6 +168,7 @@ test('workspace bridge contract declares application-scoped methods before prelo
       'readSystemDraftWorkspace',
       'openSystemDraftWorkspace',
       'readRecentExpressions',
+      'readExpressionPlaybackAudio',
       'readAppPermissionStatus',
       'requestAppPermission',
       'readVoiceTranscriptionSettings',
@@ -202,6 +205,13 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   await bridge.readSystemDraftWorkspace();
   await bridge.openSystemDraftWorkspace();
   await bridge.readRecentExpressions({ limit: 12 });
+  await bridge.readExpressionPlaybackAudio({
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    kind: 'audio',
+    requestId: 'request_expression_audio_1',
+  });
   await bridge.openMemorySpace({ workspaceId: 'ws_1' });
   await bridge.removeMemorySpace({ workspaceId: 'ws_1' });
   await bridge.updateMemorySpaceTitle({ workspaceId: 'ws_1', title: '测试工作区1' });
@@ -526,6 +536,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:readSystemDraftWorkspace',
     'workspace:openSystemDraftWorkspace',
     'workspace:readRecentExpressions',
+    'workspace:readExpressionPlaybackAudio',
     'workspace:openMemorySpace',
     'workspace:removeMemorySpace',
     'workspace:updateMemorySpaceTitle',

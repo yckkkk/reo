@@ -18,7 +18,7 @@
 - Vaul 已作为 shadcn Drawer 的 dialog/dismiss mechanics dependency 引入。
 - Sonner 已作为 toast mechanics dependency 引入；renderer root 使用 `ReoToaster` 统一承载非阻断操作提示。
 - `Waveform` 是当前 Reo audio UI primitive；它支持 canvas bars、静态 dots、播放进度双色切分和录音编辑 cursor，并在 `data-theme` 切换时重绘 canvas 以同步主题 token 颜色；不包含 agent runtime、network/API key、demo feedback 或未实现文案。Memory Studio finalized playback waveform 从 decoded audio 生成 RMS 能量曲线，并在播放行使用细 bar，以便长录音和长 TTS 音频仍保留可辨认起伏；Segment preview card 的小型 glyph 仍使用 4px bars。
-- 当前没有 shared local playback primitive；暂停态回听由 recording overlay 内部的隐藏 HTMLAudioElement 和 feature-local controls 承担。
+- 当前 shared local playback primitive 是 `useMediaPlaybackController` 和 `MediaPlaybackControl`：它们拥有单 active audio、Blob URL 生命周期和 hover/loading/playing/paused 控制投影，当前 consumer 是 Home 近期表达图标播放。Recording overlay 暂停态回听仍由自身隐藏 HTMLAudioElement 和 feature-local controls 承担。
 - 当前 Radix primitives 安装并使用 `@radix-ui/react-slot`、`@radix-ui/react-label`、`@radix-ui/react-dialog`、`@radix-ui/react-alert-dialog`、`@radix-ui/react-dropdown-menu`、`@radix-ui/react-select`、`@radix-ui/react-tooltip`、`@radix-ui/react-separator` 和 `@radix-ui/react-switch`。
 - 当前 Tiptap 安装并使用 `@tiptap/react`、`@tiptap/starter-kit`、`@tiptap/markdown`、`@tiptap/extension-image`、`@tiptap/extension-highlight`、`@tiptap/extension-text-align`、`@tiptap/extension-list`、`@tiptap/extension-typography`、`@tiptap/extension-subscript`、`@tiptap/extension-superscript` 和 `@tiptap/extensions`，只服务 `LightweightMarkdownEditorSurface` 的 Notes-like 轻量 Markdown 编辑内核。
 - 当前真实 reusable component consumer 是 app shell、memory space starter home、memory space create dialog、memory space entry form、loaded workspace frame、recording overlay、recording control surface 和 root toast host。

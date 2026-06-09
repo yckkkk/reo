@@ -48,6 +48,7 @@ import {
   readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
   readFinalizedAudioSegmentSupplementAudio,
+  readExpressionPlaybackAudio,
   readArtifactRuntimeState,
   readMemoryDetail,
   readSegmentContent,
@@ -137,6 +138,7 @@ describe('workspace renderer API wrapper', () => {
     readFinalizedAudioSegmentSupplement: vi.fn(),
     readFinalizedAudioSegmentAudio: vi.fn(),
     readFinalizedAudioSegmentSupplementAudio: vi.fn(),
+    readExpressionPlaybackAudio: vi.fn(),
     createNoteSegmentDraft: vi.fn(),
     createSegmentSupplementNoteDraft: vi.fn(),
     writeNoteSegmentDraftBody: vi.fn(),
@@ -605,6 +607,18 @@ describe('workspace renderer API wrapper', () => {
         audio: new Uint8Array([2]),
         audioByteLength: 1,
         audioHash: 'a'.repeat(64),
+      },
+    });
+    reoWorkspace.readExpressionPlaybackAudio.mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'request_expression_audio_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        kind: 'audio',
+        audio: new Uint8Array([1, 2, 3]),
+        mimeType: 'audio/webm',
       },
     });
     reoWorkspace.createRecordingDraft.mockResolvedValue({
@@ -1125,6 +1139,13 @@ describe('workspace renderer API wrapper', () => {
       audioByteLength: 1,
       audioHash: 'a'.repeat(64),
     });
+    await readExpressionPlaybackAudio({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'request_expression_audio_1',
+    });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
     await createSegmentSupplementRecordingDraft({
       workspaceHandle: 'wh_1',
@@ -1358,6 +1379,13 @@ describe('workspace renderer API wrapper', () => {
       requestId: 'request_sup_audio_1',
       audioByteLength: 1,
       audioHash: 'a'.repeat(64),
+    });
+    expect(reoWorkspace.readExpressionPlaybackAudio).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'request_expression_audio_1',
     });
     expect(reoWorkspace.createSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',

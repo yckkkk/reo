@@ -26,6 +26,12 @@ export function readRecentExpressions(
   return window.reoWorkspace.readRecentExpressions(payload);
 }
 
+export function readExpressionPlaybackAudio(
+  payload: Parameters<Window['reoWorkspace']['readExpressionPlaybackAudio']>[0]
+) {
+  return window.reoWorkspace.readExpressionPlaybackAudio(payload);
+}
+
 export function openWorkspace(payload: Parameters<Window['reoWorkspace']['openWorkspace']>[0]) {
   return window.reoWorkspace.openWorkspace(payload);
 }

@@ -204,6 +204,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       ok: true as const,
       value: { items: [], skipped: [] },
     })),
+    readExpressionPlaybackAudio: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),

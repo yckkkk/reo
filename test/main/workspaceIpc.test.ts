@@ -82,6 +82,7 @@ import {
   handleRequestAppPermissionForTest,
   handleRemoveMemorySpaceForTest,
   handleReadVoiceTranscriptionSettingsForTest,
+  handleReadExpressionPlaybackAudioForTest,
   handleReadRecentExpressionsForTest,
   handleReadSystemDraftWorkspaceForTest,
   handleRestoreDeletedMemoryForTest,
@@ -108,6 +109,7 @@ import {
 } from '../../src/main/workspaceIpc.js';
 import {
   SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+  getSystemDraftWorkspaceRootPath,
   SYSTEM_DRAFT_TITLE,
   SYSTEM_DRAFT_WORKSPACE_ID,
   SYSTEM_DRAFT_WORKSPACE_ROLE,
@@ -1504,6 +1506,201 @@ test('readRecentExpressions IPC reads system Draft and registered normal memory 
   } finally {
     await rm(appDataDir, { force: true, recursive: true });
     await rm(normalRoot, { force: true, recursive: true });
+  }
+});
+
+test('readExpressionPlaybackAudio IPC reads normal memory space audio without a workspace handle', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-expression-playback-'));
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-expression-playback-root-'));
+  try {
+    await initializeWorkspaceFiles({
+      rootPath,
+      title: '播放空间',
+      description: '',
+      createWorkspaceId: () => 'ws_playback',
+      now: () => '2026-06-08T20:00:00.000Z',
+    });
+    await writeFinalizedMemoryRecording({
+      root: rootPath,
+      workspaceId: 'ws_playback',
+      memoryId: 'mem_playback',
+      segmentId: 'seg_playback',
+      title: '近期录音',
+    });
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    await memorySpaceRegistry.upsertMemorySpace({
+      canonicalRoot: rootPath,
+      snapshot: {
+        workspaceId: 'ws_playback',
+        title: '播放空间',
+        description: '',
+        memories: [],
+      },
+    });
+
+    const result = await handleReadExpressionPlaybackAudioForTest({
+      appDataDir,
+      event,
+      input: {
+        workspaceId: 'ws_playback',
+        memoryId: 'mem_playback',
+        segmentId: 'seg_playback',
+        kind: 'audio',
+        requestId: 'request_recent_audio',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      memorySpaceRegistry,
+      now: () => '2026-06-08T20:05:00.000Z',
+    });
+
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.value.requestId, 'request_recent_audio');
+      assert.equal(result.value.workspaceId, 'ws_playback');
+      assert.equal(result.value.memoryId, 'mem_playback');
+      assert.equal(result.value.segmentId, 'seg_playback');
+      assert.equal(result.value.kind, 'audio');
+      assert.equal(result.value.mimeType, 'audio/webm');
+      assert.deepEqual(Array.from(result.value.audio), [1, 2, 3]);
+      assert.equal('workspaceHandle' in result.value, false);
+      assert.equal('rootPath' in result.value, false);
+    }
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+    await rm(rootPath, { force: true, recursive: true });
+  }
+});
+
+test('readExpressionPlaybackAudio IPC resolves system Draft audio without a workspace handle', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-draft-playback-'));
+  try {
+    const handleStore = createWorkspaceHandleStore({ createHandle: () => 'wh_draft_playback' });
+    const openedDraft = await handleOpenSystemDraftWorkspaceForTest({
+      appDataDir,
+      event,
+      input: undefined,
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-08T20:00:00.000Z',
+    });
+    assert.equal(openedDraft.ok, true);
+
+    const createdDraft = await handleCreateRecordingDraftForTest({
+      event,
+      input: { workspaceHandle: 'wh_draft_playback' },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      createSegmentId: () => 'seg_draft_playback',
+      now: () => '2026-06-08T20:01:00.000Z',
+    });
+    assert.equal(createdDraft.ok, true);
+    await appendRecordingAudioChunk({
+      rootPath: getSystemDraftWorkspaceRootPath(appDataDir),
+      segmentId: 'seg_draft_playback',
+      sequence: 0,
+      chunk: new Uint8Array([8, 9]),
+    });
+    const finalized = await handleFinalizeRecordingDraftForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_draft_playback',
+        memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+        segmentId: 'seg_draft_playback',
+        title: '草稿录音',
+        durationMs: 900,
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      now: () => '2026-06-08T20:02:00.000Z',
+    });
+    assert.equal(finalized.ok, true);
+
+    const result = await handleReadExpressionPlaybackAudioForTest({
+      appDataDir,
+      event,
+      input: {
+        workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+        memoryId: SYSTEM_DRAFT_DEFAULT_MEMORY_ID,
+        segmentId: 'seg_draft_playback',
+        kind: 'audio',
+        requestId: 'request_draft_audio',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      now: () => '2026-06-08T20:03:00.000Z',
+    });
+
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.deepEqual(Array.from(result.value.audio), [8, 9]);
+      assert.equal(result.value.workspaceId, SYSTEM_DRAFT_WORKSPACE_ID);
+      assert.equal(result.value.kind, 'audio');
+      assert.equal(result.value.mimeType, 'audio/webm');
+      assert.equal('workspaceHandle' in result.value, false);
+      assert.equal('rootPath' in result.value, false);
+    }
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+  }
+});
+
+test('readExpressionPlaybackAudio IPC reports missing inactive memory space before reading bytes', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-expression-playback-missing-'));
+  try {
+    let resolvedWorkspaceId: string | null = null;
+    const result = await handleReadExpressionPlaybackAudioForTest({
+      appDataDir,
+      event,
+      input: {
+        workspaceId: 'ws_missing_playback',
+        memoryId: 'mem_missing_playback',
+        segmentId: 'seg_missing_playback',
+        kind: 'audio',
+        requestId: 'request_missing_audio',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      memorySpaceRegistry: {
+        listMemorySpaces: async () => [],
+        resolveMemorySpace: async (workspaceId: string) => {
+          resolvedWorkspaceId = workspaceId;
+          return null;
+        },
+        resolveMemorySpaceRoot: async () => {
+          throw new Error('readExpressionPlaybackAudio must not use handle-scoped root lookup');
+        },
+        removeMemorySpace: async () => {},
+        updateMemorySpaceSnapshot: async () => {
+          throw new Error('unused');
+        },
+        upsertMemorySpace: async () => {
+          throw new Error('unused');
+        },
+      },
+      now: () => '2026-06-08T20:05:00.000Z',
+    });
+
+    assert.equal(resolvedWorkspaceId, 'ws_missing_playback');
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, 'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND');
+      assert.equal('rootPath' in result.error, false);
+      assert.equal('workspaceHandle' in result.error, false);
+    }
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
   }
 });
 

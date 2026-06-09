@@ -164,7 +164,10 @@ import {
   type WorkspaceSystemDraftSession,
   type VoiceTranscriptionSettings,
 } from './workspace/workspaceApi';
-import { resolveNextDefaultCoverTemplateId } from './workspace/covers/memoryCoverSource';
+import {
+  resolveNextDefaultCoverTemplateId,
+  resolveSegmentCoverImageSource,
+} from './workspace/covers/memoryCoverSource';
 import {
   lastTranscriptionAttemptOnFinalize,
   type LastTranscriptionAttemptOnFinalize,
@@ -294,8 +297,25 @@ function formatRecentExpressionTime(updatedAt: string) {
 function mapRecentExpressionToHomeRow(
   item: WorkspaceRecentExpressionItem
 ): WorkspaceStarterHomeRecentExpression {
+  const playback = item.playback
+    ? {
+        kind: item.playback.kind,
+        ref: {
+          workspaceId: item.workspaceId,
+          memoryId: item.memoryId,
+          segmentId: item.segmentId,
+          ...('supplementId' in item ? { supplementId: item.supplementId } : {}),
+        },
+      }
+    : undefined;
+
   return {
+    coverImageSrc: resolveSegmentCoverImageSource({
+      segment: { cover: item.cover, segmentId: item.segmentId },
+      workspaceId: item.workspaceId,
+    }),
     id: item.id,
+    ...(playback ? { playback } : {}),
     preview: item.preview?.trim() || `${item.workspaceTitle} / ${item.memoryTitle}`,
     time: formatRecentExpressionTime(item.updatedAt),
     title: item.title,
