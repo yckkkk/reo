@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <radialGradient id="leftGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fff0e9" />
+      <stop offset="54%" stop-color="#f5efff" stop-opacity="0.78" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="rightGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#eff6ff" />
+      <stop offset="58%" stop-color="#eef2ff" stop-opacity="0.64" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f4f4fb" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="arrowStroke" x1="480" y1="0" x2="720" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ff9d7a" />
+      <stop offset="50%" stop-color="#b58cff" />
+      <stop offset="100%" stop-color="#4967ff" />
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-80%" width="160%" height="260%">
+      <feDropShadow dx="0" dy="14" stdDeviation="17" flood-color="#4852a8" flood-opacity="0.16" />
+    </filter>
+    <style>
+      .title {
+        fill: #151518;
+        font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 56px;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      .subtitle {
+        fill: #4e4f58;
+        font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 30px;
+        font-weight: 400;
+        letter-spacing: 0;
+      }
+      .hint {
+        fill: #747680;
+        font-family: 'PingFang SC', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
+        font-size: 24px;
+        font-weight: 400;
+        letter-spacing: 0;
+      }
+    </style>
+  </defs>
+
+  <rect width="1200" height="800" fill="#fbfbfd" />
+  <circle cx="320" cy="420" r="240" fill="url(#leftGlow)" />
+  <circle cx="880" cy="420" r="240" fill="url(#rightGlow)" />
+  <circle cx="600" cy="400" r="300" fill="url(#centerGlow)" opacity="0.82" />
+
+  <text class="title" x="600" y="102" text-anchor="middle">安装 Reo</text>
+  <text class="subtitle" x="600" y="154" text-anchor="middle">
+    将 Reo.app 拖入 Applications 文件夹
+  </text>
+
+  <g filter="url(#softShadow)">
+    <path
+      d="M 478 420 L 710 420"
+      fill="none"
+      stroke="url(#arrowStroke)"
+      stroke-linecap="round"
+      stroke-width="18"
+    />
+    <path
+      d="M 678 386 L 724 420 L 678 454"
+      fill="none"
+      stroke="#4967ff"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      stroke-width="18"
+    />
+  </g>
+
+  <text class="hint" x="600" y="706" text-anchor="middle">复制完成后，从“应用程序”中打开 Reo</text>
+</svg>
