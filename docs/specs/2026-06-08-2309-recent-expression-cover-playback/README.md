@@ -53,11 +53,26 @@ Confirmed with product owner before design:
   `resolveSegmentCoverImageSource({ segment: { cover, segmentId }, workspaceId })`
   (custom → `reo-attachment://…`; default → bundled template PNG). No new IPC
   needed for cover backgrounds.
-- Audio fetch IPC already exists for every case — **no new audio IPC needed**:
-  - Recording segment audio: `readFinalizedAudioSegmentAudio`
-  - Recording supplement audio: `readFinalizedAudioSegmentSupplementAudio`
-  - Note speech audio: `readSegmentSpeechAudio`
-  - Note speech supplement audio: `readSegmentSupplementSpeechAudio`
+- The internal byte readers are already **root-based** and reusable:
+  - Recording audio: `readFinalizedAudioSegmentAudio({ rootPath, memoryId,
+    segmentId, expectedAudioByteLength, expectedAudioHash })` (recordingDrafts.ts)
+    + a supplement variant.
+  - Note speech audio: `readNoteSpeechAudio({ rootPath, … })` (noteDrafts.ts).
+- BUT the existing audio-read **IPC wrappers** are handle-scoped: each resolves
+  `handle.canonicalRoot` and rejects when `request.workspaceId !== handle.workspaceId`.
+  Only one workspace handle is open at a time (`workspaceSession`).
+- Home recent expressions are **cross-workspace and handle-less**: the read
+  iterates every memory-space `source` (registry `resolveMemorySpace` →
+  `rootPath`) plus the system draft workspace, with no open handle. An item's
+  workspace is usually **not** the open session, and opening it
+  (`openMemorySpace`) switches the active session and navigates to that
+  workspace's stage view.
+- Therefore inline home playback needs **one new handle-less playback-read IPC**,
+  modeled on the recent-expressions registry read: resolve the item's `rootPath`
+  from the registry (or the system draft), then call the same root-based internal
+  readers above. This avoids a workspace switch and reuses the byte-read logic.
+  This is the new "reo 开发接口" the product owner anticipated; artifacts/components
+  can later add their own activation behind the same renderer control.
 - Note speech readiness is derivable in main during the recent-expression read
   via the existing `readNoteSpeechSynthesisProjectionFromManifest` (compares note
   content hash to the synthesized manifest hash and checks the audio file). The
@@ -130,14 +145,38 @@ WorkspacePlaybackSource = { kind: 'audio' | 'note-speech'; durationMs?: number }
 
 ## Main Process Changes
 
-- In `readRecentExpressionItemsFromFileTruth`, compute `playback` for each emitted
-  item:
-  - audio segment → `{ kind: 'audio', durationMs: metadata.durationMs }`.
-  - audio supplement → `{ kind: 'audio', durationMs }` from the supplement manifest.
-  - note segment → reuse `readNoteSpeechSynthesisProjectionFromManifest`; emit
-    `{ kind: 'note-speech' }` only when status === `ready`, else omit.
-  - artifact → omit.
-- No new IPC channels; no change to playback data truth.
+**(a) Playback descriptor derivation** — in `readRecentExpressionItemsFromFileTruth`,
+compute `playback` for each emitted item:
+
+- audio segment → `{ kind: 'audio', durationMs: metadata.durationMs }`.
+- audio supplement → `{ kind: 'audio', durationMs: supplement.durationMs }` (the
+  audio supplement projection already carries `durationMs`).
+- note segment → reuse `readNoteSpeechSynthesisProjectionFromManifest({
+  currentContentHash: noteContentHash(metadata.markdownContent), manifest: metadata,
+  objectDirectory: fileTruth.recordingDirectory })`; emit `{ kind: 'note-speech' }`
+  only when status === `ready`, else omit.
+- note supplement → no `speechSynthesis` on the projection → not playable → omit.
+- artifact (segment or supplement) → omit.
+
+**(b) New handle-less playback-read IPC** — `workspace:readExpressionPlaybackAudio`:
+
+- Request: `{ workspaceId, memoryId, segmentId, supplementId?, kind:'audio'|'note-speech',
+  requestId }` (+ the standard trust/session envelope the recent-expressions read uses).
+- Handler: resolve `rootPath` the same way the recent-expressions handler does
+  (system draft → ensured draft root; else `memorySpaceRegistry.resolveMemorySpace`).
+  Then dispatch to the existing root-based reader:
+  - `kind:'audio'`, segment → `readFinalizedAudioSegmentAudio({ rootPath, … })`
+  - `kind:'audio'`, supplement → `readFinalizedAudioSegmentSupplementAudio({ rootPath, … })`
+  - `kind:'note-speech'`, segment → `readNoteSpeechAudio({ rootPath, … })`
+  - The handler reads the manifest to supply the expected identity
+    (audioByteLength/hash, or speech byteLength) to the reader; the renderer does
+    not carry identity.
+- Response: `{ requestId (echoed), workspaceId, memoryId, segmentId, supplementId?,
+  kind, audio: Uint8Array, mimeType }` (`audio/webm` for `audio`, `audio/mpeg` for
+  `note-speech`). Path safety is enforced by the same `resolveSafeWorkspaceChild`
+  the internal readers already use.
+- Preload exposes one new bridge method `readExpressionPlaybackAudio(payload)`.
+- No change to playback data truth (read-only).
 
 ## Renderer: Reusable Primitive + Home Integration
 
@@ -146,13 +185,12 @@ export, colocated test):
 
 - `useMediaPlaybackController(loadSource)` — owns a single `<audio>` element,
   `activeRef`, and `playState`. Exposes `toggle(ref)` and `stop()`.
-  `loadSource(ref)` fetches the right blob via the existing IPC and returns an
-  object URL + mime type:
-  - `{ kind:'audio', objectType:'segment' }` → `readFinalizedAudioSegmentAudio`
-  - `{ kind:'audio', objectType:'supplement' }` → `readFinalizedAudioSegmentSupplementAudio`
-  - `{ kind:'note-speech', objectType:'segment' }` → `readSegmentSpeechAudio`
-  - `{ kind:'note-speech', objectType:'supplement' }` → `readSegmentSupplementSpeechAudio`
-  Object URLs are revoked on switch/unmount.
+  `loadSource(ref)` calls the one new bridge method
+  `readExpressionPlaybackAudio({ workspaceId, memoryId, segmentId, supplementId?,
+  kind, requestId })`, validates the echoed `requestId`/identity, wraps the bytes
+  in a `Blob` of the returned `mimeType`, and returns an object URL. The last
+  loaded ref's object URL is cached and revoked on switch/unmount (replaying the
+  same paused item does not refetch).
 - `MediaPlaybackControl` — pure presentational; renders ▶ / ⏸ / spinner + scrim
   from `{ playable, hovered, playState }`.
 
@@ -186,11 +224,14 @@ real labeled button (aria-label reflects play/pause state).
 
 **In scope:** cover-fill background (all three types), hover play/pause for
 recordings + ready-speech notes, single-active controller, the named
-`WorkspacePlaybackSource` contract + renderer primitive, the row-structure fix.
+`WorkspacePlaybackSource` descriptor, the one new handle-less
+`readExpressionPlaybackAudio` IPC (+ preload method), the renderer
+`MediaPlaybackControl` / `useMediaPlaybackController` primitives, the
+row-structure fix.
 
 **Out of scope:** artifact/component playback implementation, on-demand TTS
-synthesis from Home, waveform/progress scrubber, any new audio IPC, any change to
-playback data truth.
+synthesis from Home, waveform/progress scrubber, seeking/scrubbing, any change to
+playback data truth or to the existing handle-scoped audio reads.
 
 ## Verification Plan
 
@@ -210,7 +251,10 @@ playback data truth.
 
 - `docs/current/data.md` — adding `WorkspacePlaybackSource` to the recent-expression
   contract (a stable interface change) may warrant a one-line note.
-- `docs/current/electron.md` — confirm no IPC/preload surface change (expected: none).
+- `docs/current/electron.md` — a new handle-less, registry-resolved IPC/preload
+  surface (`readExpressionPlaybackAudio`) is added; re-check whether a stable note
+  is warranted (read-only, path-safety via `resolveSafeWorkspaceChild`, same
+  trust/session envelope as the recent-expressions read).
 - `docs/current/frontend.md` — a new reusable `components/ui` primitive
   (`MediaPlaybackControl` / `useMediaPlaybackController`) is a reusable-component
   surface; re-check whether a stable note is warranted.
