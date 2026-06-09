@@ -236,7 +236,8 @@ type WidgetReorderState = {
 type MemoryCreateIntent =
   | { readonly afterCreate: 'stay-on-stage' }
   | { readonly afterCreate: 'record-memory' }
-  | { readonly afterCreate: 'note-memory' };
+  | { readonly afterCreate: 'note-memory' }
+  | { readonly afterCreate: 'artifact-memory' };
 type SegmentFocusIntent = {
   readonly memoryId: string;
   readonly segmentId: string;
@@ -264,6 +265,9 @@ function memoryCreateDialogDescription(intent: MemoryCreateIntent | null) {
   if (intent?.afterCreate === 'note-memory') {
     return '创建记忆并开始笔记';
   }
+  if (intent?.afterCreate === 'artifact-memory') {
+    return '创建记忆并创建作品';
+  }
 
   return '保持简短且易识别';
 }
@@ -274,6 +278,9 @@ function memoryCreateDialogSubmitLabel(intent: MemoryCreateIntent | null) {
   }
   if (intent?.afterCreate === 'note-memory') {
     return '开始笔记';
+  }
+  if (intent?.afterCreate === 'artifact-memory') {
+    return '创建作品';
   }
 
   return '创建';
@@ -3662,6 +3669,10 @@ export function App() {
         setMemoryCreateIntent(null);
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
         openNoteEditorForMemory(response.value.memoryId, 1);
+      } else if (memoryCreateIntent?.afterCreate === 'artifact-memory') {
+        setMemoryCreateIntent(null);
+        setWorkspaceView(WORKSPACE_STAGE_VIEW);
+        await copyArtifactSegmentPromptForMemory(mutationSession, response.value.memoryId);
       } else {
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
         showReoToast({ type: 'success', title: '已新建记忆' });
@@ -5669,6 +5680,43 @@ export function App() {
     openNoteEditorForMemory(currentMemoryId, (currentMemory?.noteSegmentCount ?? 0) + 1);
   }
 
+  async function copyArtifactSegmentPromptForMemory(session: WorkspaceSession, memoryId: string) {
+    try {
+      const result = await copyArtifactAgentPrompt({
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        action: 'create-segment',
+        memoryId,
+      });
+
+      if (!result.ok) {
+        showReoToast({ type: 'error', title: '无法复制作品提示词' });
+        return;
+      }
+
+      showReoToast({
+        type: 'success',
+        title: '已复制作品提示词',
+        description: '交给您的 Agent 后，它会在当前记忆中创建作品文件。',
+      });
+    } catch {
+      showReoToast({ type: 'error', title: '无法复制作品提示词' });
+    }
+  }
+
+  function requestStartArtifact() {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    if (!currentMemoryId) {
+      openMemoryCreateDialog({ afterCreate: 'artifact-memory' });
+      return;
+    }
+
+    void copyArtifactSegmentPromptForMemory(activeWorkspaceSession, currentMemoryId);
+  }
+
   async function requestStartDraftNoteFromHome() {
     const draftSession = await openSystemDraftWorkspaceForHomeAction();
     if (!draftSession) {
@@ -5703,27 +5751,7 @@ export function App() {
       return;
     }
 
-    try {
-      const result = await copyArtifactAgentPrompt({
-        workspaceHandle: draftSession.workspaceHandle,
-        workspaceId: draftSession.workspaceId,
-        action: 'create-segment',
-        memoryId: draftSession.defaultMemoryId,
-      });
-
-      if (!result.ok) {
-        showReoToast({ type: 'error', title: '无法复制作品提示词' });
-        return;
-      }
-
-      showReoToast({
-        type: 'success',
-        title: '已复制作品提示词',
-        description: '交给您的 Agent 后，它会在当前记忆中创建作品文件。',
-      });
-    } catch {
-      showReoToast({ type: 'error', title: '无法复制作品提示词' });
-    }
+    await copyArtifactSegmentPromptForMemory(draftSession, draftSession.defaultMemoryId);
   }
 
   async function openRecentExpression(item: WorkspaceRecentExpressionItem) {
@@ -6418,6 +6446,7 @@ export function App() {
           speechSynthesis={memoryStudioSpeechSynthesis}
           transcriptionBackfill={memoryStudioTranscriptionBackfill}
           expressionDockVisible={recordingTarget === null && !noteEditorBlocking}
+          onStartArtifact={requestStartArtifact}
           onStartNote={requestStartNote}
           onStartSegmentSupplementNote={requestStartSegmentSupplementNote}
           onStartSegmentSupplementRecording={requestStartSegmentSupplementRecording}

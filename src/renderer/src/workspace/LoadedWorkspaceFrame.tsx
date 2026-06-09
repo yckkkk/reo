@@ -89,6 +89,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onRequestWidgetUpdate?: ((widget: WorkspaceWidgetProjection) => void) | undefined;
   readonly onWidgetRuntimeMutation?: ((value: unknown) => boolean) | undefined;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
+  readonly onStartArtifact?: () => void;
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly segmentFocusIntent?: MemoryStudioSegmentFocusIntent | null;
@@ -179,6 +180,7 @@ export function LoadedWorkspaceFrame({
   onSelectObject,
   onRequestWidgetUpdate = () => undefined,
   onWidgetRuntimeMutation,
+  onStartArtifact,
   onStartNote,
   onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
@@ -232,12 +234,14 @@ export function LoadedWorkspaceFrame({
     (target: ArtifactRuntimeObjectSelectionTarget) => onSelectObject(target) !== false
   );
   const startNote = useStableOptionalEventCallback(onStartNote);
+  const startArtifactOverride = useStableOptionalEventCallback(onStartArtifact);
   const startSegmentSupplementNote = useStableOptionalEventCallback(onStartSegmentSupplementNote);
   const startSegmentSupplementRecording = useStableEventCallback(onStartSegmentSupplementRecording);
   const startRecording = useStableEventCallback(onStartRecording);
   const requestWidgetUpdate = useStableEventCallback(onRequestWidgetUpdate);
   const hasInlineMarkdownDirtyChange = onInlineMarkdownDirtyChange !== undefined;
   const hasSegmentFocusConsumed = onSegmentFocusConsumed !== undefined;
+  const hasStartArtifactOverride = onStartArtifact !== undefined;
   const hasStartNote = onStartNote !== undefined;
   const hasStartSegmentSupplementNote = onStartSegmentSupplementNote !== undefined;
   const currentShownReviewToastSessionKey =
@@ -484,12 +488,25 @@ export function LoadedWorkspaceFrame({
     () =>
       expressionDockVisible ? (
         <ExpressionDock
-          {...(currentMemory ? { onStartArtifact: startArtifact } : {})}
+          {...(hasStartArtifactOverride
+            ? { onStartArtifact: startArtifactOverride }
+            : currentMemory
+              ? { onStartArtifact: startArtifact }
+              : {})}
           {...(hasStartNote ? { onStartNote: startNote } : {})}
           onStartRecording={startRecording}
         />
       ) : null,
-    [currentMemory, expressionDockVisible, hasStartNote, startArtifact, startNote, startRecording]
+    [
+      currentMemory,
+      expressionDockVisible,
+      hasStartArtifactOverride,
+      hasStartNote,
+      startArtifact,
+      startArtifactOverride,
+      startNote,
+      startRecording,
+    ]
   );
   const workspaceStage = useMemo(
     () =>

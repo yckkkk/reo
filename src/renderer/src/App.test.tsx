@@ -10591,6 +10591,88 @@ describe('App', () => {
     expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
   });
 
+  it('creates a named Memory before copying a FAB artifact prompt when the workspace has no memories', async () => {
+    const user = userEvent.setup();
+    const createdMemory = {
+      memoryId: 'mem_artifact_target',
+      title: '第一条记忆',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      segmentCount: 0,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 0,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: true,
+      value: createdMemory,
+    });
+    reoWorkspace.copyArtifactAgentPrompt.mockResolvedValue({ ok: true });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await user.click(await screen.findByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '作品' }));
+
+    const createDialog = screen.getByRole('dialog', { name: '新建记忆' });
+    expect(createDialog).toHaveTextContent('创建记忆并创建作品');
+    await user.type(within(createDialog).getByLabelText('记忆名称'), '第一条记忆');
+    await user.click(within(createDialog).getByRole('button', { name: '创建作品' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '第一条记忆',
+      })
+    );
+    await waitFor(() =>
+      expect(reoWorkspace.copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        action: 'create-segment',
+        memoryId: 'mem_artifact_target',
+      })
+    );
+    expect(screen.queryByRole('dialog', { name: '新建记忆' })).not.toBeInTheDocument();
+    expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
+    expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
+  });
+
   it('offers to save a recoverable unfinished recording after reopening a workspace', async () => {
     const user = userEvent.setup();
     const recoveredMemory = {

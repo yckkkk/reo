@@ -9,7 +9,7 @@ import {
   redactSecrets,
 } from './doubaoStreamingAsr.js';
 
-const DEFAULT_TIMEOUT_MS = 1000;
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 export type VoiceTranscriptionProbeCode = 'auth' | 'network' | 'ok';
 

@@ -1,4 +1,4 @@
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import * as React from 'react';
 import type { LucideIcon } from 'lucide-react';
 import type { MenuItem } from 'primereact/menuitem';
@@ -52,6 +52,11 @@ type PrimeMenuItemOptions = {
   readonly className: string;
   readonly element: React.ReactNode;
   readonly onClick: (event: React.SyntheticEvent) => void;
+};
+
+type PrimeButtonTemplateOptions = {
+  readonly element: React.ReactNode;
+  readonly visible: boolean;
 };
 
 type FloatingActionButtonSpeedDialMenuItem = MenuItem & {
@@ -123,6 +128,25 @@ function createFloatingActionButtonSpeedDialActionTemplate(open: boolean) {
   };
 }
 
+function floatingActionButtonSpeedDialButtonTemplate(options: PrimeButtonTemplateOptions) {
+  const TriggerIcon = options.visible ? X : Plus;
+
+  return React.isValidElement<{
+    readonly icon?: React.ReactNode;
+  }>(options.element)
+    ? React.cloneElement(options.element, {
+        icon: (
+          <TriggerIcon
+            aria-hidden="true"
+            className="size-20"
+            data-slot="floating-action-button-speed-dial-trigger-icon"
+            strokeWidth={1.9}
+          />
+        ),
+      })
+    : null;
+}
+
 export function FloatingActionButtonSpeedDial({
   actions,
   closeLabel = '关闭操作菜单',
@@ -188,15 +212,14 @@ export function FloatingActionButtonSpeedDial({
         id={id}
         aria-label={open ? closeLabel : openLabel}
         buttonClassName="!size-[var(--reo-speed-dial-diameter)] !rounded-full !border-0 !bg-[image:var(--brand-gradient)] !text-destructive-foreground !shadow-[var(--shadow-hero-fill),var(--shadow-hero-edge)] !transition-[filter] !duration-150 !ease-out hover:!brightness-[1.05] motion-reduce:!transition-none focus-visible:!ring-2 focus-visible:!ring-ring focus-visible:!ring-offset-2 focus-visible:!ring-offset-background"
+        buttonTemplate={floatingActionButtonSpeedDialButtonTemplate}
         className="!pointer-events-auto !absolute !bottom-0 !left-[calc(50%-28px)] !z-10"
         direction="up"
-        hideIcon={<X className="size-20" strokeWidth={1.8} aria-hidden="true" />}
         mask={false}
         model={model}
         onVisibleChange={setOpen}
         radius={FLOATING_ACTION_BUTTON_SPEED_DIAL_GEOMETRY.radius}
         rotateAnimation={false}
-        showIcon={<span aria-hidden="true" />}
         transitionDelay={28}
         type={radialType}
         visible={open}

@@ -335,6 +335,7 @@ function LightweightMarkdownEditorSurfaceContent({
       extensions,
       emitContentError: true,
       immediatelyRender: false,
+      injectCSS: false,
       onBlur: ({ editor: blurredEditor }) => {
         setTiptapInteractiveSelectionReady(blurredEditor, false);
       },
