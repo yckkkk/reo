@@ -18,6 +18,7 @@ export type SegmentActionsMenuProps = {
   readonly cover?: WorkspaceCoverProjection | undefined;
   readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
   readonly onDelete: () => void;
+  readonly onMove?: (() => void) | undefined;
   readonly onOpenChange?: (open: boolean) => void;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
@@ -40,6 +41,7 @@ export function SegmentActionsMenu({
   cover,
   onCloseAutoFocus,
   onDelete,
+  onMove,
   onOpenChange,
   onRequestArtifactUpdate,
   onRequestSpeechSynthesis,
@@ -95,6 +97,7 @@ export function SegmentActionsMenu({
       onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
       onCopyRelativePath={actionBindings.onCopyRelativePath}
       onDelete={onDelete}
+      onMove={onMove}
       onOpenChange={onOpenChange}
       onOpenDefault={actionBindings.onOpenDefault}
       onRename={onRename}

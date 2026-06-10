@@ -15,6 +15,10 @@ import {
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
+  WORKSPACE_MOVE_MEMORY_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
@@ -118,8 +122,16 @@ import {
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListEntityMoveTargetsRequestSchema,
+  workspaceListEntityMoveTargetsResponseSchema,
   workspaceListMemorySpacesResponseSchema,
   workspaceMicrophoneIntentResponseSchema,
+  workspaceMoveMemoryRequestSchema,
+  workspaceMoveMemoryResponseSchema,
+  workspaceMoveSegmentRequestSchema,
+  workspaceMoveSegmentResponseSchema,
+  workspaceMoveSegmentSupplementRequestSchema,
+  workspaceMoveSegmentSupplementResponseSchema,
   workspaceRecordingTranscriptionAudioRequestSchema,
   workspaceRecordingTranscriptionCloseRequestSchema,
   workspaceRecordingTranscriptionControlResponseSchema,
@@ -400,6 +412,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
+    'workspace:listEntityMoveTargets',
     'workspace:initialize',
     'workspace:open',
     'workspace:openMemorySpace',
@@ -409,6 +422,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readWorkspaceSnapshot',
     'workspace:createMemory',
     'workspace:deleteMemory',
+    'workspace:moveMemory',
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
@@ -417,8 +431,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreSegmentCover',
     'workspace:switchSegmentDefaultCover',
     'workspace:deleteSegment',
+    'workspace:moveSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
+    'workspace:moveSegmentSupplement',
     'workspace:restoreDeletedSegmentSupplement',
     'workspace:deleteWidget',
     'workspace:restoreDeletedWidget',
@@ -523,6 +539,10 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, 'workspace:recordingTranscriptionEvent'],
     [WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL, 'workspace:fileTruthChanged'],
     [WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory'],
+    [WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL, 'workspace:listEntityMoveTargets'],
+    [WORKSPACE_MOVE_MEMORY_CHANNEL, 'workspace:moveMemory'],
+    [WORKSPACE_MOVE_SEGMENT_CHANNEL, 'workspace:moveSegment'],
+    [WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:moveSegmentSupplement'],
     [WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL, 'workspace:copyArtifactAgentPrompt'],
     [WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, 'workspace:readArtifactRuntimeState'],
     [WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, 'workspace:writeArtifactRuntimeState'],
@@ -649,6 +669,175 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
 
   for (const [actual, expected] of namedChannelContracts) {
     assert.equal(actual, expected);
+  }
+});
+
+test('workspace entity move contract validates source and target identities without paths', () => {
+  assert.deepEqual(
+    workspaceListEntityMoveTargetsRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }
+  );
+  assert.throws(() =>
+    workspaceListEntityMoveTargetsRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'body',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    })
+  );
+
+  assert.deepEqual(
+    workspaceListEntityMoveTargetsResponseSchema.parse({
+      ok: true,
+      value: {
+        source: {
+          type: 'segment',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          title: '访谈片段',
+          breadcrumb: ['草稿空间', '草稿', '访谈片段'],
+        },
+        targetLevel: 'memory',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: '草稿空间',
+            disabledReason: null,
+            memories: [
+              {
+                memoryId: 'mem_1',
+                title: '草稿',
+                disabledReason: '当前位置',
+                segments: [],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        source: {
+          type: 'segment',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          title: '访谈片段',
+          breadcrumb: ['草稿空间', '草稿', '访谈片段'],
+        },
+        targetLevel: 'memory',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: '草稿空间',
+            disabledReason: null,
+            memories: [
+              {
+                memoryId: 'mem_1',
+                title: '草稿',
+                disabledReason: '当前位置',
+                segments: [],
+              },
+            ],
+          },
+        ],
+      },
+    }
+  );
+
+  assert.deepEqual(
+    workspaceMoveMemoryRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    }
+  );
+  assert.deepEqual(
+    workspaceMoveSegmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+    }
+  );
+  assert.deepEqual(
+    workspaceMoveSegmentSupplementRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
+    }
+  );
+
+  for (const schema of [
+    workspaceMoveMemoryResponseSchema,
+    workspaceMoveSegmentResponseSchema,
+    workspaceMoveSegmentSupplementResponseSchema,
+  ]) {
+    assert.deepEqual(
+      schema.parse({
+        ok: true,
+        value: {
+          sourceWorkspaceId: 'ws_1',
+          targetWorkspaceId: 'ws_2',
+          moved: true,
+        },
+      }),
+      {
+        ok: true,
+        value: {
+          sourceWorkspaceId: 'ws_1',
+          targetWorkspaceId: 'ws_2',
+          moved: true,
+        },
+      }
+    );
   }
 });
 

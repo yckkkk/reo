@@ -749,6 +749,37 @@ function segmentDeleteError(
   return workspaceError('ERR_SEGMENT_DELETE_FAILED', 'Segment could not be deleted', dataRetention);
 }
 
+function segmentMoveError(
+  error: unknown,
+  dataRetention: WorkspaceError['dataRetention']
+): WorkspaceErrorEnvelope {
+  if (error instanceof WorkspaceHandleLost) {
+    return {
+      ok: false,
+      error: {
+        ...error.envelope.error,
+        dataRetention: error.envelope.error.dataRetention ?? dataRetention,
+      },
+    };
+  }
+
+  if (
+    isMissingFileError(error) ||
+    (error instanceof Error &&
+      (error.message === 'Invalid segment id' ||
+        error.message === 'Finalized segment projection does not match file truth' ||
+        error.message === 'Target finalized segment projection does not match file truth'))
+  ) {
+    return workspaceError('ERR_RECORDING_NOT_FOUND', 'Segment not found', 'none-written');
+  }
+
+  if (isUnsafeWorkspacePathError(error)) {
+    return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', 'Segment path is unsafe', dataRetention);
+  }
+
+  return workspaceError('ERR_SEGMENT_MOVE_FAILED', 'Segment could not be moved', dataRetention);
+}
+
 function segmentRestoreError(
   error: unknown,
   dataRetention: WorkspaceError['dataRetention']
@@ -824,6 +855,49 @@ function segmentSupplementDeleteError(
   return workspaceError(
     'ERR_SEGMENT_SUPPLEMENT_DELETE_FAILED',
     'Segment supplement could not be deleted',
+    dataRetention
+  );
+}
+
+function segmentSupplementMoveError(
+  error: unknown,
+  dataRetention: WorkspaceError['dataRetention']
+): WorkspaceErrorEnvelope {
+  if (error instanceof WorkspaceHandleLost) {
+    return {
+      ok: false,
+      error: {
+        ...error.envelope.error,
+        dataRetention: error.envelope.error.dataRetention ?? dataRetention,
+      },
+    };
+  }
+
+  if (
+    isMissingFileError(error) ||
+    (error instanceof Error &&
+      (error.message === 'Invalid segment supplement id' ||
+        error.message === 'Finalized segment supplement projection does not match file truth' ||
+        error.message === 'Target finalized segment projection does not match file truth'))
+  ) {
+    return workspaceError(
+      'ERR_RECORDING_NOT_FOUND',
+      'Segment supplement not found',
+      'none-written'
+    );
+  }
+
+  if (isUnsafeWorkspacePathError(error)) {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Segment supplement path is unsafe',
+      dataRetention
+    );
+  }
+
+  return workspaceError(
+    'ERR_SEGMENT_SUPPLEMENT_MOVE_FAILED',
+    'Segment supplement could not be moved',
     dataRetention
   );
 }
@@ -3411,7 +3485,7 @@ async function withMemoryWriteLock<T>(
   memoryId: string,
   write: () => Promise<T>
 ): Promise<T> {
-  const key = `${path.resolve(rootPath)}:${memoryId}`;
+  const key = memoryWriteLockKey(rootPath, memoryId);
   if (inFlightMemoryWrites.has(key)) {
     throw new Error('Memory write already in flight');
   }
@@ -3421,6 +3495,34 @@ async function withMemoryWriteLock<T>(
   } finally {
     inFlightMemoryWrites.delete(key);
   }
+}
+
+function memoryWriteLockKey(rootPath: string, memoryId: string) {
+  return `${path.resolve(rootPath)}:${memoryId}`;
+}
+
+function beginMemoryWriteLocks(
+  targets: readonly {
+    readonly memoryId: string;
+    readonly rootPath: string;
+  }[]
+): () => void {
+  const keys = [
+    ...new Set(targets.map((target) => memoryWriteLockKey(target.rootPath, target.memoryId))),
+  ].sort();
+  for (const key of keys) {
+    if (inFlightMemoryWrites.has(key)) {
+      throw new Error('Memory write already in flight');
+    }
+  }
+  for (const key of keys) {
+    inFlightMemoryWrites.add(key);
+  }
+  return () => {
+    for (const key of keys) {
+      inFlightMemoryWrites.delete(key);
+    }
+  };
 }
 
 async function withWorkspaceIndexWriteLock<T>(
@@ -8522,6 +8624,7 @@ async function moveFileSpaceNodeDirectory({
   targetName,
   targetParentDirectory,
   assertWorkspaceUsable: assertUsable,
+  beforeCommit,
   expectedSourceIdentity,
 }: {
   readonly sourceName: string;
@@ -8529,6 +8632,7 @@ async function moveFileSpaceNodeDirectory({
   readonly targetName: string;
   readonly targetParentDirectory: string;
   readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly beforeCommit?: () => void;
   readonly expectedSourceIdentity?: DirectoryIdentity;
 }): Promise<void> {
   if (!isSafeWorkspaceDirectoryName(sourceName) || !isSafeWorkspaceDirectoryName(targetName)) {
@@ -8540,14 +8644,338 @@ async function moveFileSpaceNodeDirectory({
   await assertSafeExistingDirectory(safeTargetParent, 'Workspace node target parent is not safe');
   assertWorkspaceUsable(assertUsable);
   await beforeFileSpaceNodeMoveForTest?.();
+  const assertBeforeCommit = () => {
+    assertWorkspaceUsable(assertUsable);
+    beforeCommit?.();
+  };
   renameWorkspaceDirectoryAcrossParents({
     sourceParentDirectory: safeSourceParent,
     sourceName,
     targetParentDirectory: safeTargetParent,
     targetName,
-    ...(assertUsable ? { beforeCommit: () => assertWorkspaceUsable(assertUsable) } : {}),
+    ...(assertUsable || beforeCommit ? { beforeCommit: assertBeforeCommit } : {}),
     ...(expectedSourceIdentity ? { expectedSourceIdentity } : {}),
   });
+}
+
+type MoveFileTruthNodeResult = MemoryFilesResult<{
+  readonly sourceWorkspaceId: string;
+  readonly targetWorkspaceId: string;
+  readonly moved: true;
+}>;
+
+function combinedWorkspaceUsableAssert(
+  first: AssertWorkspaceUsable | undefined,
+  second: AssertWorkspaceUsable | undefined
+): AssertWorkspaceUsable | undefined {
+  if (!first && !second) {
+    return undefined;
+  }
+  return () => {
+    const firstResult = first?.();
+    if (firstResult && !firstResult.ok) {
+      return firstResult;
+    }
+    const secondResult = second?.();
+    if (secondResult && !secondResult.ok) {
+      return secondResult;
+    }
+    return { ok: true };
+  };
+}
+
+async function rebuildMovedFileTruthIndexes({
+  assertSourceWorkspaceUsable,
+  assertTargetWorkspaceUsable,
+  sourceRootPath,
+  targetRootPath,
+}: {
+  readonly assertSourceWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertTargetWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly sourceRootPath: string;
+  readonly targetRootPath: string;
+}): Promise<void> {
+  const assertBothUsable = combinedWorkspaceUsableAssert(
+    assertSourceWorkspaceUsable,
+    assertTargetWorkspaceUsable
+  );
+  assertWorkspaceUsable(assertBothUsable);
+  const rebuildOptions = assertBothUsable ? { assertWorkspaceUsable: assertBothUsable } : undefined;
+  if (sourceRootPath === targetRootPath) {
+    await rebuildMemoryIndex(sourceRootPath, rebuildOptions);
+    return;
+  }
+  await Promise.all([
+    rebuildMemoryIndex(sourceRootPath, rebuildOptions),
+    rebuildMemoryIndex(targetRootPath, rebuildOptions),
+  ]);
+}
+
+export async function moveMemoryBetweenFileTruthRoots(input: {
+  readonly sourceRootPath: string;
+  readonly sourceWorkspaceId: string;
+  readonly memoryId: string;
+  readonly targetRootPath: string;
+  readonly targetWorkspaceId: string;
+  readonly assertSourceWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertTargetWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<MoveFileTruthNodeResult> {
+  let moved = false;
+  let releaseMemoryWriteLocks: (() => void) | null = null;
+  try {
+    releaseMemoryWriteLocks = beginMemoryWriteLocks([
+      { rootPath: input.sourceRootPath, memoryId: input.memoryId },
+      { rootPath: input.targetRootPath, memoryId: input.memoryId },
+    ]);
+    assertWorkspaceUsable(input.assertSourceWorkspaceUsable);
+    assertWorkspaceUsable(input.assertTargetWorkspaceUsable);
+    const sourceMemoriesDirectory = await resolveSafeWorkspaceChild(
+      input.sourceRootPath,
+      path.join(input.sourceRootPath, 'memories')
+    );
+    const targetMemoriesDirectory = await resolveSafeWorkspaceChild(
+      input.targetRootPath,
+      path.join(input.targetRootPath, 'memories')
+    );
+    const sourceDirectory = await memoryDirectory(input.sourceRootPath, input.memoryId);
+    const sourceName = path.basename(sourceDirectory);
+    await moveFileSpaceNodeDirectory({
+      sourceName,
+      sourceParentDirectory: sourceMemoriesDirectory,
+      targetName: sourceName,
+      targetParentDirectory: targetMemoriesDirectory,
+      beforeCommit: () => assertWorkspaceUsable(input.assertTargetWorkspaceUsable),
+      ...(input.assertSourceWorkspaceUsable
+        ? { assertWorkspaceUsable: input.assertSourceWorkspaceUsable }
+        : {}),
+    });
+    moved = true;
+    await rebuildMovedFileTruthIndexes({
+      sourceRootPath: input.sourceRootPath,
+      targetRootPath: input.targetRootPath,
+      ...(input.assertSourceWorkspaceUsable
+        ? { assertSourceWorkspaceUsable: input.assertSourceWorkspaceUsable }
+        : {}),
+      ...(input.assertTargetWorkspaceUsable
+        ? { assertTargetWorkspaceUsable: input.assertTargetWorkspaceUsable }
+        : {}),
+    });
+    return {
+      ok: true,
+      value: {
+        sourceWorkspaceId: input.sourceWorkspaceId,
+        targetWorkspaceId: input.targetWorkspaceId,
+        moved: true,
+      },
+    };
+  } catch (error) {
+    return memoryFilesError(
+      error,
+      'ERR_MEMORY_UPDATE_FAILED',
+      'Memory could not be moved',
+      moved ? 'file-written-index-stale' : 'previous-file-preserved'
+    );
+  } finally {
+    releaseMemoryWriteLocks?.();
+  }
+}
+
+export async function moveSegmentBetweenFileTruthRoots(input: {
+  readonly sourceRootPath: string;
+  readonly sourceWorkspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly targetRootPath: string;
+  readonly targetWorkspaceId: string;
+  readonly targetMemoryId: string;
+  readonly assertSourceWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertTargetWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<MoveFileTruthNodeResult> {
+  let moved = false;
+  let releaseMemoryWriteLocks: (() => void) | null = null;
+  try {
+    releaseMemoryWriteLocks = beginMemoryWriteLocks([
+      { rootPath: input.sourceRootPath, memoryId: input.memoryId },
+      { rootPath: input.targetRootPath, memoryId: input.targetMemoryId },
+    ]);
+    assertWorkspaceUsable(input.assertSourceWorkspaceUsable);
+    const sourceFileTruth = (
+      await listValidFinalizedSegmentFileTruths(input.sourceRootPath, input.memoryId)
+    ).find((fileTruth) => fileTruth.segmentId === input.segmentId);
+    if (
+      !sourceFileTruth ||
+      sourceFileTruth.segmentId !== input.segmentId ||
+      sourceFileTruth.metadata.workspaceId !== input.sourceWorkspaceId
+    ) {
+      throw new Error('Finalized segment projection does not match file truth');
+    }
+    assertWorkspaceUsable(input.assertTargetWorkspaceUsable);
+    const targetMemoryDirectory = await memoryDirectory(input.targetRootPath, input.targetMemoryId);
+    const targetSegmentsDirectory = await ensureMemorySegmentsDirectory({
+      rootPath: input.targetRootPath,
+      memoryDirectoryPath: targetMemoryDirectory,
+      ...(input.assertTargetWorkspaceUsable
+        ? { assertUsable: input.assertTargetWorkspaceUsable }
+        : {}),
+    });
+    const sourceName = path.basename(sourceFileTruth.recordingDirectory);
+    await moveFileSpaceNodeDirectory({
+      sourceName,
+      sourceParentDirectory: path.dirname(sourceFileTruth.recordingDirectory),
+      targetName: sourceName,
+      targetParentDirectory: targetSegmentsDirectory,
+      beforeCommit: () => assertWorkspaceUsable(input.assertTargetWorkspaceUsable),
+      expectedSourceIdentity: sourceFileTruth.recordingDirectoryIdentity,
+      ...(input.assertSourceWorkspaceUsable
+        ? { assertWorkspaceUsable: input.assertSourceWorkspaceUsable }
+        : {}),
+    });
+    moved = true;
+    await rebuildMovedFileTruthIndexes({
+      sourceRootPath: input.sourceRootPath,
+      targetRootPath: input.targetRootPath,
+      ...(input.assertSourceWorkspaceUsable
+        ? { assertSourceWorkspaceUsable: input.assertSourceWorkspaceUsable }
+        : {}),
+      ...(input.assertTargetWorkspaceUsable
+        ? { assertTargetWorkspaceUsable: input.assertTargetWorkspaceUsable }
+        : {}),
+    });
+    return {
+      ok: true,
+      value: {
+        sourceWorkspaceId: input.sourceWorkspaceId,
+        targetWorkspaceId: input.targetWorkspaceId,
+        moved: true,
+      },
+    };
+  } catch (error) {
+    return segmentMoveError(error, moved ? 'file-written-index-stale' : 'previous-file-preserved');
+  } finally {
+    releaseMemoryWriteLocks?.();
+  }
+}
+
+export async function moveSegmentSupplementBetweenFileTruthRoots(input: {
+  readonly sourceRootPath: string;
+  readonly sourceWorkspaceId: string;
+  readonly memoryId: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly targetRootPath: string;
+  readonly targetWorkspaceId: string;
+  readonly targetMemoryId: string;
+  readonly targetSegmentId: string;
+  readonly assertSourceWorkspaceUsable?: AssertWorkspaceUsable;
+  readonly assertTargetWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<MoveFileTruthNodeResult> {
+  let moved = false;
+  let releaseMemoryWriteLocks: (() => void) | null = null;
+  try {
+    releaseMemoryWriteLocks = beginMemoryWriteLocks([
+      { rootPath: input.sourceRootPath, memoryId: input.memoryId },
+      { rootPath: input.targetRootPath, memoryId: input.targetMemoryId },
+    ]);
+    assertWorkspaceUsable(input.assertSourceWorkspaceUsable);
+    const sourceSegmentFileTruth = (
+      await listValidFinalizedSegmentFileTruths(input.sourceRootPath, input.memoryId)
+    ).find((fileTruth) => fileTruth.segmentId === input.segmentId);
+    if (
+      !sourceSegmentFileTruth ||
+      sourceSegmentFileTruth.metadata.workspaceId !== input.sourceWorkspaceId
+    ) {
+      throw new Error('Finalized segment projection does not match file truth');
+    }
+    const sourceSupplements = await listValidSegmentSupplementsFromDirectory({
+      rootPath: input.sourceRootPath,
+      workspaceId: input.sourceWorkspaceId,
+      memoryId: input.memoryId,
+      segmentId: input.segmentId,
+      recordingDirectory: sourceSegmentFileTruth.recordingDirectory,
+    });
+    if (!sourceSupplements.some((supplement) => supplement.supplementId === input.supplementId)) {
+      throw new Error('Finalized segment supplement projection does not match file truth');
+    }
+    const sourceDirectory = await segmentSupplementDirectory(
+      input.sourceRootPath,
+      input.memoryId,
+      input.segmentId,
+      input.supplementId
+    );
+    await assertSafeExistingDirectory(
+      sourceDirectory,
+      'Workspace segment supplement directory is not safe'
+    );
+    const sourceDirectoryIdentity = await readDirectoryIdentity(sourceDirectory);
+    const sourceSupplement = await readValidFinalizedSupplementProjection({
+      supplementDirectory: sourceDirectory,
+      supplementDirectoryIdentity: sourceDirectoryIdentity,
+      rootPath: input.sourceRootPath,
+      workspaceId: input.sourceWorkspaceId,
+      memoryId: input.memoryId,
+      segmentId: input.segmentId,
+    });
+    if (!sourceSupplement || sourceSupplement.supplementId !== input.supplementId) {
+      throw new Error('Finalized segment supplement projection does not match file truth');
+    }
+    assertWorkspaceUsable(input.assertTargetWorkspaceUsable);
+    const targetSegmentFileTruth = (
+      await listValidFinalizedSegmentFileTruths(input.targetRootPath, input.targetMemoryId)
+    ).find((fileTruth) => fileTruth.segmentId === input.targetSegmentId);
+    if (
+      !targetSegmentFileTruth ||
+      targetSegmentFileTruth.segmentId !== input.targetSegmentId ||
+      targetSegmentFileTruth.metadata.workspaceId !== input.targetWorkspaceId
+    ) {
+      throw new Error('Target finalized segment projection does not match file truth');
+    }
+    const targetSupplementsDirectory = await ensureSegmentSupplementsDirectory({
+      rootPath: input.targetRootPath,
+      memoryId: input.targetMemoryId,
+      segmentId: input.targetSegmentId,
+      ...(input.assertTargetWorkspaceUsable
+        ? { assertUsable: input.assertTargetWorkspaceUsable }
+        : {}),
+    });
+    const sourceName = path.basename(sourceDirectory);
+    await moveFileSpaceNodeDirectory({
+      sourceName,
+      sourceParentDirectory: path.dirname(sourceDirectory),
+      targetName: sourceName,
+      targetParentDirectory: targetSupplementsDirectory,
+      beforeCommit: () => assertWorkspaceUsable(input.assertTargetWorkspaceUsable),
+      expectedSourceIdentity: sourceDirectoryIdentity,
+      ...(input.assertSourceWorkspaceUsable
+        ? { assertWorkspaceUsable: input.assertSourceWorkspaceUsable }
+        : {}),
+    });
+    moved = true;
+    await rebuildMovedFileTruthIndexes({
+      sourceRootPath: input.sourceRootPath,
+      targetRootPath: input.targetRootPath,
+      ...(input.assertSourceWorkspaceUsable
+        ? { assertSourceWorkspaceUsable: input.assertSourceWorkspaceUsable }
+        : {}),
+      ...(input.assertTargetWorkspaceUsable
+        ? { assertTargetWorkspaceUsable: input.assertTargetWorkspaceUsable }
+        : {}),
+    });
+    return {
+      ok: true,
+      value: {
+        sourceWorkspaceId: input.sourceWorkspaceId,
+        targetWorkspaceId: input.targetWorkspaceId,
+        moved: true,
+      },
+    };
+  } catch (error) {
+    return segmentSupplementMoveError(
+      error,
+      moved ? 'file-written-index-stale' : 'previous-file-preserved'
+    );
+  } finally {
+    releaseMemoryWriteLocks?.();
+  }
 }
 
 export async function deleteMemoryFromFileTruth(input: MemoryTargetInput): Promise<

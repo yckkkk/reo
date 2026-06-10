@@ -1,4 +1,11 @@
-import { MoreHorizontal, PencilLine, RefreshCw, Trash2, type LucideIcon } from 'lucide-react';
+import {
+  FolderInput,
+  MoreHorizontal,
+  PencilLine,
+  RefreshCw,
+  Trash2,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -54,12 +61,14 @@ export type EntityActionMenuProps = {
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly deleteLabel?: '删除' | '移除';
   readonly menuLabel: string;
+  readonly moveLabel?: string | undefined;
   readonly onCloseAutoFocus?:
     | ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
     | undefined;
   readonly onCopyAbsolutePath: EntityPathAction;
   readonly onCopyRelativePath?: EntityPathAction | undefined;
   readonly onDelete: () => void;
+  readonly onMove?: (() => void) | undefined;
   readonly onOpenChange?: ((open: boolean) => void) | undefined;
   readonly onOpenDefault: EntityPathAction;
   readonly onRename: () => void;
@@ -162,10 +171,12 @@ export function EntityActionMenu({
   contentAlign = 'end',
   deleteLabel = '删除',
   menuLabel,
+  moveLabel = '移动...',
   onCloseAutoFocus,
   onCopyAbsolutePath,
   onCopyRelativePath,
   onDelete,
+  onMove,
   onOpenChange,
   onOpenDefault,
   onRename,
@@ -225,10 +236,16 @@ export function EntityActionMenu({
             </DropdownMenuGroup>
           </>
         ) : null}
-        {canRename || canDelete ? (
+        {onMove || canRename || canDelete ? (
           <>
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
             <DropdownMenuGroup>
+              {onMove ? (
+                <DropdownMenuItem onSelect={onMove}>
+                  <EntityActionMenuIcon icon={FolderInput} />
+                  {moveLabel}
+                </DropdownMenuItem>
+              ) : null}
               {canRename ? (
                 <DropdownMenuItem onSelect={onRename}>
                   <EntityActionMenuIcon icon={PencilLine} />

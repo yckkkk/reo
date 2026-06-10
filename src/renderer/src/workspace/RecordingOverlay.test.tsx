@@ -159,6 +159,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
       },
     })),
     listMemorySpaces: vi.fn(async () => ({ ok: true as const, value: { memorySpaces: [] } })),
+    listEntityMoveTargets: vi.fn(),
     readSystemDraftWorkspace: vi.fn(async () => ({
       ok: true as const,
       value: {
@@ -247,6 +248,7 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     deleteWidget: vi.fn(),
     restoreDeletedWidget: vi.fn(),
     deleteMemory: vi.fn(),
+    moveMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
     resetMemoryCover: vi.fn(),
     restoreMemoryCover: vi.fn(),
@@ -255,8 +257,10 @@ function createWorkspaceBridgeDefaults(): Window['reoWorkspace'] {
     restoreSegmentCover: vi.fn(),
     switchSegmentDefaultCover: vi.fn(),
     deleteSegment: vi.fn(),
+    moveSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
     deleteSegmentSupplement: vi.fn(),
+    moveSegmentSupplement: vi.fn(),
     restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(async () => ({
       ok: false as const,

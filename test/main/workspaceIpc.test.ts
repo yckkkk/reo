@@ -37,7 +37,9 @@ import {
   handleFinishRecordingTranscriptionForTest,
   handleInitializeWorkspace,
   handleInitializeWorkspaceForTest,
+  handleListEntityMoveTargetsForTest,
   handleListWorkspaceMemorySpacesForTest,
+  handleMoveSegmentForTest,
   handleOpenWorkspace,
   handleOpenWorkspaceMemorySpaceForTest,
   handleReadWorkspaceSnapshotForTest,
@@ -1572,6 +1574,331 @@ test('readExpressionPlaybackAudio IPC reads normal memory space audio without a 
   } finally {
     await rm(appDataDir, { force: true, recursive: true });
     await rm(rootPath, { force: true, recursive: true });
+  }
+});
+
+test('entity move target IPC lists Draft, active, and registry spaces without leaking roots', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-targets-'));
+  const sourceRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-source-'));
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-target-'));
+  try {
+    await initializeWorkspaceFiles({
+      rootPath: sourceRoot,
+      title: '源空间',
+      description: '',
+      createWorkspaceId: () => 'ws_move_source',
+      now: () => '2026-06-09T20:00:00.000Z',
+    });
+    await initializeWorkspaceFiles({
+      rootPath: targetRoot,
+      title: '目标空间',
+      description: '',
+      createWorkspaceId: () => 'ws_move_target',
+      now: () => '2026-06-09T20:00:00.000Z',
+    });
+    await writeFinalizedMemoryRecording({
+      root: sourceRoot,
+      workspaceId: 'ws_move_source',
+      memoryId: 'mem_move_source',
+      segmentId: 'seg_move_source',
+      title: '源片段',
+    });
+    await writeFinalizedMemoryRecording({
+      root: targetRoot,
+      workspaceId: 'ws_move_target',
+      memoryId: 'mem_move_target',
+      segmentId: 'seg_move_target_existing',
+      title: '目标记忆',
+    });
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    await memorySpaceRegistry.upsertMemorySpace({
+      canonicalRoot: targetRoot,
+      snapshot: {
+        workspaceId: 'ws_move_target',
+        title: '目标空间',
+        description: '',
+        memories: [],
+      },
+    });
+    const handleStore = createWorkspaceHandleStore({ createHandle: () => 'wh_move_source' });
+    handleStore.register({
+      canonicalRoot: sourceRoot,
+      workspaceId: 'ws_move_source',
+      sender,
+      lock: {
+        isHeld: () => true,
+        isUsable: () => true,
+        relocate: () => ({ ok: true }),
+        release: async () => {},
+      },
+    });
+
+    const response = await handleListEntityMoveTargetsForTest({
+      appDataDir,
+      event,
+      input: {
+        workspaceHandle: 'wh_move_source',
+        workspaceId: 'ws_move_source',
+        sourceType: 'segment',
+        memoryId: 'mem_move_source',
+        segmentId: 'seg_move_source',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      memorySpaceRegistry,
+      now: () => '2026-06-09T20:10:00.000Z',
+    });
+
+    assert.equal(response.ok, true);
+    if (response.ok) {
+      assert.equal(response.value.targetLevel, 'memory');
+      assert.equal(response.value.source.title, '源片段');
+      assert.deepEqual(
+        response.value.spaces.map((space) => space.workspaceId).sort(),
+        [SYSTEM_DRAFT_WORKSPACE_ID, 'ws_move_source', 'ws_move_target'].sort()
+      );
+      const targetSpace = response.value.spaces.find(
+        (space) => space.workspaceId === 'ws_move_target'
+      );
+      assert.equal(targetSpace?.memories[0]?.memoryId, 'mem_move_target');
+    }
+    assert.equal(JSON.stringify(response).includes(sourceRoot), false);
+    assert.equal(JSON.stringify(response).includes(targetRoot), false);
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+    await rm(sourceRoot, { force: true, recursive: true });
+    await rm(targetRoot, { force: true, recursive: true });
+  }
+});
+
+test('entity move target IPC skips registry spaces whose temporary lock is held', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-targets-lock-'));
+  const sourceRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-source-lock-'));
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-target-lock-'));
+  let targetLock: Awaited<ReturnType<typeof acquireWorkspaceLock>> | null = null;
+  try {
+    await initializeWorkspaceFiles({
+      rootPath: sourceRoot,
+      title: '源空间',
+      description: '',
+      createWorkspaceId: () => 'ws_move_source_lock',
+      now: () => '2026-06-09T20:00:00.000Z',
+    });
+    await initializeWorkspaceFiles({
+      rootPath: targetRoot,
+      title: '被占用目标空间',
+      description: '',
+      createWorkspaceId: () => 'ws_move_target_lock',
+      now: () => '2026-06-09T20:00:00.000Z',
+    });
+    await writeFinalizedMemoryRecording({
+      root: sourceRoot,
+      workspaceId: 'ws_move_source_lock',
+      memoryId: 'mem_move_source_lock',
+      segmentId: 'seg_move_source_lock',
+      title: '源片段',
+    });
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    await memorySpaceRegistry.upsertMemorySpace({
+      canonicalRoot: targetRoot,
+      snapshot: {
+        workspaceId: 'ws_move_target_lock',
+        title: '被占用目标空间',
+        description: '',
+        memories: [],
+      },
+    });
+    targetLock = await acquireWorkspaceLock({ canonicalRoot: targetRoot });
+    assert.equal(targetLock.ok, true);
+
+    const handleStore = createWorkspaceHandleStore({ createHandle: () => 'wh_move_source_lock' });
+    handleStore.register({
+      canonicalRoot: sourceRoot,
+      workspaceId: 'ws_move_source_lock',
+      sender,
+      lock: {
+        isHeld: () => true,
+        isUsable: () => true,
+        relocate: () => ({ ok: true }),
+        release: async () => {},
+      },
+    });
+
+    const response = await handleListEntityMoveTargetsForTest({
+      appDataDir,
+      event,
+      input: {
+        workspaceHandle: 'wh_move_source_lock',
+        workspaceId: 'ws_move_source_lock',
+        sourceType: 'segment',
+        memoryId: 'mem_move_source_lock',
+        segmentId: 'seg_move_source_lock',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      memorySpaceRegistry,
+      now: () => '2026-06-09T20:10:00.000Z',
+    });
+
+    assert.equal(response.ok, true);
+    if (response.ok) {
+      assert.deepEqual(
+        response.value.spaces.map((space) => space.workspaceId).sort(),
+        [SYSTEM_DRAFT_WORKSPACE_ID, 'ws_move_source_lock'].sort()
+      );
+    }
+    assert.equal(JSON.stringify(response).includes(targetRoot), false);
+  } finally {
+    if (targetLock?.ok && targetLock.lock.isHeld()) {
+      await targetLock.lock.release().catch(() => {});
+    }
+    await rm(appDataDir, { force: true, recursive: true });
+    await rm(sourceRoot, { force: true, recursive: true });
+    await rm(targetRoot, { force: true, recursive: true });
+  }
+});
+
+test('move Segment IPC moves the whole Segment directory into a registry memory space', async () => {
+  const appDataDir = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-segment-'));
+  const sourceRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-segment-source-'));
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'reo-ipc-move-segment-target-'));
+  try {
+    await initializeWorkspaceFiles({
+      rootPath: sourceRoot,
+      title: '源空间',
+      description: '',
+      createWorkspaceId: () => 'ws_move_segment_source',
+      now: () => '2026-06-09T20:00:00.000Z',
+    });
+    await initializeWorkspaceFiles({
+      rootPath: targetRoot,
+      title: '目标空间',
+      description: '',
+      createWorkspaceId: () => 'ws_move_segment_target',
+      now: () => '2026-06-09T20:00:00.000Z',
+    });
+    await writeFinalizedMemoryRecording({
+      root: sourceRoot,
+      workspaceId: 'ws_move_segment_source',
+      memoryId: 'mem_move_segment_source',
+      segmentId: 'seg_move_segment',
+      title: '移动片段',
+    });
+    await writeFinalizedMemoryRecording({
+      root: targetRoot,
+      workspaceId: 'ws_move_segment_target',
+      memoryId: 'mem_move_segment_target',
+      segmentId: 'seg_move_segment_existing',
+      title: '目标记忆',
+    });
+    const memorySpaceRegistry = createWorkspaceMemorySpaceRegistry({
+      registryPath: path.join(appDataDir, 'workspace-registry.json'),
+    });
+    await memorySpaceRegistry.upsertMemorySpace({
+      canonicalRoot: targetRoot,
+      snapshot: {
+        workspaceId: 'ws_move_segment_target',
+        title: '目标空间',
+        description: '',
+        memories: [],
+      },
+    });
+    const handleIds = ['wh_move_segment_source', 'wh_move_segment_target'];
+    const handleStore = createWorkspaceHandleStore({
+      createHandle: () => handleIds.shift() ?? 'wh_move_segment_extra',
+    });
+    handleStore.register({
+      canonicalRoot: sourceRoot,
+      workspaceId: 'ws_move_segment_source',
+      sender,
+      lock: {
+        isHeld: () => true,
+        isUsable: () => true,
+        relocate: () => ({ ok: true }),
+        release: async () => {},
+      },
+    });
+
+    const moved = await handleMoveSegmentForTest({
+      appDataDir,
+      event,
+      input: {
+        workspaceHandle: 'wh_move_segment_source',
+        workspaceId: 'ws_move_segment_source',
+        memoryId: 'mem_move_segment_source',
+        segmentId: 'seg_move_segment',
+        targetWorkspaceId: 'ws_move_segment_target',
+        targetMemoryId: 'mem_move_segment_target',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      memorySpaceRegistry,
+      now: () => '2026-06-09T20:10:00.000Z',
+    });
+
+    assert.deepEqual(moved, {
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_move_segment_source',
+        targetWorkspaceId: 'ws_move_segment_target',
+        moved: true,
+      },
+    });
+    await assert.rejects(
+      stat(
+        path.join(sourceRoot, 'memories', 'mem_move_segment_source', 'segments', 'seg_move_segment')
+      )
+    );
+    const targetManifest = await readObjectManifest(targetRoot, 'segments', 'seg_move_segment');
+    assert.equal(targetManifest['workspaceId'], 'ws_move_segment_target');
+    assert.equal(targetManifest['memoryId'], 'mem_move_segment_target');
+
+    const openedTarget = await handleOpenWorkspaceMemorySpaceForTest({
+      event,
+      input: { workspaceId: 'ws_move_segment_target' },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+      memorySpaceRegistry,
+    });
+    assert.equal(openedTarget.ok, true);
+    const detail = await handleReadMemoryDetailForTest({
+      event,
+      input: {
+        workspaceHandle: 'wh_move_segment_target',
+        workspaceId: 'ws_move_segment_target',
+        memoryId: 'mem_move_segment_target',
+        requestId: 'detail-after-move',
+      },
+      expectedSession,
+      expectedSessionKey: 'default',
+      isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+      handleStore,
+    });
+    assert.equal(detail.ok, true);
+    if (detail.ok) {
+      assert.equal(
+        detail.value.detail.segments.some((segment) => segment.segmentId === 'seg_move_segment'),
+        true
+      );
+    }
+    assert.equal(JSON.stringify(moved).includes(sourceRoot), false);
+    assert.equal(JSON.stringify(moved).includes(targetRoot), false);
+  } finally {
+    await rm(appDataDir, { force: true, recursive: true });
+    await rm(sourceRoot, { force: true, recursive: true });
+    await rm(targetRoot, { force: true, recursive: true });
   }
 });
 

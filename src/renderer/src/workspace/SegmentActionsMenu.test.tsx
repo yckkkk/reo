@@ -48,6 +48,7 @@ const segmentActionPayload = {
 function renderMenu(
   props: {
     onDelete?: () => void;
+    onMove?: () => void;
     onResetCover?: () => void;
     onRename?: () => void;
     onRequestArtifactUpdate?: () => void;
@@ -65,6 +66,7 @@ function renderMenu(
       actionIdentity={segmentActionPayload}
       cover={props.cover}
       onDelete={props.onDelete ?? vi.fn()}
+      onMove={props.onMove}
       onRequestArtifactUpdate={props.onRequestArtifactUpdate}
       onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
       onRequestTranscriptionBackfill={props.onRequestTranscriptionBackfill}
@@ -157,6 +159,16 @@ describe('SegmentActionsMenu', () => {
 
     expect(reoWorkspace.openSegmentDocument).toHaveBeenCalledWith(segmentActionPayload);
     await waitFor(() => expect(toast.success).not.toHaveBeenCalled());
+  });
+
+  it('invokes move from the More menu', async () => {
+    const onMove = vi.fn();
+    renderMenu({ onMove });
+
+    const { user } = await openEntityActionMenu('My Segment 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '移动...' }));
+
+    expect(onMove).toHaveBeenCalledOnce();
   });
 
   it('shows an error toast when reveal in Finder fails', async () => {

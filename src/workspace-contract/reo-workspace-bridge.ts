@@ -46,9 +46,17 @@ import type {
   WorkspaceInitializeResponse,
   WorkspaceEntityActionResponse,
   WorkspaceListMemorySpacesResponse,
+  WorkspaceListEntityMoveTargetsRequest,
+  WorkspaceListEntityMoveTargetsResponse,
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
+  WorkspaceMoveMemoryRequest,
+  WorkspaceMoveMemoryResponse,
+  WorkspaceMoveSegmentRequest,
+  WorkspaceMoveSegmentResponse,
+  WorkspaceMoveSegmentSupplementRequest,
+  WorkspaceMoveSegmentSupplementResponse,
   WorkspaceOpenMarkdownExternalLinkRequest,
   WorkspaceOpenMarkdownExternalLinkResponse,
   WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
@@ -195,6 +203,9 @@ import type {
 export interface ReoWorkspaceBridge {
   readonly chooseDirectory: () => Promise<WorkspaceChooseDirectoryResponse>;
   readonly listMemorySpaces: () => Promise<WorkspaceListMemorySpacesResponse>;
+  readonly listEntityMoveTargets: (
+    payload: WorkspaceListEntityMoveTargetsRequest
+  ) => Promise<WorkspaceListEntityMoveTargetsResponse>;
   readonly readSystemDraftWorkspace: () => Promise<WorkspaceReadSystemDraftWorkspaceResponse>;
   readonly openSystemDraftWorkspace: () => Promise<WorkspaceOpenSystemDraftWorkspaceResponse>;
   readonly readRecentExpressions: (
@@ -295,6 +306,9 @@ export interface ReoWorkspaceBridge {
   readonly createMemory: (
     payload: WorkspaceCreateMemoryRequest
   ) => Promise<WorkspaceCreateMemoryResponse>;
+  readonly moveMemory: (
+    payload: WorkspaceMoveMemoryRequest
+  ) => Promise<WorkspaceMoveMemoryResponse>;
   readonly deleteMemory: (
     payload: WorkspaceDeleteMemoryRequest
   ) => Promise<WorkspaceDeleteMemoryResponse>;
@@ -322,12 +336,18 @@ export interface ReoWorkspaceBridge {
   readonly deleteSegment: (
     payload: WorkspaceDeleteSegmentRequest
   ) => Promise<WorkspaceDeleteSegmentResponse>;
+  readonly moveSegment: (
+    payload: WorkspaceMoveSegmentRequest
+  ) => Promise<WorkspaceMoveSegmentResponse>;
   readonly restoreDeletedSegment: (
     payload: WorkspaceRestoreDeletedSegmentRequest
   ) => Promise<WorkspaceRestoreDeletedSegmentResponse>;
   readonly deleteSegmentSupplement: (
     payload: WorkspaceDeleteSegmentSupplementRequest
   ) => Promise<WorkspaceDeleteSegmentSupplementResponse>;
+  readonly moveSegmentSupplement: (
+    payload: WorkspaceMoveSegmentSupplementRequest
+  ) => Promise<WorkspaceMoveSegmentSupplementResponse>;
   readonly restoreDeletedSegmentSupplement: (
     payload: WorkspaceRestoreDeletedSegmentSupplementRequest
   ) => Promise<WorkspaceRestoreDeletedSegmentSupplementResponse>;

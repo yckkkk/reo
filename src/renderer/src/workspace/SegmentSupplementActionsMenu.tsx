@@ -14,6 +14,7 @@ export type SegmentSupplementActionsMenuProps = {
   readonly contentAlign?: ComponentProps<typeof DropdownMenuContent>['align'];
   readonly onDelete: () => void;
   readonly onCloseAutoFocus?: ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus'];
+  readonly onMove?: (() => void) | undefined;
   readonly onOpenChange?: (open: boolean) => void;
   readonly onRequestArtifactRefresh?: (() => void) | undefined;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
@@ -34,6 +35,7 @@ export function SegmentSupplementActionsMenu({
   contentAlign = 'end',
   onDelete,
   onCloseAutoFocus,
+  onMove,
   onOpenChange,
   onRequestArtifactRefresh,
   onRequestArtifactUpdate,
@@ -83,6 +85,7 @@ export function SegmentSupplementActionsMenu({
       onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
       onCopyRelativePath={actionBindings.onCopyRelativePath}
       onDelete={onDelete}
+      onMove={onMove}
       onOpenChange={onOpenChange}
       onOpenDefault={actionBindings.onOpenDefault}
       onRename={onRename}

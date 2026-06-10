@@ -50,6 +50,7 @@ const segmentSupplementActionPayload = {
 function renderMenu(
   props: {
     onDelete?: () => void;
+    onMove?: () => void;
     onRename?: () => void;
     onRequestArtifactRefresh?: () => void;
     onRequestArtifactUpdate?: () => void;
@@ -64,6 +65,7 @@ function renderMenu(
     <SegmentSupplementActionsMenu
       actionIdentity={segmentSupplementActionPayload}
       onDelete={props.onDelete ?? vi.fn()}
+      onMove={props.onMove}
       onRequestArtifactRefresh={props.onRequestArtifactRefresh}
       onRequestArtifactUpdate={props.onRequestArtifactUpdate}
       onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
@@ -155,6 +157,16 @@ describe('SegmentSupplementActionsMenu', () => {
       segmentSupplementActionPayload
     );
     await waitFor(() => expect(toast.success).not.toHaveBeenCalled());
+  });
+
+  it('invokes move from the More menu', async () => {
+    const onMove = vi.fn();
+    renderMenu({ onMove });
+
+    const { user } = await openEntityActionMenu('My Supplement 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '移动...' }));
+
+    expect(onMove).toHaveBeenCalledOnce();
   });
 
   it('shows an error toast when reveal in Finder fails', async () => {

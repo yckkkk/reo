@@ -18,6 +18,7 @@ export type MemoryActionsMenuProps = {
   readonly cover?: WorkspaceMemoryCoverProjection | undefined;
   readonly memoryTitle: string;
   readonly onDelete: () => void;
+  readonly onMove?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly onResetCover: () => void;
   readonly onSwitchDefaultCover: () => void;
@@ -33,6 +34,7 @@ export function MemoryActionsMenu({
   cover,
   memoryTitle,
   onDelete,
+  onMove,
   onRename,
   onResetCover,
   onSwitchDefaultCover,
@@ -63,9 +65,11 @@ export function MemoryActionsMenu({
         },
       ]}
       menuLabel={menuLabel}
+      moveLabel="移动记忆..."
       onCopyAbsolutePath={actionBindings.onCopyAbsolutePath}
       onCopyRelativePath={actionBindings.onCopyRelativePath}
       onDelete={onDelete}
+      onMove={onMove}
       onOpenDefault={actionBindings.onOpenDefault}
       onRename={onRename}
       onRevealInFinder={actionBindings.onRevealInFinder}

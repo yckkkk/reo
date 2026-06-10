@@ -66,6 +66,10 @@ describe('App', () => {
     copyNeedsReviewAgentPrompt: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
+    listEntityMoveTargets: vi.fn(),
+    moveMemory: vi.fn(),
+    moveSegment: vi.fn(),
+    moveSegmentSupplement: vi.fn(),
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
@@ -517,6 +521,25 @@ describe('App', () => {
     reoWorkspace.copyNeedsReviewAgentPrompt.mockResolvedValue({ ok: true });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_OPEN_FAILED', message: 'Move targets could not be read' },
+    });
+    reoWorkspace.moveMemory.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_UPDATE_FAILED', message: 'Memory could not be moved' },
+    });
+    reoWorkspace.moveSegment.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_SEGMENT_MOVE_FAILED', message: 'Segment could not be moved' },
+    });
+    reoWorkspace.moveSegmentSupplement.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_SUPPLEMENT_MOVE_FAILED',
+        message: 'Segment supplement could not be moved',
+      },
+    });
     reoWorkspace.createMemory.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_CREATE_FAILED', message: 'Memory could not be created' },
@@ -4123,6 +4146,7 @@ describe('App', () => {
       '生成转录',
       '恢复随机默认图片',
       '切换随机默认图片',
+      '移动...',
       '重命名',
       '删除',
     ]);
@@ -5368,6 +5392,7 @@ describe('App', () => {
       '复制绝对路径',
       '恢复随机默认图片',
       '切换随机默认图片',
+      '移动记忆...',
       '重命名',
       '删除',
     ]);
@@ -5422,6 +5447,240 @@ describe('App', () => {
       })
     );
     expect(within(titlebar).getByRole('button', { name: '灵感 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('moves a Memory from the More menu and exposes a target space toast action', async () => {
+    const user = userEvent.setup();
+    toast.dismiss();
+    const { birthdayMemory } = mockWorkspaceWithEmptyBirthdayMemory();
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_target',
+            title: 'Target space',
+            description: '',
+            addedAt: '2026-06-09T20:15:00.000Z',
+            lastOpenedAt: '2026-06-09T20:15:00.000Z',
+          },
+        ],
+      },
+    });
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: true,
+      value: {
+        source: {
+          type: 'memory',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_birthday',
+          title: 'My seventh birthday',
+          breadcrumb: ['Daily memory'],
+        },
+        targetLevel: 'workspace',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            disabledReason: '当前位置',
+            memories: [],
+          },
+          {
+            workspaceId: 'ws_target',
+            title: 'Target space',
+            disabledReason: null,
+            memories: [],
+          },
+        ],
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [birthdayMemory],
+      },
+    });
+    reoWorkspace.moveMemory.mockImplementation(async () => {
+      reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      });
+      return {
+        ok: true,
+        value: {
+          sourceWorkspaceId: 'ws_1',
+          targetWorkspaceId: 'ws_target',
+          moved: true,
+        },
+      };
+    });
+    reoWorkspace.openMemorySpace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-target',
+        workspaceId: 'ws_target',
+        snapshot: {
+          workspaceId: 'ws_target',
+          title: 'Target space',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await expandMemoryRail(user);
+    await user.click(await screen.findByRole('button', { name: '选择记忆 My seventh birthday' }));
+    await user.click(await findTitlebarMemoryControl('My seventh birthday'));
+    const memoryMenu = await screen.findByRole('menu', { name: 'My seventh birthday 记忆操作' });
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '移动记忆...' }));
+    const moveDialog = await screen.findByRole('dialog', { name: '移动记忆' });
+    expect(within(moveDialog).getByRole('button', { name: /Daily memory/ })).toBeDisabled();
+
+    await user.click(within(moveDialog).getByRole('button', { name: 'Target space' }));
+    await user.click(within(moveDialog).getByRole('button', { name: '移动' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.moveMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        targetWorkspaceId: 'ws_target',
+      })
+    );
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+
+    const moveToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已移动');
+    expect(moveToast).toBeDefined();
+    if (!moveToast || !('action' in moveToast) || !moveToast.action) {
+      throw new Error('Move toast did not expose a target-space action');
+    }
+    const moveToastAction = moveToast.action as {
+      readonly label: unknown;
+      readonly onClick: () => void;
+    };
+    expect(moveToastAction.label).toBe('打开目标空间');
+    moveToastAction.onClick();
+
+    await waitFor(() =>
+      expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_target' })
+    );
+  });
+
+  it('refreshes the source projection when a Memory move reports stale index after commit', async () => {
+    const user = userEvent.setup();
+    toast.dismiss();
+    const { birthdayMemory } = mockWorkspaceWithEmptyBirthdayMemory();
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: true,
+      value: {
+        source: {
+          type: 'memory',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_birthday',
+          title: 'My seventh birthday',
+          breadcrumb: ['Daily memory'],
+        },
+        targetLevel: 'workspace',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            disabledReason: '当前位置',
+            memories: [],
+          },
+          {
+            workspaceId: 'ws_target',
+            title: 'Target space',
+            disabledReason: null,
+            memories: [],
+          },
+        ],
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [birthdayMemory],
+      },
+    });
+    reoWorkspace.moveMemory.mockImplementation(async () => {
+      reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      });
+      return {
+        ok: false,
+        error: {
+          code: 'ERR_WORKSPACE_LOCK_LOST',
+          message: 'Workspace lock was lost',
+          dataRetention: 'file-written-index-stale',
+        },
+      };
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await expandMemoryRail(user);
+    await user.click(await screen.findByRole('button', { name: '选择记忆 My seventh birthday' }));
+    await user.click(await findTitlebarMemoryControl('My seventh birthday'));
+    const memoryMenu = await screen.findByRole('menu', { name: 'My seventh birthday 记忆操作' });
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '移动记忆...' }));
+    const moveDialog = await screen.findByRole('dialog', { name: '移动记忆' });
+
+    await user.click(within(moveDialog).getByRole('button', { name: 'Target space' }));
+    await user.click(within(moveDialog).getByRole('button', { name: '移动' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    expect(screen.queryByRole('dialog', { name: '移动记忆' })).not.toBeInTheDocument();
+    expect(
+      [...toast.getToasts()].some((entry) => 'title' in entry && entry.title === '移动后需要刷新')
+    ).toBe(true);
   });
 
   it('keeps the optimistic memory space title when rename reports stale projections', async () => {

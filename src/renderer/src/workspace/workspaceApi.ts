@@ -12,6 +12,12 @@ export function listMemorySpaces() {
   return window.reoWorkspace.listMemorySpaces();
 }
 
+export function listEntityMoveTargets(
+  payload: Parameters<Window['reoWorkspace']['listEntityMoveTargets']>[0]
+) {
+  return window.reoWorkspace.listEntityMoveTargets(payload);
+}
+
 export function readSystemDraftWorkspace() {
   return window.reoWorkspace.readSystemDraftWorkspace();
 }
@@ -246,6 +252,10 @@ export function deleteMemory(payload: Parameters<Window['reoWorkspace']['deleteM
   return window.reoWorkspace.deleteMemory(payload);
 }
 
+export function moveMemory(payload: Parameters<Window['reoWorkspace']['moveMemory']>[0]) {
+  return window.reoWorkspace.moveMemory(payload);
+}
+
 export function restoreDeletedMemory(
   payload: Parameters<Window['reoWorkspace']['restoreDeletedMemory']>[0]
 ) {
@@ -292,6 +302,10 @@ export function deleteSegment(payload: Parameters<Window['reoWorkspace']['delete
   return window.reoWorkspace.deleteSegment(payload);
 }
 
+export function moveSegment(payload: Parameters<Window['reoWorkspace']['moveSegment']>[0]) {
+  return window.reoWorkspace.moveSegment(payload);
+}
+
 export function restoreDeletedSegment(
   payload: Parameters<Window['reoWorkspace']['restoreDeletedSegment']>[0]
 ) {
@@ -302,6 +316,12 @@ export function deleteSegmentSupplement(
   payload: Parameters<Window['reoWorkspace']['deleteSegmentSupplement']>[0]
 ) {
   return window.reoWorkspace.deleteSegmentSupplement(payload);
+}
+
+export function moveSegmentSupplement(
+  payload: Parameters<Window['reoWorkspace']['moveSegmentSupplement']>[0]
+) {
+  return window.reoWorkspace.moveSegmentSupplement(payload);
 }
 
 export function restoreDeletedSegmentSupplement(
@@ -708,6 +728,14 @@ export type ReorderedSegmentContentTabs = Extract<
 >['value'];
 export type DeletedSegmentSupplement = Extract<
   Awaited<ReturnType<typeof deleteSegmentSupplement>>,
+  { readonly ok: true }
+>['value'];
+export type EntityMoveTargets = Extract<
+  Awaited<ReturnType<typeof listEntityMoveTargets>>,
+  { readonly ok: true }
+>['value'];
+export type MovedEntity = Extract<
+  Awaited<ReturnType<typeof moveSegment>>,
   { readonly ok: true }
 >['value'];
 export type RestoredSegmentSupplement = Extract<

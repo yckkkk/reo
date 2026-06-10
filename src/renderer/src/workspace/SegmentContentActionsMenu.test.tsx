@@ -26,6 +26,7 @@ function renderMenu(
     contentKind?: 'artifact' | 'body' | 'transcript';
     clearDisabled?: boolean;
     onClear?: () => void;
+    onMoveSegment?: () => void;
     onRequestArtifactRefresh?: () => void;
     onRequestArtifactUpdate?: () => void;
     onRequestSpeechSynthesis?: (speaker: VoiceSpeechSynthesisSpeaker) => void;
@@ -43,6 +44,7 @@ function renderMenu(
       contentKind={props.contentKind ?? 'transcript'}
       menuLabel="转录 更多操作"
       onClear={props.onClear ?? vi.fn()}
+      onMoveSegment={props.onMoveSegment}
       onRequestArtifactRefresh={props.onRequestArtifactRefresh}
       onRequestArtifactUpdate={props.onRequestArtifactUpdate}
       onRequestSpeechSynthesis={props.onRequestSpeechSynthesis}
@@ -97,6 +99,26 @@ describe('SegmentContentActionsMenu', () => {
     await openEntityActionMenu('转录 更多操作');
     await user.click(screen.getByRole('menuitem', { name: '清空转录' }));
     expect(onClear).toHaveBeenCalledOnce();
+  });
+
+  it('moves the parent Segment from primary transcript, body, and artifact menus', async () => {
+    for (const contentKind of ['transcript', 'body', 'artifact'] as const) {
+      const onMoveSegment = vi.fn();
+      const { unmount } = render(
+        <SegmentContentActionsMenu
+          actionIdentity={segmentActionPayload}
+          contentKind={contentKind}
+          menuLabel="转录 更多操作"
+          onMoveSegment={onMoveSegment}
+        />
+      );
+
+      const { user } = await openEntityActionMenu('转录 更多操作');
+      await user.click(screen.getByRole('menuitem', { name: '移动片段...' }));
+
+      expect(onMoveSegment).toHaveBeenCalledOnce();
+      unmount();
+    }
   });
 
   it('uses body copy for a primary body tab', async () => {

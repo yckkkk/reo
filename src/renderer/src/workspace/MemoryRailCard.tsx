@@ -12,6 +12,7 @@ type MemoryRailCardProps = {
   readonly active: boolean;
   readonly memory: WorkspaceMemory;
   readonly onDeleteMemory: (memory: WorkspaceMemory) => void;
+  readonly onMoveMemory?: ((memory: WorkspaceMemory) => void) | undefined;
   readonly onRenameMemory: (memory: WorkspaceMemory) => void;
   readonly onResetMemoryCover: (memory: WorkspaceMemory) => void;
   readonly onSwitchMemoryDefaultCover: (memory: WorkspaceMemory) => void;
@@ -25,6 +26,7 @@ export function MemoryRailCard({
   active,
   memory,
   onDeleteMemory,
+  onMoveMemory,
   onRenameMemory,
   onResetMemoryCover,
   onSwitchMemoryDefaultCover,
@@ -34,6 +36,7 @@ export function MemoryRailCard({
   workspaceId,
 }: MemoryRailCardProps) {
   const coverSource = resolveMemoryCoverImageSource({ memory, workspaceId });
+  const canMoveMemory = memory.capabilities?.canDelete !== false;
 
   return (
     <ReoCardSurface
@@ -101,6 +104,7 @@ export function MemoryRailCard({
         cover={memory.cover}
         memoryTitle={memory.title}
         onDelete={() => onDeleteMemory(memory)}
+        onMove={onMoveMemory && canMoveMemory ? () => onMoveMemory(memory) : undefined}
         onRename={() => onRenameMemory(memory)}
         onResetCover={() => onResetMemoryCover(memory)}
         onSwitchDefaultCover={() => onSwitchMemoryDefaultCover(memory)}

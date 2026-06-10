@@ -38,7 +38,11 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
+  WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
+  WORKSPACE_MOVE_MEMORY_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
@@ -141,6 +145,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       invoke<WorkspaceBridgeResponse<'chooseDirectory'>>(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL),
     listMemorySpaces: () =>
       invoke<WorkspaceBridgeResponse<'listMemorySpaces'>>(WORKSPACE_LIST_MEMORY_SPACES_CHANNEL),
+    listEntityMoveTargets: (payload) =>
+      invoke<WorkspaceBridgeResponse<'listEntityMoveTargets'>>(
+        WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
+        payload
+      ),
     readSystemDraftWorkspace: () =>
       invoke<WorkspaceBridgeResponse<'readSystemDraftWorkspace'>>(
         WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL
@@ -309,6 +318,8 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       invoke<WorkspaceBridgeResponse<'createMemory'>>(WORKSPACE_CREATE_MEMORY_CHANNEL, payload),
     deleteMemory: (payload) =>
       invoke<WorkspaceBridgeResponse<'deleteMemory'>>(WORKSPACE_DELETE_MEMORY_CHANNEL, payload),
+    moveMemory: (payload) =>
+      invoke<WorkspaceBridgeResponse<'moveMemory'>>(WORKSPACE_MOVE_MEMORY_CHANNEL, payload),
     restoreDeletedMemory: (payload) =>
       invoke<WorkspaceBridgeResponse<'restoreDeletedMemory'>>(
         WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
@@ -346,6 +357,8 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       ),
     deleteSegment: (payload) =>
       invoke<WorkspaceBridgeResponse<'deleteSegment'>>(WORKSPACE_DELETE_SEGMENT_CHANNEL, payload),
+    moveSegment: (payload) =>
+      invoke<WorkspaceBridgeResponse<'moveSegment'>>(WORKSPACE_MOVE_SEGMENT_CHANNEL, payload),
     restoreDeletedSegment: (payload) =>
       invoke<WorkspaceBridgeResponse<'restoreDeletedSegment'>>(
         WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL,
@@ -354,6 +367,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     deleteSegmentSupplement: (payload) =>
       invoke<WorkspaceBridgeResponse<'deleteSegmentSupplement'>>(
         WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
+        payload
+      ),
+    moveSegmentSupplement: (payload) =>
+      invoke<WorkspaceBridgeResponse<'moveSegmentSupplement'>>(
+        WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
         payload
       ),
     restoreDeletedSegmentSupplement: (payload) =>

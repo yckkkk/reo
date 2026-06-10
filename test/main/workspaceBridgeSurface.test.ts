@@ -6,6 +6,7 @@ import type { ReoWorkspaceBridge } from '../../src/workspace-contract/reo-worksp
 const workspaceBridgeKeys = [
   'chooseDirectory',
   'listMemorySpaces',
+  'listEntityMoveTargets',
   'readSystemDraftWorkspace',
   'openSystemDraftWorkspace',
   'readRecentExpressions',
@@ -43,6 +44,7 @@ const workspaceBridgeKeys = [
   'readWorkspaceSnapshot',
   'createMemory',
   'deleteMemory',
+  'moveMemory',
   'restoreDeletedMemory',
   'resetMemoryCover',
   'restoreMemoryCover',
@@ -51,8 +53,10 @@ const workspaceBridgeKeys = [
   'restoreSegmentCover',
   'switchSegmentDefaultCover',
   'deleteSegment',
+  'moveSegment',
   'restoreDeletedSegment',
   'deleteSegmentSupplement',
+  'moveSegmentSupplement',
   'restoreDeletedSegmentSupplement',
   'deleteWidget',
   'restoreDeletedWidget',
@@ -202,6 +206,13 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     value: { status: 'canceled' },
   });
   await bridge.listMemorySpaces();
+  await bridge.listEntityMoveTargets({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    sourceType: 'segment',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
   await bridge.readSystemDraftWorkspace();
   await bridge.openSystemDraftWorkspace();
   await bridge.readRecentExpressions({ limit: 12 });
@@ -229,6 +240,12 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   });
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
   await bridge.deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
+  await bridge.moveMemory({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    targetWorkspaceId: 'ws_2',
+  });
   await bridge.restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
   await bridge.resetMemoryCover({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
   await bridge.restoreMemoryCover({
@@ -267,6 +284,14 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
   });
+  await bridge.moveSegment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    targetWorkspaceId: 'ws_2',
+    targetMemoryId: 'mem_2',
+  });
   await bridge.restoreDeletedSegment({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -279,6 +304,16 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
     supplementId: 'sup_1',
+  });
+  await bridge.moveSegmentSupplement({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    targetWorkspaceId: 'ws_2',
+    targetMemoryId: 'mem_2',
+    targetSegmentId: 'seg_2',
   });
   await bridge.restoreDeletedSegmentSupplement({
     workspaceHandle: 'wh_1',
@@ -533,6 +568,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
+    'workspace:listEntityMoveTargets',
     'workspace:readSystemDraftWorkspace',
     'workspace:openSystemDraftWorkspace',
     'workspace:readRecentExpressions',
@@ -545,6 +581,7 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:copyArtifactAgentPrompt',
     'workspace:createMemory',
     'workspace:deleteMemory',
+    'workspace:moveMemory',
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
@@ -553,8 +590,10 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:restoreSegmentCover',
     'workspace:switchSegmentDefaultCover',
     'workspace:deleteSegment',
+    'workspace:moveSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
+    'workspace:moveSegmentSupplement',
     'workspace:restoreDeletedSegmentSupplement',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',

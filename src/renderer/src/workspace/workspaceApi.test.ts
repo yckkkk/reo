@@ -33,7 +33,11 @@ import {
   finalizeSegmentSupplementNoteDraft,
   finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
+  listEntityMoveTargets,
   listMemorySpaces,
+  moveMemory,
+  moveSegment,
+  moveSegmentSupplement,
   openMarkdownExternalLink,
   openWidgetDocument,
   openMemoryDocument,
@@ -91,6 +95,7 @@ describe('workspace renderer API wrapper', () => {
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
     listMemorySpaces: vi.fn(),
+    listEntityMoveTargets: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
@@ -128,10 +133,13 @@ describe('workspace renderer API wrapper', () => {
     deleteWidget: vi.fn(),
     restoreDeletedWidget: vi.fn(),
     deleteMemory: vi.fn(),
+    moveMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
     deleteSegment: vi.fn(),
+    moveSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
     deleteSegmentSupplement: vi.fn(),
+    moveSegmentSupplement: vi.fn(),
     restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
@@ -402,6 +410,21 @@ describe('workspace renderer API wrapper', () => {
         ],
       },
     });
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: true,
+      value: {
+        source: {
+          type: 'segment',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          title: '录音',
+          breadcrumb: ['记忆', '产品灵感与思考'],
+        },
+        targetLevel: 'memory',
+        spaces: [],
+      },
+    });
     reoWorkspace.openWorkspace.mockResolvedValue({ ok: true, value: { workspaceId: 'ws_1' } });
     reoWorkspace.openMemorySpace.mockResolvedValue({
       ok: true,
@@ -459,6 +482,14 @@ describe('workspace renderer API wrapper', () => {
       ok: true,
       value: { memoryId: 'mem_1', restoreToken: 'mem_1', memories: [] },
     });
+    reoWorkspace.moveMemory.mockResolvedValue({
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_1',
+        targetWorkspaceId: 'ws_2',
+        moved: true,
+      },
+    });
     reoWorkspace.restoreDeletedMemory.mockResolvedValue({
       ok: true,
       value: {
@@ -500,6 +531,14 @@ describe('workspace renderer API wrapper', () => {
         },
         segmentId: 'seg_1',
         restoreToken: 'seg_1',
+      },
+    });
+    reoWorkspace.moveSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_1',
+        targetWorkspaceId: 'ws_2',
+        moved: true,
       },
     });
     reoWorkspace.restoreDeletedSegment.mockResolvedValue({
@@ -854,6 +893,14 @@ describe('workspace renderer API wrapper', () => {
         restoreToken: 'sup_1',
       },
     });
+    reoWorkspace.moveSegmentSupplement.mockResolvedValue({
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_1',
+        targetWorkspaceId: 'ws_2',
+        moved: true,
+      },
+    });
     reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
@@ -1057,6 +1104,13 @@ describe('workspace renderer API wrapper', () => {
       description: '',
     });
     await listMemorySpaces();
+    await listEntityMoveTargets({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
     await openWorkspace({ selectionToken: 'selection-token-2' });
     await openMemorySpace({ workspaceId: 'ws_1' });
     await removeMemorySpace({ workspaceId: 'ws_1' });
@@ -1086,12 +1140,26 @@ describe('workspace renderer API wrapper', () => {
       restoreToken: 'wdg_1',
     });
     await deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
+    await moveMemory({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    });
     await restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
     await deleteSegment({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
+    });
+    await moveSegment({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
     });
     await restoreDeletedSegment({
       workspaceHandle: 'wh_1',
@@ -1221,6 +1289,16 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       supplementId: 'sup_1',
     });
+    await moveSegmentSupplement({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
+    });
     await restoreDeletedSegmentSupplement({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
@@ -1286,6 +1364,13 @@ describe('workspace renderer API wrapper', () => {
       description: '',
     });
     expect(reoWorkspace.listMemorySpaces).toHaveBeenCalledTimes(1);
+    expect(reoWorkspace.listEntityMoveTargets).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
     expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.updateMemorySpaceTitle).toHaveBeenCalledWith({
@@ -1324,6 +1409,12 @@ describe('workspace renderer API wrapper', () => {
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',
     });
+    expect(reoWorkspace.moveMemory).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    });
     expect(reoWorkspace.restoreDeletedMemory).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       restoreToken: 'mem_1',
@@ -1333,6 +1424,14 @@ describe('workspace renderer API wrapper', () => {
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
+    });
+    expect(reoWorkspace.moveSegment).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
     });
     expect(reoWorkspace.restoreDeletedSegment).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
@@ -1449,6 +1548,16 @@ describe('workspace renderer API wrapper', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       supplementId: 'sup_1',
+    });
+    expect(reoWorkspace.moveSegmentSupplement).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
     });
     expect(reoWorkspace.restoreDeletedSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',

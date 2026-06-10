@@ -56,6 +56,7 @@ import type {
 } from './workspace/MemoryStudio';
 import { MemoryCreateDialog } from './workspace/MemoryCreateDialog';
 import { MemoryDeleteDialog } from './workspace/MemoryDeleteDialog';
+import { EntityMoveDialog, type EntityMoveTargetSelection } from './workspace/EntityMoveDialog';
 import { MemoryRenameDialog } from './workspace/MemoryRenameDialog';
 import { MemoryTitleDialog } from './workspace/MemoryTitleDialog';
 import { WidgetDeleteDialog } from './workspace/WidgetDeleteDialog';
@@ -120,6 +121,10 @@ import {
   discardSegmentSupplementRecordingDraft,
   finalizeRecordingDraft,
   finalizeSegmentSupplementRecordingDraft,
+  listEntityMoveTargets,
+  moveMemory,
+  moveSegment,
+  moveSegmentSupplement,
   onFileTruthChanged,
   openWorkspace,
   openMemorySpace,
@@ -149,6 +154,7 @@ import {
   updateSegmentContentTitle,
   updateSegmentSupplementTitle,
   updateSegmentTitle,
+  type EntityMoveTargets,
   type FinalizedAudioSegment,
   type FinalizedNoteSegment,
   type FinalizedSegmentSupplementRecording,
@@ -344,6 +350,22 @@ type MemoryDetailQueryData = {
   readonly requestId: string;
   readonly detail: WorkspaceMemoryDetail;
 };
+type EntityMoveTarget =
+  | {
+      readonly type: 'memory';
+      readonly memory: WorkspaceMemorySummary;
+    }
+  | {
+      readonly type: 'segment';
+      readonly memoryId: string;
+      readonly segment: WorkspaceMemoryDetail['segments'][number];
+    }
+  | {
+      readonly type: 'supplement';
+      readonly memoryId: string;
+      readonly segment: WorkspaceMemoryDetail['segments'][number];
+      readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
+    };
 type RecordingFlow =
   | { readonly status: 'closed' }
   | {
@@ -936,6 +958,9 @@ export function App() {
     useState<SegmentSupplementDeleteTarget | null>(null);
   const [segmentSupplementRenameTarget, setSegmentSupplementRenameTarget] =
     useState<SegmentSupplementRenameTarget | null>(null);
+  const [entityMoveTarget, setEntityMoveTarget] = useState<EntityMoveTarget | null>(null);
+  const [entityMoveTargets, setEntityMoveTargets] = useState<EntityMoveTargets | null>(null);
+  const [entityMoveLoading, setEntityMoveLoading] = useState(false);
   const [workspaceActionPending, setWorkspaceActionPending] = useState(false);
   const [segmentContentClearPending, setSegmentContentClearPending] = useState(false);
   const [workspaceEntryError, setWorkspaceEntryError] = useState<string | null>(null);
@@ -989,6 +1014,7 @@ export function App() {
   const workspaceSessionRef = useRef<WorkspaceSession | null>(null);
   const workspaceSessionRevisionRef = useRef(0);
   const workspaceSnapshotRefreshRequestRef = useRef(0);
+  const entityMoveRequestIdRef = useRef(0);
   const widgetReorderMutationIdRef = useRef(0);
   const widgetReorderStateRef = useRef<WidgetReorderState | null>(null);
   const workspaceReleaseRecordsRef = useRef<Map<string, PendingWorkspaceRelease>>(new Map());
@@ -1494,6 +1520,9 @@ export function App() {
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
     setSegmentSupplementRenameTarget(null);
+    setEntityMoveTarget(null);
+    setEntityMoveTargets(null);
+    setEntityMoveLoading(false);
     setSegmentFocusIntent(null);
   }
 
@@ -2932,6 +2961,313 @@ export function App() {
 
   function invalidateRecentExpressions() {
     void queryClient.invalidateQueries({ queryKey: recentExpressionsQueryRootKey() });
+  }
+
+  function entityMoveSourcePayload(
+    session: WorkspaceSession,
+    target: EntityMoveTarget
+  ): Parameters<typeof listEntityMoveTargets>[0] {
+    if (target.type === 'memory') {
+      return {
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        sourceType: 'memory',
+        memoryId: target.memory.memoryId,
+      };
+    }
+    if (target.type === 'segment') {
+      return {
+        workspaceHandle: session.workspaceHandle,
+        workspaceId: session.workspaceId,
+        sourceType: 'segment',
+        memoryId: target.memoryId,
+        segmentId: target.segment.segmentId,
+      };
+    }
+    return {
+      workspaceHandle: session.workspaceHandle,
+      workspaceId: session.workspaceId,
+      sourceType: 'supplement',
+      memoryId: target.memoryId,
+      segmentId: target.segment.segmentId,
+      supplementId: target.supplement.supplementId,
+    };
+  }
+
+  function invalidateEntityMoveQueries(sourceWorkspaceId: string, targetWorkspaceId: string) {
+    const movedWorkspaceIds =
+      sourceWorkspaceId === targetWorkspaceId
+        ? [sourceWorkspaceId]
+        : [sourceWorkspaceId, targetWorkspaceId];
+    void queryClient.invalidateQueries({
+      predicate: (query) =>
+        movedWorkspaceIds.some((workspaceId) =>
+          workspaceProjectionQueryBelongsToWorkspace(query.queryKey, workspaceId)
+        ),
+      refetchType: 'none',
+    });
+    queryClient.removeQueries({
+      predicate: (query) =>
+        movedWorkspaceIds.some((workspaceId) =>
+          workspacePlaybackAudioQueryBelongsToWorkspace(query.queryKey, workspaceId)
+        ),
+    });
+    void queryClient.invalidateQueries({ queryKey: memorySpacesQueryKey() });
+    invalidateRecentExpressions();
+  }
+
+  function showEntityMoveSuccessToast(selection: EntityMoveTargetSelection) {
+    const targetMemorySpaceAvailable =
+      selection.targetWorkspaceId !== activeWorkspaceSession.workspaceId &&
+      memorySpaces.some((memorySpace) => memorySpace.workspaceId === selection.targetWorkspaceId);
+
+    showReoToast({
+      type: 'success',
+      title: '已移动',
+      ...(targetMemorySpaceAvailable
+        ? {
+            action: {
+              label: '打开目标空间',
+              onClick: () => {
+                void selectMemorySpaceFromSidebar(selection.targetWorkspaceId);
+              },
+            },
+          }
+        : {}),
+    });
+  }
+
+  async function refreshActiveWorkspaceAfterEntityMove(
+    session: WorkspaceSession,
+    target: EntityMoveTarget,
+    selection: EntityMoveTargetSelection
+  ) {
+    const response = await readWorkspaceSnapshot({
+      workspaceHandle: session.workspaceHandle,
+    });
+    if (!workspaceSessionMatches(session)) {
+      return;
+    }
+    if (!response.ok || response.value.workspaceId !== session.workspaceId) {
+      void queryClient.invalidateQueries({
+        queryKey: workspaceSnapshotQueryKey(session),
+      });
+      return;
+    }
+
+    const refreshedSession: WorkspaceSession = {
+      ...session,
+      snapshot: response.value,
+    };
+    const sameWorkspaceTarget = selection.targetWorkspaceId === session.workspaceId;
+    const preferredMemoryId =
+      sameWorkspaceTarget && 'targetMemoryId' in selection ? selection.targetMemoryId : null;
+    const selectedMemoryStillExists =
+      currentMemoryId &&
+      response.value.memories.some((memory) => memory.memoryId === currentMemoryId);
+    const nextSelectedMemoryId =
+      preferredMemoryId &&
+      response.value.memories.some((memory) => memory.memoryId === preferredMemoryId)
+        ? preferredMemoryId
+        : selectedMemoryStillExists
+          ? currentMemoryId
+          : (response.value.memories[0]?.memoryId ?? null);
+    const nextFocusIntent: SegmentFocusIntent | null =
+      sameWorkspaceTarget && 'targetMemoryId' in selection && target.type === 'segment'
+        ? {
+            memoryId: selection.targetMemoryId,
+            segmentId: target.segment.segmentId,
+          }
+        : sameWorkspaceTarget &&
+            'targetMemoryId' in selection &&
+            'targetSegmentId' in selection &&
+            target.type === 'supplement'
+          ? {
+              memoryId: selection.targetMemoryId,
+              segmentId: selection.targetSegmentId,
+              supplementId: target.supplement.supplementId,
+            }
+          : null;
+
+    seedWorkspaceSnapshot(queryClient, refreshedSession);
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
+        ? refreshedSession
+        : currentSession
+    );
+    setSelectedMemoryId(nextSelectedMemoryId);
+    setSegmentFocusIntent(nextFocusIntent);
+  }
+
+  function closeEntityMoveDialog() {
+    entityMoveRequestIdRef.current += 1;
+    setEntityMoveTarget(null);
+    setEntityMoveTargets(null);
+    setEntityMoveLoading(false);
+  }
+
+  function handleEntityMoveOpenChange(nextOpen: boolean) {
+    if (!nextOpen && workspaceActionPending) {
+      return;
+    }
+    if (!nextOpen) {
+      closeEntityMoveDialog();
+    }
+  }
+
+  function openEntityMoveDialog(target: EntityMoveTarget) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    const session = activeWorkspaceSession;
+    const requestId = entityMoveRequestIdRef.current + 1;
+    entityMoveRequestIdRef.current = requestId;
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
+    setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(null);
+    setSegmentDeleteTarget(null);
+    setSegmentContentClearTarget(null);
+    setSegmentContentRenameTarget(null);
+    setSegmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+    setMemorySpaceRenameTarget(null);
+    setEntityMoveTarget(target);
+    setEntityMoveTargets(null);
+    setEntityMoveLoading(true);
+
+    void (async () => {
+      try {
+        const response = await listEntityMoveTargets(entityMoveSourcePayload(session, target));
+        if (entityMoveRequestIdRef.current !== requestId || !workspaceSessionMatches(session)) {
+          return;
+        }
+        if (!response.ok) {
+          closeEntityMoveDialog();
+          showReoToast({
+            type: 'error',
+            title: '无法读取移动目标',
+            description: workspaceErrorDisplayMessage(response.error, '无法读取移动目标。'),
+          });
+          return;
+        }
+        setEntityMoveTargets(response.value);
+      } catch (error) {
+        if (entityMoveRequestIdRef.current !== requestId || !workspaceSessionMatches(session)) {
+          return;
+        }
+        closeEntityMoveDialog();
+        showReoToast({
+          type: 'error',
+          title: '无法读取移动目标',
+          description: unknownErrorDisplayMessage(error, '无法读取移动目标。'),
+        });
+      } finally {
+        if (entityMoveRequestIdRef.current === requestId) {
+          setEntityMoveLoading(false);
+        }
+      }
+    })();
+  }
+
+  async function confirmMoveEntity(selection: EntityMoveTargetSelection) {
+    const target = entityMoveTarget;
+    if (!target || !beginWorkspaceAction()) {
+      return;
+    }
+
+    const mutationSession = activeWorkspaceSession;
+    setEntityMoveLoading(true);
+    try {
+      const source = entityMoveSourcePayload(mutationSession, target);
+      let response:
+        | Awaited<ReturnType<typeof moveMemory>>
+        | Awaited<ReturnType<typeof moveSegment>>
+        | Awaited<ReturnType<typeof moveSegmentSupplement>>;
+
+      if (target.type === 'memory') {
+        response = await moveMemory({
+          workspaceHandle: mutationSession.workspaceHandle,
+          workspaceId: mutationSession.workspaceId,
+          memoryId: target.memory.memoryId,
+          targetWorkspaceId: selection.targetWorkspaceId,
+        });
+      } else if (target.type === 'segment') {
+        if (!('targetMemoryId' in selection)) {
+          return;
+        }
+        response = await moveSegment({
+          workspaceHandle: source.workspaceHandle,
+          workspaceId: source.workspaceId,
+          memoryId: source.memoryId,
+          segmentId: target.segment.segmentId,
+          targetWorkspaceId: selection.targetWorkspaceId,
+          targetMemoryId: selection.targetMemoryId,
+        });
+      } else {
+        if (!('targetMemoryId' in selection) || !('targetSegmentId' in selection)) {
+          return;
+        }
+        response = await moveSegmentSupplement({
+          workspaceHandle: source.workspaceHandle,
+          workspaceId: source.workspaceId,
+          memoryId: source.memoryId,
+          segmentId: target.segment.segmentId,
+          supplementId: target.supplement.supplementId,
+          targetWorkspaceId: selection.targetWorkspaceId,
+          targetMemoryId: selection.targetMemoryId,
+          targetSegmentId: selection.targetSegmentId,
+        });
+      }
+
+      if (!workspaceSessionMatches(mutationSession)) {
+        return;
+      }
+      if (!response.ok && response.error.dataRetention !== 'file-written-index-stale') {
+        showReoToast({
+          type: 'error',
+          title: '移动失败',
+          description: workspaceErrorDisplayMessage(response.error, '移动失败。'),
+        });
+        return;
+      }
+
+      invalidateEntityMoveQueries(mutationSession.workspaceId, selection.targetWorkspaceId);
+      closeEntityMoveDialog();
+      await refreshActiveWorkspaceAfterEntityMove(mutationSession, target, selection);
+      if (workspaceSessionMatches(mutationSession)) {
+        if (response.ok) {
+          showEntityMoveSuccessToast(selection);
+        } else {
+          showReoToast({
+            type: 'error',
+            title: '移动后需要刷新',
+            description: workspaceErrorDisplayMessage(response.error, '移动后需要刷新。'),
+          });
+        }
+      }
+    } catch (error) {
+      if (!workspaceSessionMatches(mutationSession)) {
+        return;
+      }
+      showReoToast({
+        type: 'error',
+        title: '移动失败',
+        description: unknownErrorDisplayMessage(error, '移动失败。'),
+      });
+    } finally {
+      if (workspaceSessionMatches(mutationSession)) {
+        setEntityMoveLoading(false);
+      }
+      finishWorkspaceAction();
+    }
   }
 
   function handleAudioSegmentFinalized(
@@ -6358,6 +6694,7 @@ export function App() {
             onCreateWidget={requestCreateWidget}
             onDeleteMemory={openMemoryDeleteDialog}
             onDeleteWidget={openWidgetDeleteDialog}
+            onMoveMemory={(memory) => openEntityMoveDialog({ type: 'memory', memory })}
             onRenameMemory={setMemoryRenameTarget}
             onRenameWidget={openWidgetRenameDialog}
             onRequestWidgetRefresh={refreshWidget}
@@ -6421,6 +6758,11 @@ export function App() {
           }}
           onDeleteSegment={openSegmentDeleteDialog}
           onDeleteSegmentSupplement={openSegmentSupplementDeleteDialog}
+          onMoveMemory={(memory) => openEntityMoveDialog({ type: 'memory', memory })}
+          onMoveSegment={(target) => openEntityMoveDialog({ type: 'segment', ...target })}
+          onMoveSegmentSupplement={(target) =>
+            openEntityMoveDialog({ type: 'supplement', ...target })
+          }
           onClearSegmentContent={setSegmentContentClearTarget}
           onSegmentTranscriptSaved={(saved) =>
             handleRecordingContentSaved({ ...saved, expectedSession: activeWorkspaceSession })
@@ -6538,6 +6880,15 @@ export function App() {
         }}
         onSave={saveRenamedSegmentSupplement}
         open={segmentSupplementRenameTarget !== null}
+      />
+      <EntityMoveDialog
+        disabled={workspaceActionPending || entityMoveLoading}
+        onConfirm={(selection) => {
+          void confirmMoveEntity(selection);
+        }}
+        onOpenChange={handleEntityMoveOpenChange}
+        open={entityMoveTarget !== null}
+        targets={entityMoveTargets}
       />
       <SegmentSupplementDeleteDialog
         disabled={workspaceActionPending}

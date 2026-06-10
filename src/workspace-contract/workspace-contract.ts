@@ -229,11 +229,13 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_MEMORY_COVER_RESTORE_FAILED',
   'ERR_MEMORY_RESTORE_FAILED',
   'ERR_SEGMENT_DELETE_FAILED',
+  'ERR_SEGMENT_MOVE_FAILED',
   'ERR_SEGMENT_COVER_RESET_FAILED',
   'ERR_SEGMENT_COVER_RESTORE_FAILED',
   'ERR_SEGMENT_RESTORE_FAILED',
   'ERR_SEGMENT_RESTORE_PARENT_MISSING',
   'ERR_SEGMENT_SUPPLEMENT_DELETE_FAILED',
+  'ERR_SEGMENT_SUPPLEMENT_MOVE_FAILED',
   'ERR_SEGMENT_SUPPLEMENT_RESTORE_FAILED',
   'ERR_SEGMENT_SUPPLEMENT_RESTORE_PARENT_MISSING',
   'ERR_WORKSPACE_WIDGET_UPDATE_FAILED',
@@ -1275,6 +1277,59 @@ export const workspaceCreateMemoryRequestSchema = workspaceHandleSchema
 
 export const workspaceDeleteMemoryRequestSchema = workspaceMemoryIdRequestSchema;
 
+const workspaceMoveSourceSchema = z.discriminatedUnion('sourceType', [
+  workspaceMemoryIdRequestSchema
+    .extend({
+      workspaceId: z.string().min(1),
+      sourceType: z.literal('memory'),
+    })
+    .strict(),
+  workspaceMemoryIdRequestSchema
+    .extend({
+      workspaceId: z.string().min(1),
+      sourceType: z.literal('segment'),
+      segmentId: segmentIdSchema,
+    })
+    .strict(),
+  workspaceMemoryIdRequestSchema
+    .extend({
+      workspaceId: z.string().min(1),
+      sourceType: z.literal('supplement'),
+      segmentId: segmentIdSchema,
+      supplementId: supplementIdSchema,
+    })
+    .strict(),
+]);
+
+export const workspaceListEntityMoveTargetsRequestSchema = workspaceMoveSourceSchema;
+
+export const workspaceMoveMemoryRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    targetWorkspaceId: z.string().min(1),
+  })
+  .strict();
+
+export const workspaceMoveSegmentRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    targetWorkspaceId: z.string().min(1),
+    targetMemoryId: memoryIdSchema,
+  })
+  .strict();
+
+export const workspaceMoveSegmentSupplementRequestSchema = workspaceMemoryIdRequestSchema
+  .extend({
+    workspaceId: z.string().min(1),
+    segmentId: segmentIdSchema,
+    supplementId: supplementIdSchema,
+    targetWorkspaceId: z.string().min(1),
+    targetMemoryId: memoryIdSchema,
+    targetSegmentId: segmentIdSchema,
+  })
+  .strict();
+
 export const workspaceRestoreDeletedMemoryRequestSchema = workspaceHandleSchema
   .extend({
     restoreToken: memoryIdSchema,
@@ -1796,6 +1851,82 @@ export const workspaceCreateMemoryResponseSchema = z.discriminatedUnion('ok', [
   }),
   workspaceErrorEnvelopeSchema,
 ]);
+
+const workspaceMoveTargetSegmentSchema = z.strictObject({
+  segmentId: segmentIdSchema,
+  title: z.string(),
+  disabledReason: z.string().nullable(),
+});
+
+const workspaceMoveTargetMemorySchema = z.strictObject({
+  memoryId: memoryIdSchema,
+  title: z.string(),
+  disabledReason: z.string().nullable(),
+  segments: z.array(workspaceMoveTargetSegmentSchema),
+});
+
+const workspaceMoveTargetSpaceSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  title: z.string(),
+  disabledReason: z.string().nullable(),
+  memories: z.array(workspaceMoveTargetMemorySchema),
+});
+
+const workspaceMoveSourceProjectionSchema = z.discriminatedUnion('type', [
+  z.strictObject({
+    type: z.literal('memory'),
+    workspaceId: z.string().min(1),
+    memoryId: memoryIdSchema,
+    title: z.string(),
+    breadcrumb: z.array(z.string()),
+  }),
+  z.strictObject({
+    type: z.literal('segment'),
+    workspaceId: z.string().min(1),
+    memoryId: memoryIdSchema,
+    segmentId: segmentIdSchema,
+    title: z.string(),
+    breadcrumb: z.array(z.string()),
+  }),
+  z.strictObject({
+    type: z.literal('supplement'),
+    workspaceId: z.string().min(1),
+    memoryId: memoryIdSchema,
+    segmentId: segmentIdSchema,
+    supplementId: supplementIdSchema,
+    title: z.string(),
+    breadcrumb: z.array(z.string()),
+  }),
+]);
+
+export const workspaceListEntityMoveTargetsResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      source: workspaceMoveSourceProjectionSchema,
+      targetLevel: z.enum(['workspace', 'memory', 'segment']),
+      spaces: z.array(workspaceMoveTargetSpaceSchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+const workspaceMoveEntityResponseValueSchema = z.strictObject({
+  sourceWorkspaceId: z.string().min(1),
+  targetWorkspaceId: z.string().min(1),
+  moved: z.literal(true),
+});
+
+export const workspaceMoveMemoryResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: workspaceMoveEntityResponseValueSchema,
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceMoveSegmentResponseSchema = workspaceMoveMemoryResponseSchema;
+export const workspaceMoveSegmentSupplementResponseSchema = workspaceMoveMemoryResponseSchema;
 
 export const workspaceDeleteWidgetResponseSchema = z.discriminatedUnion('ok', [
   z.strictObject({
@@ -2823,6 +2954,12 @@ export type WorkspaceReadWorkspaceSnapshotRequest = z.infer<
 export type WorkspaceListMemorySpacesResponse = z.infer<
   typeof workspaceListMemorySpacesResponseSchema
 >;
+export type WorkspaceListEntityMoveTargetsRequest = z.infer<
+  typeof workspaceListEntityMoveTargetsRequestSchema
+>;
+export type WorkspaceListEntityMoveTargetsResponse = z.infer<
+  typeof workspaceListEntityMoveTargetsResponseSchema
+>;
 export type WorkspaceCloseResponse = z.infer<typeof workspaceCloseResponseSchema>;
 export type WorkspaceReadWorkspaceSnapshotResponse = z.infer<
   typeof workspaceReadWorkspaceSnapshotResponseSchema
@@ -2944,6 +3081,7 @@ export type WorkspaceUpdateSegmentContentTabOrderRequest = z.infer<
 >;
 export type WorkspaceCreateMemoryRequest = z.infer<typeof workspaceCreateMemoryRequestSchema>;
 export type WorkspaceDeleteMemoryRequest = z.infer<typeof workspaceDeleteMemoryRequestSchema>;
+export type WorkspaceMoveMemoryRequest = z.infer<typeof workspaceMoveMemoryRequestSchema>;
 export type WorkspaceRestoreDeletedMemoryRequest = z.infer<
   typeof workspaceRestoreDeletedMemoryRequestSchema
 >;
@@ -2966,11 +3104,15 @@ export type WorkspaceSwitchSegmentDefaultCoverRequest = z.infer<
   typeof workspaceSwitchSegmentDefaultCoverRequestSchema
 >;
 export type WorkspaceDeleteSegmentRequest = z.infer<typeof workspaceDeleteSegmentRequestSchema>;
+export type WorkspaceMoveSegmentRequest = z.infer<typeof workspaceMoveSegmentRequestSchema>;
 export type WorkspaceRestoreDeletedSegmentRequest = z.infer<
   typeof workspaceRestoreDeletedSegmentRequestSchema
 >;
 export type WorkspaceDeleteSegmentSupplementRequest = z.infer<
   typeof workspaceDeleteSegmentSupplementRequestSchema
+>;
+export type WorkspaceMoveSegmentSupplementRequest = z.infer<
+  typeof workspaceMoveSegmentSupplementRequestSchema
 >;
 export type WorkspaceRestoreDeletedSegmentSupplementRequest = z.infer<
   typeof workspaceRestoreDeletedSegmentSupplementRequestSchema
@@ -3008,6 +3150,7 @@ export type WorkspaceUpdateSegmentContentTabOrderResponse = z.infer<
 export type WorkspaceEntityActionResponse = z.infer<typeof workspaceEntityActionResponseSchema>;
 export type WorkspaceCreateMemoryResponse = z.infer<typeof workspaceCreateMemoryResponseSchema>;
 export type WorkspaceDeleteMemoryResponse = z.infer<typeof workspaceDeleteMemoryResponseSchema>;
+export type WorkspaceMoveMemoryResponse = z.infer<typeof workspaceMoveMemoryResponseSchema>;
 export type WorkspaceRestoreDeletedMemoryResponse = z.infer<
   typeof workspaceRestoreDeletedMemoryResponseSchema
 >;
@@ -3030,11 +3173,15 @@ export type WorkspaceSwitchSegmentDefaultCoverResponse = z.infer<
   typeof workspaceSwitchSegmentDefaultCoverResponseSchema
 >;
 export type WorkspaceDeleteSegmentResponse = z.infer<typeof workspaceDeleteSegmentResponseSchema>;
+export type WorkspaceMoveSegmentResponse = z.infer<typeof workspaceMoveSegmentResponseSchema>;
 export type WorkspaceRestoreDeletedSegmentResponse = z.infer<
   typeof workspaceRestoreDeletedSegmentResponseSchema
 >;
 export type WorkspaceDeleteSegmentSupplementResponse = z.infer<
   typeof workspaceDeleteSegmentSupplementResponseSchema
+>;
+export type WorkspaceMoveSegmentSupplementResponse = z.infer<
+  typeof workspaceMoveSegmentSupplementResponseSchema
 >;
 export type WorkspaceRestoreDeletedSegmentSupplementResponse = z.infer<
   typeof workspaceRestoreDeletedSegmentSupplementResponseSchema

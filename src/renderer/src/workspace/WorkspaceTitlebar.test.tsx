@@ -114,6 +114,7 @@ function renderWorkspaceTitlebar({
   memorySpaceCapabilities,
   onCreateMemory = vi.fn(),
   onCreateWidget = vi.fn(),
+  onMoveMemory = vi.fn(),
   onReorderWidgets = vi.fn(),
   widgets = [],
 }: {
@@ -124,6 +125,7 @@ function renderWorkspaceTitlebar({
   };
   readonly onCreateMemory?: () => void;
   readonly onCreateWidget?: () => void;
+  readonly onMoveMemory?: (memory: WorkspaceMemorySummary) => void;
   readonly onReorderWidgets?: (widgetTabOrder: readonly string[]) => void;
   readonly widgets?: readonly WorkspaceWidgetProjection[];
 }) {
@@ -138,6 +140,7 @@ function renderWorkspaceTitlebar({
         onCreateWidget={onCreateWidget}
         onDeleteMemory={vi.fn()}
         onDeleteWidget={vi.fn()}
+        onMoveMemory={onMoveMemory}
         onRenameMemory={vi.fn()}
         onRenameWidget={vi.fn()}
         onRequestWidgetRefresh={vi.fn()}
@@ -180,6 +183,7 @@ describe('WorkspaceTitlebar', () => {
     await user.click(document.body);
     await user.click(screen.getByRole('button', { name: '草稿 记忆操作' }));
     expect(screen.getByRole('menuitem', { name: '用默认应用打开' })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '移动记忆...' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '重命名' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '删除' })).not.toBeInTheDocument();
   });

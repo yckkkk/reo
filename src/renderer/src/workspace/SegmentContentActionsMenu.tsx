@@ -1,4 +1,12 @@
-import { AppWindow, Ellipsis, Eraser, PencilLine, RefreshCw, type LucideIcon } from 'lucide-react';
+import {
+  AppWindow,
+  Ellipsis,
+  Eraser,
+  FolderInput,
+  PencilLine,
+  RefreshCw,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ComponentProps, ReactElement } from 'react';
 import type { WorkspaceSegmentEntityActionRequest } from '../../../workspace-contract/workspace-contract';
 import { Button } from '@/components/ui/button';
@@ -28,6 +36,7 @@ export type SegmentContentActionsMenuProps = {
   readonly onCloseAutoFocus?:
     | ComponentProps<typeof DropdownMenuContent>['onCloseAutoFocus']
     | undefined;
+  readonly onMoveSegment?: (() => void) | undefined;
   readonly onOpenChange?: (open: boolean) => void;
   readonly onRequestArtifactRefresh?: (() => void) | undefined;
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
@@ -75,6 +84,7 @@ export function SegmentContentActionsMenu({
   menuLabel,
   onClear,
   onCloseAutoFocus,
+  onMoveSegment,
   onOpenChange,
   onRequestArtifactRefresh,
   onRequestArtifactUpdate,
@@ -164,22 +174,32 @@ export function SegmentContentActionsMenu({
             </DropdownMenuGroup>
           </>
         ) : null}
-        {contentKind !== 'artifact' && onClear && onRename ? (
+        {onMoveSegment || (contentKind !== 'artifact' && onClear && onRename) ? (
           <>
             <DropdownMenuSeparator className={entityActionMenuSeparatorClassName} />
             <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={onRename}>
-                <SegmentContentActionIcon icon={PencilLine} />
-                重命名
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive data-[disabled]:text-destructive/50 data-[highlighted]:text-destructive"
-                disabled={clearDisabled}
-                onSelect={onClear}
-              >
-                <SegmentContentActionIcon icon={Eraser} />
-                {clearLabel}
-              </DropdownMenuItem>
+              {onMoveSegment ? (
+                <DropdownMenuItem onSelect={onMoveSegment}>
+                  <SegmentContentActionIcon icon={FolderInput} />
+                  移动片段...
+                </DropdownMenuItem>
+              ) : null}
+              {contentKind !== 'artifact' && onRename ? (
+                <DropdownMenuItem onSelect={onRename}>
+                  <SegmentContentActionIcon icon={PencilLine} />
+                  重命名
+                </DropdownMenuItem>
+              ) : null}
+              {contentKind !== 'artifact' && onClear ? (
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive data-[disabled]:text-destructive/50 data-[highlighted]:text-destructive"
+                  disabled={clearDisabled}
+                  onSelect={onClear}
+                >
+                  <SegmentContentActionIcon icon={Eraser} />
+                  {clearLabel}
+                </DropdownMenuItem>
+              ) : null}
             </DropdownMenuGroup>
           </>
         ) : null}

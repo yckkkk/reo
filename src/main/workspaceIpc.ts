@@ -45,7 +45,11 @@ import {
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
+  WORKSPACE_MOVE_MEMORY_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
@@ -148,9 +152,17 @@ import {
   workspaceFileTruthChangedEventSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListEntityMoveTargetsRequestSchema,
+  workspaceListEntityMoveTargetsResponseSchema,
   workspaceListMemorySpacesResponseSchema,
   workspaceMicrophoneIntentRequestSchema,
   workspaceMicrophoneIntentResponseSchema,
+  workspaceMoveMemoryRequestSchema,
+  workspaceMoveMemoryResponseSchema,
+  workspaceMoveSegmentRequestSchema,
+  workspaceMoveSegmentResponseSchema,
+  workspaceMoveSegmentSupplementRequestSchema,
+  workspaceMoveSegmentSupplementResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
   workspaceOpenRequestSchema,
@@ -417,6 +429,9 @@ import {
   deleteMemoryFromFileTruth,
   deleteSegmentSupplementFromFileTruth,
   deleteSegmentFromFileTruth,
+  moveMemoryBetweenFileTruthRoots,
+  moveSegmentBetweenFileTruthRoots,
+  moveSegmentSupplementBetweenFileTruthRoots,
   readMemoryDetailFromFileTruth,
   resetMemoryCoverToDefaultFromFileTruth,
   resetSegmentCoverToDefaultFromFileTruth,
@@ -668,6 +683,12 @@ export interface HandleCreateMemoryOptions extends HandleWorkspaceRequestOptions
   readonly createMemoryId?: () => string;
   readonly now?: () => string;
 }
+
+type HandleEntityMoveOptions = HandleWorkspaceRequestOptions & {
+  readonly appDataDir?: string;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly now?: () => string;
+};
 
 export interface HandleCreateRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly createSegmentId?: () => string;
@@ -5985,6 +6006,759 @@ export async function handleUpdateSegmentSupplementTitleForTest(
   return handleUpdateSegmentSupplementTitleCore(options);
 }
 
+type MoveTargetSegment = {
+  readonly segmentId: string;
+  readonly title: string;
+  readonly disabledReason: string | null;
+};
+
+type MoveTargetMemory = {
+  readonly memoryId: string;
+  readonly title: string;
+  readonly disabledReason: string | null;
+  readonly segments: readonly MoveTargetSegment[];
+};
+
+type MoveTargetSpace = {
+  readonly workspaceId: string;
+  readonly title: string;
+  readonly disabledReason: string | null;
+  readonly memories: readonly MoveTargetMemory[];
+};
+type EntityMoveSourceType = z.infer<
+  typeof workspaceListEntityMoveTargetsRequestSchema
+>['sourceType'];
+type EntityMoveTargetLevel = 'workspace' | 'memory' | 'segment';
+
+type MoveSourceProjection =
+  | {
+      readonly type: 'memory';
+      readonly workspaceId: string;
+      readonly memoryId: string;
+      readonly title: string;
+      readonly breadcrumb: readonly string[];
+    }
+  | {
+      readonly type: 'segment';
+      readonly workspaceId: string;
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly title: string;
+      readonly breadcrumb: readonly string[];
+    }
+  | {
+      readonly type: 'supplement';
+      readonly workspaceId: string;
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly supplementId: string;
+      readonly title: string;
+      readonly breadcrumb: readonly string[];
+    };
+
+type MoveTargetWorkspaceRoot = {
+  readonly rootPath: string;
+  readonly assertUsable: AssertWorkspaceHandleUsable;
+  readonly release: () => Promise<void>;
+};
+
+function moveInvalidTargetError(message: string): WorkspaceErrorEnvelope {
+  return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', message);
+}
+
+function entityMoveTargetLevelForSource(sourceType: EntityMoveSourceType): EntityMoveTargetLevel {
+  if (sourceType === 'memory') {
+    return 'workspace';
+  }
+  if (sourceType === 'segment') {
+    return 'memory';
+  }
+  return 'segment';
+}
+
+async function resolveMoveTargetWorkspaceRoot({
+  activeHandle,
+  appDataDir,
+  memorySpaceRegistry,
+  now,
+  targetWorkspaceId,
+}: {
+  readonly activeHandle: RequiredWorkspaceHandle;
+  readonly appDataDir?: string | undefined;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly now: () => string;
+  readonly targetWorkspaceId: string;
+}): Promise<
+  { readonly ok: true; readonly value: MoveTargetWorkspaceRoot } | WorkspaceErrorEnvelope
+> {
+  if (targetWorkspaceId === activeHandle.workspaceId) {
+    return {
+      ok: true,
+      value: {
+        rootPath: activeHandle.canonicalRoot,
+        assertUsable: activeHandle.assertUsable,
+        release: async () => {},
+      },
+    };
+  }
+
+  let rootPath: string | null;
+  if (isSystemDraftWorkspaceId(targetWorkspaceId)) {
+    const ensured = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+    if (!ensured.ok) {
+      return ensured;
+    }
+    rootPath = ensured.value.rootPath;
+  } else {
+    try {
+      rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(targetWorkspaceId);
+    } catch (error) {
+      return workspaceMemorySpaceRegistryReadError(error);
+    }
+  }
+
+  if (!rootPath) {
+    return workspaceError(
+      'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+      'Move target workspace could not be resolved'
+    );
+  }
+
+  const lock = await acquireWorkspaceLock({ canonicalRoot: rootPath });
+  if (!lock.ok) {
+    return lock;
+  }
+  const assertTemporaryTargetUsable = workspaceLockAssertUsable(lock);
+
+  const opened = await openWorkspaceFiles({
+    rootPath,
+    assertWorkspaceUsable: assertTemporaryTargetUsable,
+  });
+  if (!opened.ok) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return opened;
+  }
+  if (opened.snapshot.workspaceId !== targetWorkspaceId) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Move target workspace metadata is invalid',
+      'previous-file-preserved'
+    );
+  }
+
+  return {
+    ok: true,
+    value: {
+      rootPath,
+      assertUsable: assertTemporaryTargetUsable,
+      release: async () => {
+        if (lock.lock.isHeld()) {
+          await lock.lock.release().catch(() => {});
+        }
+      },
+    },
+  };
+}
+
+async function readMoveWorkspaceSnapshot({
+  assertUsable,
+  rootPath,
+  workspaceId,
+}: {
+  readonly assertUsable?: AssertWorkspaceHandleUsable;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+}): Promise<{ readonly ok: true; readonly snapshot: WorkspaceSnapshot } | WorkspaceErrorEnvelope> {
+  const result = await readWorkspaceSnapshotFromFileTruth({
+    rootPath,
+    workspaceId,
+    ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+  });
+  return result.ok ? { ok: true, snapshot: result.snapshot } : result;
+}
+
+async function readMoveMemoryDetailSegments({
+  assertUsable,
+  rootPath,
+  workspaceId,
+  memoryId,
+}: {
+  readonly assertUsable?: AssertWorkspaceHandleUsable;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+}): Promise<readonly MoveTargetSegment[]> {
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId,
+    memoryId,
+    ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+  });
+  if (!detail.ok) {
+    return [];
+  }
+  return detail.value.segments.map((segment) => ({
+    segmentId: segment.segmentId,
+    title: segment.title,
+    disabledReason: null,
+  }));
+}
+
+async function moveTargetSpaceFromSnapshot({
+  assertUsable,
+  rootPath,
+  snapshot,
+  source,
+}: {
+  readonly assertUsable?: AssertWorkspaceHandleUsable;
+  readonly rootPath: string;
+  readonly snapshot: WorkspaceSnapshot;
+  readonly source: z.infer<typeof workspaceListEntityMoveTargetsRequestSchema>;
+}): Promise<MoveTargetSpace> {
+  const targetLevel = entityMoveTargetLevelForSource(source.sourceType);
+  const memories =
+    targetLevel === 'workspace'
+      ? []
+      : await Promise.all(
+          snapshot.memories.map(async (memory) => {
+            const segments =
+              targetLevel === 'segment'
+                ? await readMoveMemoryDetailSegments({
+                    rootPath,
+                    workspaceId: snapshot.workspaceId,
+                    memoryId: memory.memoryId,
+                    ...(assertUsable ? { assertUsable } : {}),
+                  })
+                : [];
+            return {
+              memoryId: memory.memoryId,
+              title: memory.title,
+              disabledReason:
+                source.sourceType === 'segment' &&
+                snapshot.workspaceId === source.workspaceId &&
+                memory.memoryId === source.memoryId
+                  ? '当前位置'
+                  : null,
+              segments: segments.map((segment) => ({
+                ...segment,
+                disabledReason:
+                  source.sourceType === 'supplement' &&
+                  snapshot.workspaceId === source.workspaceId &&
+                  memory.memoryId === source.memoryId &&
+                  segment.segmentId === source.segmentId
+                    ? '当前位置'
+                    : null,
+              })),
+            };
+          })
+        );
+
+  return {
+    workspaceId: snapshot.workspaceId,
+    title: snapshot.title,
+    disabledReason:
+      source.sourceType === 'memory' && snapshot.workspaceId === source.workspaceId
+        ? '当前位置'
+        : null,
+    memories,
+  };
+}
+
+async function withTemporaryMoveTargetWorkspace<T>({
+  rootPath,
+  workspaceId,
+  run,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly run: (input: {
+    readonly assertUsable: AssertWorkspaceHandleUsable;
+    readonly rootPath: string;
+    readonly snapshot: WorkspaceSnapshot;
+  }) => Promise<T>;
+}): Promise<T | null> {
+  const lock = await acquireWorkspaceLock({ canonicalRoot: rootPath });
+  if (!lock.ok) {
+    return null;
+  }
+  const assertUsable = workspaceLockAssertUsable(lock);
+  try {
+    const opened = await openWorkspaceFiles({ rootPath, assertWorkspaceUsable: assertUsable });
+    if (!opened.ok || opened.snapshot.workspaceId !== workspaceId) {
+      return null;
+    }
+    return await run({ assertUsable, rootPath, snapshot: opened.snapshot });
+  } finally {
+    if (lock.lock.isHeld()) {
+      await lock.lock.release().catch(() => {});
+    }
+  }
+}
+
+async function readMoveSourceProjection({
+  handle,
+  request,
+}: {
+  readonly handle: RequiredWorkspaceHandle;
+  readonly request: z.infer<typeof workspaceListEntityMoveTargetsRequestSchema>;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly source: MoveSourceProjection;
+      readonly snapshot: WorkspaceSnapshot;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const snapshotResult = await readMoveWorkspaceSnapshot({
+    assertUsable: handle.assertUsable,
+    rootPath: handle.canonicalRoot,
+    workspaceId: handle.workspaceId,
+  });
+  if (!snapshotResult.ok) {
+    return snapshotResult;
+  }
+  const { snapshot } = snapshotResult;
+  const memory = snapshot.memories.find((candidate) => candidate.memoryId === request.memoryId);
+  if (!memory) {
+    return workspaceError('ERR_WORKSPACE_MEMORY_NOT_FOUND', 'Move source Memory was not found');
+  }
+  if (request.sourceType === 'memory') {
+    return {
+      ok: true,
+      snapshot,
+      source: {
+        type: 'memory',
+        workspaceId: snapshot.workspaceId,
+        memoryId: memory.memoryId,
+        title: memory.title,
+        breadcrumb: [snapshot.title],
+      },
+    };
+  }
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath: handle.canonicalRoot,
+    workspaceId: handle.workspaceId,
+    memoryId: request.memoryId,
+    assertWorkspaceUsable: handle.assertUsable,
+  });
+  if (!detail.ok) {
+    return detail;
+  }
+  const segment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === request.segmentId
+  );
+  if (!segment) {
+    return workspaceError('ERR_WORKSPACE_SEGMENT_NOT_FOUND', 'Move source Segment was not found');
+  }
+  if (request.sourceType === 'segment') {
+    return {
+      ok: true,
+      snapshot,
+      source: {
+        type: 'segment',
+        workspaceId: snapshot.workspaceId,
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        title: segment.title,
+        breadcrumb: [snapshot.title, memory.title],
+      },
+    };
+  }
+
+  const supplement = segment.supplements.find(
+    (candidate) => candidate.supplementId === request.supplementId
+  );
+  if (!supplement) {
+    return workspaceError(
+      'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+      'Move source SegmentSupplement was not found'
+    );
+  }
+  return {
+    ok: true,
+    snapshot,
+    source: {
+      type: 'supplement',
+      workspaceId: snapshot.workspaceId,
+      memoryId: memory.memoryId,
+      segmentId: segment.segmentId,
+      supplementId: supplement.supplementId,
+      title: supplement.title,
+      breadcrumb: [snapshot.title, memory.title, segment.title],
+    },
+  };
+}
+
+function handleListEntityMoveTargetsCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceListEntityMoveTargetsResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    event,
+    input,
+    channel: WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+    handleStore,
+    schema: workspaceListEntityMoveTargetsRequestSchema,
+    invalidMessage: 'listEntityMoveTargets request is invalid',
+    run: async (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Move target list workspace does not match the active handle'
+          );
+        }
+
+        const sourceResult = await readMoveSourceProjection({ handle, request });
+        if (!sourceResult.ok) {
+          return sourceResult;
+        }
+
+        const spaces: MoveTargetSpace[] = [];
+        const seenWorkspaceIds = new Set<string>();
+        const pushSnapshot = async ({
+          assertUsable,
+          rootPath,
+          snapshot,
+        }: {
+          readonly assertUsable?: AssertWorkspaceHandleUsable;
+          readonly rootPath: string;
+          readonly snapshot: WorkspaceSnapshot;
+        }) => {
+          if (seenWorkspaceIds.has(snapshot.workspaceId)) {
+            return;
+          }
+          seenWorkspaceIds.add(snapshot.workspaceId);
+          spaces.push(
+            await moveTargetSpaceFromSnapshot({
+              rootPath,
+              snapshot,
+              source: request,
+              ...(assertUsable ? { assertUsable } : {}),
+            })
+          );
+        };
+
+        await pushSnapshot({
+          assertUsable: handle.assertUsable,
+          rootPath: handle.canonicalRoot,
+          snapshot: sourceResult.snapshot,
+        });
+
+        if (!seenWorkspaceIds.has(SYSTEM_DRAFT_WORKSPACE_ID)) {
+          const ensuredDraft = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+          if (!ensuredDraft.ok) {
+            return ensuredDraft;
+          }
+          const draftRead = await withTemporaryMoveTargetWorkspace({
+            rootPath: ensuredDraft.value.rootPath,
+            workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+            run: async ({ assertUsable: draftAssertUsable, rootPath, snapshot }) => {
+              await pushSnapshot({
+                assertUsable: draftAssertUsable,
+                rootPath,
+                snapshot: annotateSystemDraftSnapshot(snapshot),
+              });
+            },
+          });
+          if (draftRead === null && !seenWorkspaceIds.has(SYSTEM_DRAFT_WORKSPACE_ID)) {
+            return workspaceError(
+              'ERR_WORKSPACE_OPEN_FAILED',
+              'System Draft workspace could not be read for move targets'
+            );
+          }
+        }
+
+        let memorySpaces: Awaited<ReturnType<WorkspaceMemorySpaceRegistry['listMemorySpaces']>>;
+        try {
+          memorySpaces = await memorySpaceRegistry.listMemorySpaces();
+        } catch (error) {
+          return workspaceMemorySpaceRegistryReadError(error);
+        }
+        for (const memorySpace of memorySpaces) {
+          if (seenWorkspaceIds.has(memorySpace.workspaceId)) {
+            continue;
+          }
+          let rootPath: string | null;
+          try {
+            rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(memorySpace.workspaceId);
+          } catch (error) {
+            return workspaceMemorySpaceRegistryReadError(error);
+          }
+          if (!rootPath) {
+            continue;
+          }
+          await withTemporaryMoveTargetWorkspace({
+            rootPath,
+            workspaceId: memorySpace.workspaceId,
+            run: async ({
+              assertUsable: targetAssertUsable,
+              rootPath: targetRootPath,
+              snapshot,
+            }) => {
+              await pushSnapshot({
+                assertUsable: targetAssertUsable,
+                rootPath: targetRootPath,
+                snapshot,
+              });
+            },
+          });
+        }
+
+        const targetLevel = entityMoveTargetLevelForSource(request.sourceType);
+        return workspaceListEntityMoveTargetsResponseSchema.parse({
+          ok: true,
+          value: {
+            source: sourceResult.source,
+            targetLevel,
+            spaces,
+          },
+        });
+      }),
+  });
+}
+
+function handleMoveMemoryCore({
+  appDataDir,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+  ...options
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceMoveMemoryResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_MOVE_MEMORY_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMoveMemoryRequestSchema,
+    invalidMessage: 'moveMemory request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Memory move workspace does not match the active handle'
+          );
+        }
+        if (
+          isSystemDraftWorkspaceId(handle.workspaceId) &&
+          isSystemDraftDefaultMemoryId(request.memoryId)
+        ) {
+          return protectedSystemEntityError('System Draft default Memory cannot be moved');
+        }
+        if (request.targetWorkspaceId === request.workspaceId) {
+          return moveInvalidTargetError('Memory is already in this workspace');
+        }
+
+        const target = await resolveMoveTargetWorkspaceRoot({
+          activeHandle: handle,
+          appDataDir,
+          memorySpaceRegistry,
+          now,
+          targetWorkspaceId: request.targetWorkspaceId,
+        });
+        if (!target.ok) {
+          return target;
+        }
+        try {
+          const result = await moveMemoryBetweenFileTruthRoots({
+            sourceRootPath: handle.canonicalRoot,
+            sourceWorkspaceId: request.workspaceId,
+            memoryId: request.memoryId,
+            targetRootPath: target.value.rootPath,
+            targetWorkspaceId: request.targetWorkspaceId,
+            assertSourceWorkspaceUsable: assertUsable,
+            assertTargetWorkspaceUsable: target.value.assertUsable,
+          });
+          return workspaceMoveMemoryResponseSchema.parse(
+            result.ok ? { ok: true, value: result.value } : result
+          );
+        } finally {
+          await target.value.release();
+        }
+      }),
+  });
+}
+
+function handleMoveSegmentCore({
+  appDataDir,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+  ...options
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceMoveSegmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_MOVE_SEGMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMoveSegmentRequestSchema,
+    invalidMessage: 'moveSegment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment move workspace does not match the active handle'
+          );
+        }
+        if (
+          request.targetWorkspaceId === request.workspaceId &&
+          request.targetMemoryId === request.memoryId
+        ) {
+          return moveInvalidTargetError('Segment is already in this Memory');
+        }
+
+        const target = await resolveMoveTargetWorkspaceRoot({
+          activeHandle: handle,
+          appDataDir,
+          memorySpaceRegistry,
+          now,
+          targetWorkspaceId: request.targetWorkspaceId,
+        });
+        if (!target.ok) {
+          return target;
+        }
+        try {
+          const result = await moveSegmentBetweenFileTruthRoots({
+            sourceRootPath: handle.canonicalRoot,
+            sourceWorkspaceId: request.workspaceId,
+            memoryId: request.memoryId,
+            segmentId: request.segmentId,
+            targetRootPath: target.value.rootPath,
+            targetWorkspaceId: request.targetWorkspaceId,
+            targetMemoryId: request.targetMemoryId,
+            assertSourceWorkspaceUsable: assertUsable,
+            assertTargetWorkspaceUsable: target.value.assertUsable,
+          });
+          return workspaceMoveSegmentResponseSchema.parse(
+            result.ok ? { ok: true, value: result.value } : result
+          );
+        } finally {
+          await target.value.release();
+        }
+      }),
+  });
+}
+
+function handleMoveSegmentSupplementCore({
+  appDataDir,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+  ...options
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceMoveSegmentSupplementResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMoveSegmentSupplementRequestSchema,
+    invalidMessage: 'moveSegmentSupplement request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'SegmentSupplement move workspace does not match the active handle'
+          );
+        }
+        if (
+          request.targetWorkspaceId === request.workspaceId &&
+          request.targetMemoryId === request.memoryId &&
+          request.targetSegmentId === request.segmentId
+        ) {
+          return moveInvalidTargetError('SegmentSupplement is already in this Segment');
+        }
+
+        const target = await resolveMoveTargetWorkspaceRoot({
+          activeHandle: handle,
+          appDataDir,
+          memorySpaceRegistry,
+          now,
+          targetWorkspaceId: request.targetWorkspaceId,
+        });
+        if (!target.ok) {
+          return target;
+        }
+        try {
+          const result = await moveSegmentSupplementBetweenFileTruthRoots({
+            sourceRootPath: handle.canonicalRoot,
+            sourceWorkspaceId: request.workspaceId,
+            memoryId: request.memoryId,
+            segmentId: request.segmentId,
+            supplementId: request.supplementId,
+            targetRootPath: target.value.rootPath,
+            targetWorkspaceId: request.targetWorkspaceId,
+            targetMemoryId: request.targetMemoryId,
+            targetSegmentId: request.targetSegmentId,
+            assertSourceWorkspaceUsable: assertUsable,
+            assertTargetWorkspaceUsable: target.value.assertUsable,
+          });
+          return workspaceMoveSegmentSupplementResponseSchema.parse(
+            result.ok ? { ok: true, value: result.value } : result
+          );
+        } finally {
+          await target.value.release();
+        }
+      }),
+  });
+}
+
+export async function handleListEntityMoveTargets(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceListEntityMoveTargetsResponseSchema>> {
+  return handleListEntityMoveTargetsCore(options);
+}
+
+export async function handleListEntityMoveTargetsForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceListEntityMoveTargetsResponseSchema>> {
+  return handleListEntityMoveTargetsCore(options);
+}
+
+export async function handleMoveMemory(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveMemoryResponseSchema>> {
+  return handleMoveMemoryCore(options);
+}
+
+export async function handleMoveMemoryForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveMemoryResponseSchema>> {
+  return handleMoveMemoryCore(options);
+}
+
+export async function handleMoveSegment(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentResponseSchema>> {
+  return handleMoveSegmentCore(options);
+}
+
+export async function handleMoveSegmentForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentResponseSchema>> {
+  return handleMoveSegmentCore(options);
+}
+
+export async function handleMoveSegmentSupplement(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentSupplementResponseSchema>> {
+  return handleMoveSegmentSupplementCore(options);
+}
+
+export async function handleMoveSegmentSupplementForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentSupplementResponseSchema>> {
+  return handleMoveSegmentSupplementCore(options);
+}
+
 function handleCreateMemoryCore({
   createMemoryId: createMemoryIdOption = createMemoryId,
   now = nowIso,
@@ -8781,6 +9555,18 @@ export function registerWorkspaceIpc({
       memorySpaceRegistry,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL, (event, input) =>
+    handleListEntityMoveTargets({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      memorySpaceRegistry,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, async (event, input) =>
     rememberReadyBackfillWorkspace(
       event,
@@ -9460,6 +10246,18 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_MOVE_MEMORY_CHANNEL, (event, input) =>
+    handleMoveMemory({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      memorySpaceRegistry,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, (event, input) =>
     handleRestoreDeletedMemory({
       event,
@@ -9540,6 +10338,18 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_MOVE_SEGMENT_CHANNEL, (event, input) =>
+    handleMoveSegment({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      memorySpaceRegistry,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, (event, input) =>
     handleRestoreDeletedSegment({
       event,
@@ -9558,6 +10368,18 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL, (event, input) =>
+    handleMoveSegmentSupplement({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      handleStore,
+      memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(
