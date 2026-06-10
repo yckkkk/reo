@@ -137,8 +137,7 @@ export function EntityMoveDialog({
       setExpandedSpaces(new Set());
       setExpandedMemories(new Set());
     }
-    // 仅在弹层开合或 source 身份变化时重置
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 仅在弹层开合或 source 身份变化时重置展开与选择
   }, [open, sourceKey]);
 
   const rows = useMemo(
@@ -149,10 +148,7 @@ export function EntityMoveDialog({
     [targets, expandedSpaces, expandedMemories, query, selection]
   );
 
-  const selectableCount = useMemo(
-    () => (targets ? countSelectableLeaves(targets) : 0),
-    [targets]
-  );
+  const selectableCount = useMemo(() => (targets ? countSelectableLeaves(targets) : 0), [targets]);
 
   function close(nextOpen: boolean) {
     if (!nextOpen) {
@@ -180,7 +176,11 @@ export function EntityMoveDialog({
 
   const trimmedQuery = query.trim();
   const emptyMessage =
-    selectableCount === 0 ? '没有可用目标' : trimmedQuery.length > 0 ? '无匹配结果' : '没有可用目标';
+    selectableCount === 0
+      ? '没有可用目标'
+      : trimmedQuery.length > 0
+        ? '无匹配结果'
+        : '没有可用目标';
 
   return (
     <Dialog open={open} onOpenChange={close}>

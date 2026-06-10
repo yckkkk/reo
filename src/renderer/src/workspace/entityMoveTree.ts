@@ -257,8 +257,7 @@ export function projectMoveTree(input: {
           role: 'leaf',
           icon: 'segment',
           selection: candidate,
-          disabledReason:
-            space.disabledReason ?? memory.disabledReason ?? segment.disabledReason,
+          disabledReason: space.disabledReason ?? memory.disabledReason ?? segment.disabledReason,
           selected: isSelected(candidate),
         });
       }
