@@ -20,6 +20,14 @@
   - 4 个目标文件 eslint/prettier/typecheck 全绿；`entityMoveTree.test.ts` + `EntityMoveDialog.test.tsx` 合计 19/19 通过。
   - 提交 `chore: format move dialog files and drop unregistered eslint-disable`。
 
+## 运行时缺陷修复（第一次截图后）
+
+- **症状**：行被撑成约 136px 高，整列竖向铺开、巨大空隙。
+- **根因**：本项目 Tailwind v4 只显式定义了 `--spacing-{4,8,12,16,20,24,28,32,36,40,48,56,64,72,96,160}`；**未定义的数字键不会报错，而是回退到 `calc(0.25rem * N)`（即 4px×N）**。组件用了未定义键 `min-h-34`→136px、`pr-10`→40px、`py-1`/`space-y-1`→4px。原 `EntityMoveDialog` 也藏着同样的 `min-h-34/gap-10/px-10`，只因片段行从不渲染而未暴露。
+- **修复**：`min-h-34`→`min-h-32`、`pr-10`→`pr-12`、`py-1`→`py-4`、`space-y-1`→`space-y-4`；并补竖向节奏 `mt-20`(搜索)、`mt-12`(列表)。静态核对：文件内全部 spacing utility 现都命中已定义键。
+- 复查：eslint/prettier/typecheck 干净；组件测试 4/4。
+- ⚠️ 仍需用户运行时再截图确认（jsdom 不计算 CSS 像素，无法程序化验证间距）。
+
 ## 待办（交给用户在新 session）
 
 - **Phase gate**：对本分支 diff 跑 `/review` 与 `/simplify`，按结果修正。

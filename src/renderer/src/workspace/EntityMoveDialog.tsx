@@ -61,7 +61,7 @@ function MoveTreeRowView({
         aria-expanded={row.expandable ? row.expanded : undefined}
         onClick={() => row.expandable && onToggle(row.toggleKey, row.toggleDepth)}
         className={cn(
-          'reo-squircle flex min-h-34 w-full items-center gap-8 rounded-md pr-10 text-left text-ui-md font-medium leading-ui-md text-foreground',
+          'reo-squircle flex min-h-32 w-full items-center gap-8 rounded-md pr-12 text-left text-ui-md font-medium leading-ui-md text-foreground',
           'hover:bg-accent disabled:text-muted-foreground disabled:hover:bg-transparent'
         )}
       >
@@ -95,7 +95,7 @@ function MoveTreeRowView({
         }
       }}
       className={cn(
-        'reo-squircle flex min-h-34 w-full items-center gap-8 rounded-md pr-10 text-left text-ui-md leading-ui-md text-foreground',
+        'reo-squircle flex min-h-32 w-full items-center gap-8 rounded-md pr-12 text-left text-ui-md leading-ui-md text-foreground',
         'hover:bg-accent disabled:text-muted-foreground disabled:hover:bg-transparent',
         row.selected && 'bg-secondary font-medium hover:bg-secondary'
       )}
@@ -198,7 +198,7 @@ export function EntityMoveDialog({
 
         {targets ? (
           <>
-            <div className="relative">
+            <div className="relative mt-20">
               <Search
                 aria-hidden
                 className="pointer-events-none absolute left-12 top-1/2 size-16 -translate-y-1/2 text-muted-foreground"
@@ -213,9 +213,9 @@ export function EntityMoveDialog({
               />
             </div>
 
-            <div className="edge-fade-y scrollbar-hover max-h-[48vh] overflow-y-auto py-1">
+            <div className="edge-fade-y scrollbar-hover mt-12 max-h-[48vh] overflow-y-auto py-4">
               {rows.length > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-4">
                   {rows.map((row) => (
                     <MoveTreeRowView
                       key={row.key}
