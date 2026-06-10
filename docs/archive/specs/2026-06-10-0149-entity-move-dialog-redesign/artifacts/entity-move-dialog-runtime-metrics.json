@@ -1,0 +1,230 @@
+[
+  {
+    "title": "移动记忆",
+    "visibleText": "移动记忆 正在移动「启示录阅读记录」· 现位于 启示录阅读记录 启示录阅读记录 当前位置 草稿 长期归档 取消 移动",
+    "viewport": {
+      "width": 900,
+      "height": 720
+    },
+    "scrollWidth": 900,
+    "scrollHeight": 720,
+    "horizontalOverflow": false,
+    "rows": [
+      {
+        "text": "启示录阅读记录当前位置",
+        "disabled": true,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 341,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "草稿",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 377,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "长期归档",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "true",
+        "x": 252,
+        "y": 413,
+        "width": 396,
+        "height": 32
+      }
+    ],
+    "oversizedRows": [],
+    "moveDisabled": false,
+    "screenshot": "artifacts/entity-move-memory.png"
+  },
+  {
+    "title": "移动片段",
+    "visibleText": "移动片段 正在移动「Run id 与移动弹层审查」· 现位于 测试空间 › Codex Dogfood 测试空间 2 Codex Dogfood 当前位置 产品判断 草稿 1 收件箱 空记忆空间 0 取消 移动",
+    "viewport": {
+      "width": 900,
+      "height": 720
+    },
+    "scrollWidth": 900,
+    "scrollHeight": 720,
+    "horizontalOverflow": false,
+    "rows": [
+      {
+        "text": "测试空间2",
+        "disabled": false,
+        "ariaExpanded": "true",
+        "ariaPressed": null,
+        "x": 252,
+        "y": 287,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "Codex Dogfood当前位置",
+        "disabled": true,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 323,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "产品判断",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 359,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "草稿1",
+        "disabled": false,
+        "ariaExpanded": "true",
+        "ariaPressed": null,
+        "x": 252,
+        "y": 395,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "收件箱",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "true",
+        "x": 252,
+        "y": 431,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "空记忆空间0",
+        "disabled": true,
+        "ariaExpanded": null,
+        "ariaPressed": null,
+        "x": 252,
+        "y": 467,
+        "width": 396,
+        "height": 32
+      }
+    ],
+    "oversizedRows": [],
+    "moveDisabled": false,
+    "screenshot": "artifacts/entity-move-segment.png"
+  },
+  {
+    "title": "移动补充内容",
+    "visibleText": "移动补充内容 正在移动「补充笔记1」· 现位于 测试空间 › Codex Dogfood › Run id 与移动弹层审查 测试空间 1 Codex Dogfood 2 Run id 与移动弹层审查 当前位置 跨空间移动检查 草稿 2 收件箱 2 候选片段 整理笔记 空 Memory 0 取消 移动",
+    "viewport": {
+      "width": 900,
+      "height": 720
+    },
+    "scrollWidth": 900,
+    "scrollHeight": 720,
+    "horizontalOverflow": false,
+    "rows": [
+      {
+        "text": "测试空间1",
+        "disabled": false,
+        "ariaExpanded": "true",
+        "ariaPressed": null,
+        "x": 252,
+        "y": 243,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "Codex Dogfood2",
+        "disabled": false,
+        "ariaExpanded": "true",
+        "ariaPressed": null,
+        "x": 252,
+        "y": 279,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "Run id 与移动弹层审查当前位置",
+        "disabled": true,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 315,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "跨空间移动检查",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 351,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "草稿2",
+        "disabled": false,
+        "ariaExpanded": "true",
+        "ariaPressed": null,
+        "x": 252,
+        "y": 387,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "收件箱2",
+        "disabled": false,
+        "ariaExpanded": "true",
+        "ariaPressed": null,
+        "x": 252,
+        "y": 423,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "候选片段",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "true",
+        "x": 252,
+        "y": 459,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "整理笔记",
+        "disabled": false,
+        "ariaExpanded": null,
+        "ariaPressed": "false",
+        "x": 252,
+        "y": 495,
+        "width": 396,
+        "height": 32
+      },
+      {
+        "text": "空 Memory0",
+        "disabled": true,
+        "ariaExpanded": null,
+        "ariaPressed": null,
+        "x": 252,
+        "y": 531,
+        "width": 396,
+        "height": 32
+      }
+    ],
+    "oversizedRows": [],
+    "moveDisabled": false,
+    "screenshot": "artifacts/entity-move-supplement.png"
+  }
+]

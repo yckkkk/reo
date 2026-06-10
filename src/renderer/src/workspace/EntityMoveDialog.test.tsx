@@ -112,6 +112,28 @@ describe('EntityMoveDialog', () => {
     });
   });
 
+  it('disables confirm when search hides the selected target', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    render(
+      <EntityMoveDialog
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+        open
+        targets={segmentMoveTargets}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /草稿/ }));
+    await user.click(screen.getByRole('button', { name: '收件箱' }));
+    expect(screen.getByRole('button', { name: '移动' })).toBeEnabled();
+
+    await user.type(screen.getByRole('textbox', { name: '搜索移动目标' }), '当前记忆');
+
+    expect(screen.getByRole('button', { name: '移动' })).toBeDisabled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it('selects a space directly when moving a memory', async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();

@@ -149,6 +149,10 @@ export function EntityMoveDialog({
   );
 
   const selectableCount = useMemo(() => (targets ? countSelectableLeaves(targets) : 0), [targets]);
+  const visibleSelection =
+    selection && rows.some((row) => row.role === 'leaf' && row.selected && !row.disabledReason)
+      ? selection
+      : null;
 
   function close(nextOpen: boolean) {
     if (!nextOpen) {
@@ -240,10 +244,10 @@ export function EntityMoveDialog({
           </Button>
           <Button
             type="button"
-            disabled={disabled || !selection}
+            disabled={disabled || !visibleSelection}
             onClick={() => {
-              if (selection) {
-                onConfirm(selection);
+              if (visibleSelection) {
+                onConfirm(visibleSelection);
               }
             }}
           >

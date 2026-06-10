@@ -87,28 +87,72 @@ export function countSelectableLeaves(targets: EntityMoveTargets): number {
   );
 }
 
-export type MoveTreeRow = {
+type MoveTreeBaseRow = {
   readonly key: string;
   readonly depth: 0 | 1 | 2;
   readonly title: string;
-} & (
-  | {
-      readonly role: 'folder';
-      readonly icon: 'space' | 'memory';
-      readonly toggleKey: string;
-      readonly toggleDepth: 0 | 1;
-      readonly childCount: number;
-      readonly expandable: boolean;
-      readonly expanded: boolean;
-    }
-  | {
-      readonly role: 'leaf';
-      readonly icon: 'space' | 'memory' | 'segment';
-      readonly selection: EntityMoveTargetSelection;
-      readonly disabledReason: string | null;
-      readonly selected: boolean;
-    }
-);
+};
+
+type MoveTreeFolderRow = MoveTreeBaseRow & {
+  readonly role: 'folder';
+  readonly icon: 'space' | 'memory';
+  readonly toggleKey: string;
+  readonly toggleDepth: 0 | 1;
+  readonly childCount: number;
+  readonly expandable: boolean;
+  readonly expanded: boolean;
+};
+
+type MoveTreeLeafRow = MoveTreeBaseRow & {
+  readonly role: 'leaf';
+  readonly icon: 'space' | 'memory' | 'segment';
+  readonly selection: EntityMoveTargetSelection;
+  readonly disabledReason: string | null;
+  readonly selected: boolean;
+};
+
+export type MoveTreeRow = MoveTreeFolderRow | MoveTreeLeafRow;
+
+function firstDisabledReason(...reasons: readonly (string | null)[]): string | null {
+  return reasons.find((reason): reason is string => reason !== null) ?? null;
+}
+
+function visibleRows<T>(input: {
+  readonly all: readonly T[];
+  readonly searching: boolean;
+  readonly visible: readonly T[];
+}): readonly T[] {
+  return input.searching ? input.visible : input.all;
+}
+
+function folderRow(
+  input: Omit<MoveTreeFolderRow, 'role' | 'expandable' | 'expanded'> & {
+    readonly shouldExpand: boolean;
+  }
+): MoveTreeFolderRow {
+  const { shouldExpand, ...row } = input;
+  const expandable = row.childCount > 0;
+  return {
+    ...row,
+    role: 'folder',
+    expandable,
+    expanded: expandable && shouldExpand,
+  };
+}
+
+function leafRow(
+  input: Omit<MoveTreeLeafRow, 'role' | 'selected'> & {
+    readonly currentSelection: EntityMoveTargetSelection | null;
+  }
+): MoveTreeLeafRow {
+  const { currentSelection, ...row } = input;
+  return {
+    ...row,
+    role: 'leaf',
+    selected:
+      currentSelection !== null && selectionKey(currentSelection) === selectionKey(row.selection),
+  };
+}
 
 export function projectMoveTree(input: {
   readonly targets: EntityMoveTargets;
@@ -121,8 +165,6 @@ export function projectMoveTree(input: {
   const normalized = query.trim().toLowerCase();
   const searching = normalized.length > 0;
   const matches = (title: string) => !searching || title.toLowerCase().includes(normalized);
-  const isSelected = (candidate: EntityMoveTargetSelection) =>
-    selection !== null && selectionKey(selection) === selectionKey(candidate);
 
   const rows: MoveTreeRow[] = [];
 
@@ -132,16 +174,17 @@ export function projectMoveTree(input: {
         continue;
       }
       const candidate: EntityMoveTargetSelection = { targetWorkspaceId: space.workspaceId };
-      rows.push({
-        key: space.workspaceId,
-        depth: 0,
-        title: space.title,
-        role: 'leaf',
-        icon: 'space',
-        selection: candidate,
-        disabledReason: space.disabledReason,
-        selected: isSelected(candidate),
-      });
+      rows.push(
+        leafRow({
+          currentSelection: selection,
+          disabledReason: space.disabledReason,
+          icon: 'space',
+          key: space.workspaceId,
+          depth: 0,
+          title: space.title,
+          selection: candidate,
+        })
+      );
     }
     return rows;
   }
@@ -155,38 +198,40 @@ export function projectMoveTree(input: {
       if (!spaceMatches && visibleMemories.length === 0) {
         continue;
       }
-      const expandable = space.memories.length > 0;
-      const expanded = expandable && (searching || expandedSpaces.has(space.workspaceId));
-      rows.push({
+      const spaceRow = folderRow({
         key: space.workspaceId,
         depth: 0,
         title: space.title,
-        role: 'folder',
         icon: 'space',
         toggleKey: space.workspaceId,
         toggleDepth: 0,
         childCount: space.memories.length,
-        expandable,
-        expanded,
+        shouldExpand: searching || expandedSpaces.has(space.workspaceId),
       });
-      if (!expanded) {
+      rows.push(spaceRow);
+      if (!spaceRow.expanded) {
         continue;
       }
-      for (const memory of searching ? visibleMemories : space.memories) {
+      for (const memory of visibleRows({
+        all: space.memories,
+        searching,
+        visible: visibleMemories,
+      })) {
         const candidate: EntityMoveTargetSelection = {
           targetWorkspaceId: space.workspaceId,
           targetMemoryId: memory.memoryId,
         };
-        rows.push({
-          key: memoryKey(space.workspaceId, memory.memoryId),
-          depth: 1,
-          title: memory.title,
-          role: 'leaf',
-          icon: 'memory',
-          selection: candidate,
-          disabledReason: space.disabledReason ?? memory.disabledReason,
-          selected: isSelected(candidate),
-        });
+        rows.push(
+          leafRow({
+            currentSelection: selection,
+            disabledReason: firstDisabledReason(space.disabledReason, memory.disabledReason),
+            icon: 'memory',
+            key: memoryKey(space.workspaceId, memory.memoryId),
+            depth: 1,
+            title: memory.title,
+            selection: candidate,
+          })
+        );
       }
     }
     return rows;
@@ -203,63 +248,69 @@ export function projectMoveTree(input: {
     if (!spaceMatches && visibleMemories.length === 0) {
       continue;
     }
-    const spaceExpandable = space.memories.length > 0;
-    const spaceExpanded = spaceExpandable && (searching || expandedSpaces.has(space.workspaceId));
-    rows.push({
+    const spaceRow = folderRow({
       key: space.workspaceId,
       depth: 0,
       title: space.title,
-      role: 'folder',
       icon: 'space',
       toggleKey: space.workspaceId,
       toggleDepth: 0,
       childCount: space.memories.length,
-      expandable: spaceExpandable,
-      expanded: spaceExpanded,
+      shouldExpand: searching || expandedSpaces.has(space.workspaceId),
     });
-    if (!spaceExpanded) {
+    rows.push(spaceRow);
+    if (!spaceRow.expanded) {
       continue;
     }
-    for (const memory of searching ? visibleMemories : space.memories) {
+    for (const memory of visibleRows({
+      all: space.memories,
+      searching,
+      visible: visibleMemories,
+    })) {
       const memoryMatches = spaceMatches || matches(memory.title);
       const visibleSegments = memory.segments.filter(
         (segment) => memoryMatches || matches(segment.title)
       );
       const memoryToggleKey = memoryKey(space.workspaceId, memory.memoryId);
-      const memoryExpandable = memory.segments.length > 0;
-      const memoryExpanded =
-        memoryExpandable && (searching || expandedMemories.has(memoryToggleKey));
-      rows.push({
+      const memoryRow = folderRow({
         key: memoryToggleKey,
         depth: 1,
         title: memory.title,
-        role: 'folder',
         icon: 'memory',
         toggleKey: memoryToggleKey,
         toggleDepth: 1,
         childCount: memory.segments.length,
-        expandable: memoryExpandable,
-        expanded: memoryExpanded,
+        shouldExpand: searching || expandedMemories.has(memoryToggleKey),
       });
-      if (!memoryExpanded) {
+      rows.push(memoryRow);
+      if (!memoryRow.expanded) {
         continue;
       }
-      for (const segment of searching ? visibleSegments : memory.segments) {
+      for (const segment of visibleRows({
+        all: memory.segments,
+        searching,
+        visible: visibleSegments,
+      })) {
         const candidate: EntityMoveTargetSelection = {
           targetWorkspaceId: space.workspaceId,
           targetMemoryId: memory.memoryId,
           targetSegmentId: segment.segmentId,
         };
-        rows.push({
-          key: `${memoryToggleKey}/${segment.segmentId}`,
-          depth: 2,
-          title: segment.title,
-          role: 'leaf',
-          icon: 'segment',
-          selection: candidate,
-          disabledReason: space.disabledReason ?? memory.disabledReason ?? segment.disabledReason,
-          selected: isSelected(candidate),
-        });
+        rows.push(
+          leafRow({
+            currentSelection: selection,
+            disabledReason: firstDisabledReason(
+              space.disabledReason,
+              memory.disabledReason,
+              segment.disabledReason
+            ),
+            icon: 'segment',
+            key: `${memoryToggleKey}/${segment.segmentId}`,
+            depth: 2,
+            title: segment.title,
+            selection: candidate,
+          })
+        );
       }
     }
   }
