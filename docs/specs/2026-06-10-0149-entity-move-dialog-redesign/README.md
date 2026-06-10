@@ -12,11 +12,11 @@
 
 `workspace:listEntityMoveTargets` 按 `targetLevel` 填充层级，子层只在需要时填充：
 
-| 移动 | targetLevel | 空间 | Memory | 片段 |
-|---|---|---|---|---|
-| 记忆 | `workspace` | 选择叶子，`memories: []` | — | — |
-| 片段 | `memory` | 文件夹，children=memories | 选择叶子，`segments: []` | — |
-| 补充 | `segment` | 文件夹，children=memories | 文件夹，children=segments | 选择叶子 |
+| 移动 | targetLevel | 空间                      | Memory                    | 片段     |
+| ---- | ----------- | ------------------------- | ------------------------- | -------- |
+| 记忆 | `workspace` | 选择叶子，`memories: []`  | —                         | —        |
+| 片段 | `memory`    | 文件夹，children=memories | 选择叶子，`segments: []`  | —        |
+| 补充 | `segment`   | 文件夹，children=memories | 文件夹，children=segments | 选择叶子 |
 
 - **文件夹的子项数总是可得**（一个节点是文件夹，当且仅当它的子层已被填充）；**叶子层无更深计数**，且强行获取需要对每个空间每个 Memory 做完整 detail 读取，开销过大。
   - 规则：**文件夹显示直接子项数（裸数字）；选择叶子不显示数字。** 不引入假计数。

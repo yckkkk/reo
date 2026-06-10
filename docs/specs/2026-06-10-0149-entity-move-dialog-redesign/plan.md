@@ -13,6 +13,7 @@
 **相关真源：** `docs/specs/2026-06-10-0149-entity-move-dialog-redesign/README.md`；`docs/current/frontend.md`（设计系统 token、行为规则）。
 
 **约定（项目记忆）：**
+
 - 全程维护 `docs/specs/2026-06-10-0149-entity-move-dialog-redesign/implementation-notes.md`（每完成一步追加：做了什么、验证输出、截图路径）。
 - 每个 Phase 收尾跑 `/review` + `/simplify` 通过后再进入下一 Phase。
 - 任务进行中用 targeted 测试；`npm run verify:quick` 只在最后收口前跑一次。
@@ -34,18 +35,22 @@
 - [ ] **Step 1: 从 main 切工作分支**
 
 Run:
+
 ```bash
 git checkout -b feat/entity-move-dialog-redesign
 ```
+
 Expected: `Switched to a new branch 'feat/entity-move-dialog-redesign'`
 
 - [ ] **Step 2: 建实现笔记**
 
 Create `docs/specs/2026-06-10-0149-entity-move-dialog-redesign/implementation-notes.md`:
+
 ```markdown
 # 实现笔记 — 移动弹层重新设计
 
 ## 进度
+
 - (按步骤追加：做了什么 / 验证输出 / 截图路径)
 ```
 
@@ -56,12 +61,14 @@ Create `docs/specs/2026-06-10-0149-entity-move-dialog-redesign/implementation-no
 ### Task 1: `entityMoveTree.ts` 模型与纯 helper
 
 **Files:**
+
 - Create: `src/renderer/src/workspace/entityMoveTree.ts`
 - Test: `src/renderer/src/workspace/entityMoveTree.test.ts`
 
 - [ ] **Step 1: 写失败测试（helper 部分）**
 
 Create `src/renderer/src/workspace/entityMoveTree.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import type { EntityMoveTargets } from './workspaceApi';
@@ -179,6 +186,7 @@ Expected: FAIL — `Failed to resolve import "./entityMoveTree"` / 函数未定�
 - [ ] **Step 3: 写最小实现（helper 部分）**
 
 Create `src/renderer/src/workspace/entityMoveTree.ts`:
+
 ```ts
 import type { EntityMoveTargets } from './workspaceApi';
 
@@ -261,8 +269,7 @@ export function countSelectableLeaves(targets: EntityMoveTargets): number {
         (memoryCount, memory) =>
           memoryCount +
           memory.segments.filter(
-            (segment) =>
-              !space.disabledReason && !memory.disabledReason && !segment.disabledReason
+            (segment) => !space.disabledReason && !memory.disabledReason && !segment.disabledReason
           ).length,
         0
       ),
@@ -286,12 +293,14 @@ git commit -m "feat: add entity move tree model helpers"
 ### Task 2: `projectMoveTree` 投影函数
 
 **Files:**
+
 - Modify: `src/renderer/src/workspace/entityMoveTree.ts`
 - Test: `src/renderer/src/workspace/entityMoveTree.test.ts`
 
 - [ ] **Step 1: 追加失败测试（投影部分）**
 
 在 `entityMoveTree.test.ts` 顶部 import 增补 `projectMoveTree` 与类型，并复用既有 fixtures，新增一个 segment fixture，追加测试：
+
 ```ts
 // 在 import 行加入 projectMoveTree
 import {
@@ -355,7 +364,9 @@ describe('projectMoveTree — memory move (workspace level)', () => {
       query: noQuery,
       selection: { targetWorkspaceId: 'ws_b' },
     });
-    const selectedTitles = rows.filter((row) => row.role === 'leaf' && row.selected).map((r) => r.title);
+    const selectedTitles = rows
+      .filter((row) => row.role === 'leaf' && row.selected)
+      .map((r) => r.title);
     expect(selectedTitles).toEqual(['空间B']);
   });
 });
@@ -464,6 +475,7 @@ Expected: FAIL — `projectMoveTree is not a function`。
 - [ ] **Step 3: 实现 `projectMoveTree` + `MoveTreeRow`**
 
 在 `entityMoveTree.ts` 末尾追加：
+
 ```ts
 export type MoveTreeRow = {
   readonly key: string;
@@ -635,8 +647,7 @@ export function projectMoveTree(input: {
           role: 'leaf',
           icon: 'segment',
           selection: candidate,
-          disabledReason:
-            space.disabledReason ?? memory.disabledReason ?? segment.disabledReason,
+          disabledReason: space.disabledReason ?? memory.disabledReason ?? segment.disabledReason,
           selected: isSelected(candidate),
         });
       }
@@ -674,11 +685,13 @@ git commit -m "feat: project entity move targets into a collapsible row model"
 ### Task 3: 重写 `EntityMoveDialog.tsx`
 
 **Files:**
+
 - Rewrite: `src/renderer/src/workspace/EntityMoveDialog.tsx`
 
 - [ ] **Step 1: 整文件替换为新实现**
 
 用以下内容覆盖 `src/renderer/src/workspace/EntityMoveDialog.tsx`：
+
 ```tsx
 import { Check, ChevronRight, Folder, Layers3, NotebookText, Search } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -831,10 +844,7 @@ export function EntityMoveDialog({
     [targets, expandedSpaces, expandedMemories, query, selection]
   );
 
-  const selectableCount = useMemo(
-    () => (targets ? countSelectableLeaves(targets) : 0),
-    [targets]
-  );
+  const selectableCount = useMemo(() => (targets ? countSelectableLeaves(targets) : 0), [targets]);
 
   function close(nextOpen: boolean) {
     if (!nextOpen) {
@@ -862,7 +872,11 @@ export function EntityMoveDialog({
 
   const trimmedQuery = query.trim();
   const emptyMessage =
-    selectableCount === 0 ? '没有可用目标' : trimmedQuery.length > 0 ? '无匹配结果' : '没有可用目标';
+    selectableCount === 0
+      ? '没有可用目标'
+      : trimmedQuery.length > 0
+        ? '无匹配结果'
+        : '没有可用目标';
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -953,11 +967,13 @@ git commit -m "feat: rebuild entity move dialog as a searchable collapsible tree
 ### Task 4: 组件交互测试
 
 **Files:**
+
 - Rewrite: `src/renderer/src/workspace/EntityMoveDialog.test.tsx`
 
 - [ ] **Step 1: 整文件替换测试**
 
 用以下内容覆盖 `src/renderer/src/workspace/EntityMoveDialog.test.tsx`：
+
 ```tsx
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -1011,7 +1027,12 @@ const memoryMoveTargets: EntityMoveTargets = {
 describe('EntityMoveDialog', () => {
   it('shows source context and disables the current location', () => {
     render(
-      <EntityMoveDialog onConfirm={vi.fn()} onOpenChange={vi.fn()} open targets={segmentMoveTargets} />
+      <EntityMoveDialog
+        onConfirm={vi.fn()}
+        onOpenChange={vi.fn()}
+        open
+        targets={segmentMoveTargets}
+      />
     );
     expect(screen.getByRole('heading', { name: '移动片段' })).toBeInTheDocument();
     expect(screen.getByText(/正在移动「源片段」/)).toBeInTheDocument();
@@ -1023,7 +1044,12 @@ describe('EntityMoveDialog', () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
-      <EntityMoveDialog onConfirm={onConfirm} onOpenChange={vi.fn()} open targets={segmentMoveTargets} />
+      <EntityMoveDialog
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+        open
+        targets={segmentMoveTargets}
+      />
     );
 
     // 目标空间默认折叠：收件箱尚不可见
@@ -1043,7 +1069,12 @@ describe('EntityMoveDialog', () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
-      <EntityMoveDialog onConfirm={onConfirm} onOpenChange={vi.fn()} open targets={segmentMoveTargets} />
+      <EntityMoveDialog
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+        open
+        targets={segmentMoveTargets}
+      />
     );
 
     await user.type(screen.getByRole('textbox', { name: '搜索移动目标' }), '收件箱');
@@ -1062,7 +1093,12 @@ describe('EntityMoveDialog', () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     render(
-      <EntityMoveDialog onConfirm={onConfirm} onOpenChange={vi.fn()} open targets={memoryMoveTargets} />
+      <EntityMoveDialog
+        onConfirm={onConfirm}
+        onOpenChange={vi.fn()}
+        open
+        targets={memoryMoveTargets}
+      />
     );
 
     expect(screen.getByRole('heading', { name: '移动记忆' })).toBeInTheDocument();
@@ -1110,10 +1146,11 @@ Expected: 通过（typecheck、lint、format、相关测试）。失败则修正
 - [ ] **Step 3: 运行时视觉核对（三模式）**
 
 用 `/run` 启动 app（或既有运行方式），分别触发：
+
 - 在某 Segment More 触发「移动片段」→ 文件夹折叠、源空间自动展开、当前记忆禁用、展开他空间选目标。
 - 在某 SegmentSupplement More 触发「移动补充内容」→ 空间与 Memory 两级折叠、源空间+源记忆自动展开、片段叶子可选。
 - 在某 Memory More 触发「移动记忆」→ 扁平空间列表、当前空间禁用、无折叠无计数。
-对三种各截一张图，存入 spec 目录并在 implementation-notes.md 记录路径与观察（选中高亮、hover、搜索过滤、空空间灰显）。
+  对三种各截一张图，存入 spec 目录并在 implementation-notes.md 记录路径与观察（选中高亮、hover、搜索过滤、空空间灰显）。
 
 - [ ] **Step 4: 文档纪律检查**
 
@@ -1123,6 +1160,7 @@ Expected: 通过（typecheck、lint、format、相关测试）。失败则修正
 
 将 `docs/specs/2026-06-10-0149-entity-move-dialog-redesign/` 移入 `docs/archive/specs/`（该 spec 完成的是一次性 UI 重做，无遗留长期 initiative）。
 Run:
+
 ```bash
 git mv docs/specs/2026-06-10-0149-entity-move-dialog-redesign docs/archive/specs/2026-06-10-0149-entity-move-dialog-redesign
 ```
@@ -1143,6 +1181,7 @@ git commit -m "chore: archive entity move dialog redesign spec"
 ## Self-Review
 
 **Spec coverage：**
+
 - 结构模型（folder/leaf 角色、三模式深度）→ Task 2 `projectMoveTree` + 测试。
 - 「文件夹显子项数、叶子不显数字、不假计数」→ `MoveTreeRow` folder 才有 `childCount`；Task 2 测试断言 childCount。
 - 选择永远是叶子、Confirm ⟺ selection≠null → 组件 `disabled={disabled || !selection}`；Task 4 确认流。
