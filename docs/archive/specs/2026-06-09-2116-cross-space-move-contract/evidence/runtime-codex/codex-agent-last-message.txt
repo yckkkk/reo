@@ -1,0 +1,20 @@
+Completed run `20260609221232`.
+
+**Sources no longer exist**
+- `$DRAFT_ROOT/memories/mem_system_draft--草稿/segments/seg_cross_space_codex_segment_20260609221232--Codex Cross Space Segment 20260609221232`
+- `$DRAFT_ROOT/memories/mem_system_draft--草稿/segments/seg_cross_space_codex_supp_source_20260609221232--Codex Supplement Source 20260609221232/supplements/sup_cross_space_codex_supp_20260609221232--Codex Cross Space Supplement 20260609221232`
+- `$DRAFT_ROOT/memories/mem_cross_space_codex_20260609221232--Codex Cross Space Memory 20260609221232`
+
+**Targets exist**
+- `$TEST_ROOT/memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/segments/seg_cross_space_codex_segment_20260609221232--Codex Cross Space Segment 20260609221232`
+- `$TEST_ROOT/memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/segments/seg_codex_dogfood_17800103--Codex Dogfood Segment 17800103/supplements/sup_cross_space_codex_supp_20260609221232--Codex Cross Space Supplement 20260609221232`
+- `$TEST_ROOT/memories/mem_cross_space_codex_20260609221232--Codex Cross Space Memory 20260609221232`
+
+**IDs found**
+- `memory.md`: `mem_cross_space_codex_20260609221232`
+- moved segment `segment.md`: `seg_cross_space_codex_segment_20260609221232`
+- moved supplement `supplement.md`: `sup_cross_space_codex_supp_20260609221232`
+- moved memory child `segment.md`: `seg_cross_space_codex_memory_child_20260609221232`
+- moved memory child `supplement.md`: `sup_cross_space_codex_memory_child_20260609221232`
+
+Confirmed: I did not read, write, move, or clean any `.reo` directory. No test suites were run.

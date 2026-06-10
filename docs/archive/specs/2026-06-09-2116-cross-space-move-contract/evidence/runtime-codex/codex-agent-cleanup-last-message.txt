@@ -1,0 +1,7 @@
+Moved the Draft Segment directory as requested.
+
+Compact report:
+- Source no longer exists: yes
+- Target exists: yes
+- `segment.md` id: `seg_cross_space_codex_supp_source_20260609221232`
+- `.reo` touched: no

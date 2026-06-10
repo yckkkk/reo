@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-06-10T05:11:39.136Z",
+  "listOk": true,
+  "listMemorySpaces": [
+    {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "title": "测试"
+    },
+    {
+      "workspaceId": "ws_3f4f0ee4-3f57-4add-9c5d-d1780b2f5360",
+      "title": "启示录阅读记录"
+    }
+  ],
+  "draftOk": true,
+  "draft": {
+    "workspaceId": "ws_system_draft",
+    "title": "草稿",
+    "memoryCount": 1,
+    "memories": [
+      {
+        "memoryId": "mem_system_draft",
+        "title": "草稿",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      }
+    ]
+  },
+  "testOk": true,
+  "test": {
+    "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+    "title": "测试",
+    "memoryCount": 5,
+    "memories": [
+      {
+        "memoryId": "mem_20260517063940_89533fee",
+        "title": "生活",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_20260519032914_666583be",
+        "title": "碎片记录",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_e2e_auto_1779846740550",
+        "title": "E2E 自动记忆 已重命名 1779846740550",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_codex_dogfood_17800058",
+        "title": "Codex Dogfood Memory 17800058",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_agent_codex_live_1779792000",
+        "title": "Agent Live Sync 测试已重命名",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      }
+    ]
+  },
+  "testRefreshOk": true,
+  "testRefresh": {
+    "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+    "title": "测试",
+    "memoryCount": 5,
+    "memories": [
+      {
+        "memoryId": "mem_20260517063940_89533fee",
+        "title": "生活",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_20260519032914_666583be",
+        "title": "碎片记录",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_e2e_auto_1779846740550",
+        "title": "E2E 自动记忆 已重命名 1779846740550",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_codex_dogfood_17800058",
+        "title": "Codex Dogfood Memory 17800058",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      },
+      {
+        "memoryId": "mem_agent_codex_live_1779792000",
+        "title": "Agent Live Sync 测试已重命名",
+        "segmentCount": null,
+        "segmentIds": [],
+        "segmentTitles": []
+      }
+    ]
+  }
+}

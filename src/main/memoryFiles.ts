@@ -1658,16 +1658,20 @@ async function reconcileNoteSegmentCandidate({
       return;
     }
     const existingManifest = await readSegmentManifestOrNull(rootPath, segmentId);
-    if (
-      !existingManifest ||
-      existingManifest.objectType !== 'segment' ||
-      existingManifest.workspaceId !== workspaceId ||
-      existingManifest.segmentId !== segmentId ||
-      existingManifest.kind !== 'audio'
-    ) {
+    const existingManifestMatchesIdentity =
+      existingManifest &&
+      existingManifest.objectType === 'segment' &&
+      existingManifest.workspaceId === workspaceId &&
+      existingManifest.segmentId === segmentId &&
+      existingManifest.kind === 'audio';
+    if (!existingManifest && (await exists(await segmentObjectManifestPath(rootPath, segmentId)))) {
+      return;
+    }
+    if (existingManifest && !existingManifestMatchesIdentity) {
       return;
     }
     if (
+      existingManifestMatchesIdentity &&
       existingManifest.memoryId !== memoryId &&
       (await activeSegmentDirectoryStillExists({
         memoryId: existingManifest.memoryId,
@@ -1703,7 +1707,7 @@ async function reconcileNoteSegmentCandidate({
     } catch {
       return;
     }
-    if (existingManifest.audioByteLength !== audioByteLength) {
+    if (existingManifestMatchesIdentity && existingManifest.audioByteLength !== audioByteLength) {
       return;
     }
     const title = inferCandidateTitle({
@@ -1730,17 +1734,36 @@ async function reconcileNoteSegmentCandidate({
         }),
       });
     }
-    if (existingManifest.memoryId !== memoryId || existingManifest.workspaceId !== workspaceId) {
+    if (
+      !existingManifestMatchesIdentity ||
+      existingManifest.memoryId !== memoryId ||
+      existingManifest.workspaceId !== workspaceId
+    ) {
       const timestamp = new Date().toISOString();
       await writeSegmentObjectManifest({
         rootPath,
-        segment: {
-          ...existingManifest,
-          workspaceId,
-          memoryId,
-          audioByteLength,
-          updatedAt: timestamp,
-        },
+        segment: existingManifestMatchesIdentity
+          ? {
+              ...existingManifest,
+              workspaceId,
+              memoryId,
+              audioByteLength,
+              updatedAt: timestamp,
+            }
+          : {
+              schemaVersion: 1,
+              objectType: 'segment',
+              workspaceId,
+              memoryId,
+              segmentId,
+              kind: 'audio',
+              createdAt: timestamp,
+              finalizedAt: timestamp,
+              updatedAt: timestamp,
+              durationMs: 0,
+              nextSequence: 1,
+              audioByteLength,
+            },
       });
     }
     return;
@@ -2074,16 +2097,23 @@ async function reconcileNoteSupplementCandidate({
       return;
     }
     const existingManifest = await readSupplementManifestOrNull(rootPath, supplementId);
+    const existingManifestMatchesIdentity =
+      existingManifest &&
+      existingManifest.objectType === 'supplement' &&
+      existingManifest.workspaceId === workspaceId &&
+      existingManifest.supplementId === supplementId &&
+      existingManifest.kind === 'audio';
     if (
-      !existingManifest ||
-      existingManifest.objectType !== 'supplement' ||
-      existingManifest.workspaceId !== workspaceId ||
-      existingManifest.supplementId !== supplementId ||
-      existingManifest.kind !== 'audio'
+      !existingManifest &&
+      (await exists(await supplementObjectManifestPath(rootPath, supplementId)))
     ) {
       return;
     }
+    if (existingManifest && !existingManifestMatchesIdentity) {
+      return;
+    }
     if (
+      existingManifestMatchesIdentity &&
       (existingManifest.memoryId !== memoryId || existingManifest.segmentId !== segmentId) &&
       (await activeSupplementDirectoryStillExists({
         memoryId: existingManifest.memoryId,
@@ -2120,7 +2150,7 @@ async function reconcileNoteSupplementCandidate({
     } catch {
       return;
     }
-    if (existingManifest.audioByteLength !== audioByteLength) {
+    if (existingManifestMatchesIdentity && existingManifest.audioByteLength !== audioByteLength) {
       return;
     }
     const title = inferCandidateTitle({
@@ -2148,6 +2178,7 @@ async function reconcileNoteSupplementCandidate({
       });
     }
     if (
+      !existingManifestMatchesIdentity ||
       existingManifest.memoryId !== memoryId ||
       existingManifest.segmentId !== segmentId ||
       existingManifest.workspaceId !== workspaceId
@@ -2155,14 +2186,30 @@ async function reconcileNoteSupplementCandidate({
       const timestamp = new Date().toISOString();
       await writeSupplementObjectManifest({
         rootPath,
-        supplement: {
-          ...existingManifest,
-          workspaceId,
-          memoryId,
-          segmentId,
-          audioByteLength,
-          updatedAt: timestamp,
-        },
+        supplement: existingManifestMatchesIdentity
+          ? {
+              ...existingManifest,
+              workspaceId,
+              memoryId,
+              segmentId,
+              audioByteLength,
+              updatedAt: timestamp,
+            }
+          : {
+              schemaVersion: 1,
+              objectType: 'supplement',
+              workspaceId,
+              memoryId,
+              segmentId,
+              supplementId,
+              kind: 'audio',
+              createdAt: timestamp,
+              finalizedAt: timestamp,
+              updatedAt: timestamp,
+              durationMs: 0,
+              nextSequence: 1,
+              audioByteLength,
+            },
       });
     }
     return;
