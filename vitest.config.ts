@@ -21,6 +21,7 @@ export default defineConfig({
             'src/renderer/src/appProjection.test.ts',
             'src/renderer/src/workspace/memoryLabels.test.ts',
             'src/renderer/src/workspace/covers/memoryCoverSource.test.ts',
+            'src/renderer/src/workspace/entityMoveTree.test.ts',
             'src/renderer/src/workspace/galleryModel.test.ts',
             'src/renderer/src/workspace/noteEditorModel.test.ts',
             'src/renderer/src/workspace/noteMarkdownMode.test.ts',
