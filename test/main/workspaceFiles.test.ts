@@ -27,7 +27,7 @@ import {
   DEFAULT_REO_DOCTOR_SKILL_MD,
   DEFAULT_REO_EDIT_SKILL_MD,
   DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES,
-  DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS,
+  DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES,
   DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_EXAMPLE_FILES,
   DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
@@ -707,7 +707,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   );
   assert.deepEqual(
     (await readdir(path.join(root, 'skills', 'reo-generative-runtime', 'scripts'))).sort(),
-    ['inspect-runtime.mjs', 'scaffold-runtime.mjs', 'validate-runtime.mjs']
+    Object.keys(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).sort()
   );
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works-design'))).sort(), [
     'SKILL.md',
@@ -1123,9 +1123,15 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
     /full Reo semantic token block/
   );
   assert.match(
-    DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS,
+    DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES['validate-runtime.mjs'],
     /reo-theme-token-block-incomplete/
   );
+  assert.deepEqual(Object.keys(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).sort(), [
+    'inspect-runtime.mjs',
+    'reo-token-contract.mjs',
+    'scaffold-runtime.mjs',
+    'validate-runtime.mjs',
+  ]);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /text-overflow: ellipsis/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /overflow-wrap: anywhere/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /240px rail to a 520px rail/);
@@ -1982,11 +1988,10 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     'templates.md',
     'validation.md',
   ]);
-  assert.deepEqual([...report.repaired.runtimeScripts].sort(), [
-    'inspect-runtime.mjs',
-    'scaffold-runtime.mjs',
-    'validate-runtime.mjs',
-  ]);
+  assert.deepEqual(
+    [...report.repaired.runtimeScripts].sort(),
+    Object.keys(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).sort()
+  );
   assert.equal(report.repaired.worksSkill, true);
   assert.equal(report.repaired.worksDesignSkill, true);
   assert.deepEqual([...report.repaired.worksReferences].sort(), [
@@ -2030,6 +2035,37 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     ),
     /validate-runtime/
   );
+  for (const [filename, expected] of Object.entries(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES)) {
+    assert.equal(
+      await readFile(
+        path.join(root, 'skills', 'reo-generative-runtime', 'scripts', filename),
+        'utf8'
+      ),
+      expected
+    );
+  }
+  const repairedScaffold = spawnSync(
+    process.execPath,
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'scaffold-runtime.mjs'),
+      'doctor-repaired-work',
+      '--title',
+      'Doctor repaired work',
+      '--template',
+      'dashboard',
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+  assert.equal(repairedScaffold.status, 0, repairedScaffold.stderr || repairedScaffold.stdout);
+  const repairedValidate = spawnSync(
+    process.execPath,
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'doctor-repaired-work',
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+  assert.equal(repairedValidate.status, 0, repairedValidate.stderr || repairedValidate.stdout);
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), 'utf8'),
     /^name: reo-works-design/m

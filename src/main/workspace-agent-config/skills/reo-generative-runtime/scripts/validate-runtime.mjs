@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { lstat, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  REO_SEMANTIC_THEME,
+  missingReoSemanticTokenLabels,
+} from './reo-token-contract.mjs';
 
 const toolName = "validate-runtime";
 const targetArg = process.argv[2] ?? ".";
@@ -36,37 +40,8 @@ function validateInlineScripts(html) {
   }
 }
 
-const reoThemeTokenChecks = [
-  [/:root,\s*\[data-theme=['"]light['"]\]\s*\{/i, ":root + light theme selector"],
-  [/\[data-theme=['"]dark['"]\]\s*\{/i, "dark theme selector"],
-  [/:root:not\(\[data-theme\]\)/i, "system dark fallback selector"],
-  [/--background:\s*var\(--surface-1\)/, "--background"],
-  [/--foreground:\s*#18181b/, "--foreground"],
-  [/--card:\s*var\(--surface-2\)/, "--card"],
-  [/--popover:\s*var\(--surface-4\)/, "--popover"],
-  [/--primary-hover:/, "--primary-hover"],
-  [/--secondary:/, "--secondary"],
-  [/--muted-foreground:/, "--muted-foreground"],
-  [/--accent-foreground:/, "--accent-foreground"],
-  [/--destructive-hover:/, "--destructive-hover"],
-  [/--scrim:/, "--scrim"],
-  [/--border:/, "--border"],
-  [/--input:\s*var\(--surface-3\)/, "--input"],
-  [/--font-memory-serif:/, "--font-memory-serif"],
-  [/--tracking-heading:\s*0/, "--tracking-heading"],
-  [/--font-weight-medium:\s*500/, "--font-weight-medium"],
-  [/--spacing-160:\s*160px/, "--spacing-160"],
-  [/--container-form:\s*720px/, "--container-form"],
-  [/--radius-4xl:\s*32px/, "--radius-4xl"],
-  [/--shadow-modal:/, "--shadow-modal"],
-  [/--shadow-hero-fill:/, "--shadow-hero-fill"],
-  [/--shadow-surface-inset:/, "--shadow-surface-inset"],
-];
-
 function validateReoThemeTokenBlock(html) {
-  const missing = reoThemeTokenChecks
-    .filter(([pattern]) => !pattern.test(html))
-    .map(([, label]) => label);
+  const missing = missingReoSemanticTokenLabels(html);
   if (missing.length === 0) return;
   add(
     "reo-theme-token-block-incomplete",
@@ -156,7 +131,7 @@ for (const [fileName, text] of [["runtime.json", runtime], ["state.json", state]
     add("invalid-json", fileName, "File must parse as JSON.");
   }
 }
-if (entry && runtimeManifest?.theme?.tokens === "reo-semantic-v1") {
+if (entry && runtimeManifest?.theme?.tokens === REO_SEMANTIC_THEME.tokens) {
   validateReoThemeTokenBlock(entry);
 }
 

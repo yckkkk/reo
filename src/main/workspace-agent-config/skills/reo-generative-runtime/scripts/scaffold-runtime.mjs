@@ -1,7 +1,11 @@
 #!/usr/bin/env node
-import { lstat, mkdir, open, readFile, realpath } from 'node:fs/promises';
+import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  REO_SEMANTIC_THEME,
+  readReoSemanticTokenCss,
+} from './reo-token-contract.mjs';
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -131,18 +135,7 @@ function bodyForTemplate(config) {
   return `<div class="grid">${config.sections.map(function (section) { return `<section class="panel"><h2>${escapeHtml(section)}</h2><p>把和「${escapeHtml(section)}」有关的内容放在这里，后续可以继续改写。</p></section>`; }).join("")}</div>`;
 }
 
-async function readReoTokenCss() {
-  const referencePath = path.resolve(
-    scriptDirectory,
-    "../../reo-works-design/references/core-design-system.md"
-  );
-  const reference = await readFile(referencePath, "utf8");
-  const match = /```css\n([\s\S]*?)\n```/.exec(reference);
-  if (!match?.[1]) throw new Error("Reo works design token CSS is missing.");
-  return `${match[1]}\n`;
-}
-
-const BASE_CSS = await readReoTokenCss();
+const BASE_CSS = await readReoSemanticTokenCss(scriptDirectory);
 
 function styleCss() {
   return BASE_CSS + `body{margin:0;font-family:var(--font-sans);background:var(--background);color:var(--foreground);padding:24px;line-height:var(--leading-body);font-size:var(--text-body)}main{max-width:820px;margin:0 auto}h1{font-size:22px;font-weight:500;margin:0 0 8px}h2{font-size:16px;font-weight:500;margin:0 0 6px}.lead{color:var(--muted-foreground);margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.panel,.metrics>div{background:var(--card);color:var(--card-foreground);border-radius:var(--radius-lg);box-shadow:var(--shadow-surface-inset);padding:16px}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.metrics span{display:block;color:var(--muted-foreground);font-size:13px}.metrics strong{font-size:24px;font-weight:500}.toolbar{display:flex;gap:8px;margin:16px 0}.toolbar input{flex:1;min-width:0;border:0;background:var(--input);color:var(--foreground);border-radius:var(--radius-md);padding:10px 12px}.toolbar input::placeholder{color:var(--muted-foreground)}.toolbar button,.list button{border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);padding:10px 12px}.toolbar button:focus-visible,.list button:focus-visible,.toolbar input:focus-visible{outline:2px solid var(--ring);outline-offset:2px}.list{list-style:none;padding:0;margin:0;display:grid;gap:8px}.list li{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:var(--radius-md);box-shadow:var(--shadow-surface-inset);padding:10px 12px}`;
@@ -158,7 +151,7 @@ const runtimeManifest = {
   title,
   entry: "entry.html",
   template: config.id,
-  theme: { tokens: "reo-semantic-v1", modes: ["light", "dark"], default: "system" },
+  theme: REO_SEMANTIC_THEME,
   state: { schemaVersion: 1, stores: ["ui", "data", "progress", "draft"] },
   bridge: { needs: ["state"] },
 };
