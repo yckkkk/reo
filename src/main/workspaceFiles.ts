@@ -525,6 +525,67 @@ async function readSnapshotWidgets({
   });
 }
 
+type WorkspaceFileTruthConvergenceMode = 'workspace-open' | 'file-truth-refresh';
+
+async function convergeWorkspaceSnapshotFromFileTruth({
+  canonicalRoot,
+  metadata,
+  mode,
+  assertWorkspaceUsable: assertUsable,
+}: {
+  readonly canonicalRoot: string;
+  readonly metadata: WorkspaceMetadata;
+  readonly mode: WorkspaceFileTruthConvergenceMode;
+  readonly assertWorkspaceUsable?: AssertWorkspaceUsable;
+}): Promise<WorkspaceSnapshot> {
+  let snapshotMetadata = metadata;
+  const repairTitleMirrorBeforeReadModel = mode === 'file-truth-refresh';
+  const repairTitleMirrorAfterIndexReconciliation = mode === 'workspace-open';
+  const passiveTiptapSidecarReconcile = mode === 'file-truth-refresh';
+
+  const repairTitleMirror = async (): Promise<void> => {
+    snapshotMetadata = await repairWorkspaceTitleMetadataMirror({
+      canonicalRoot,
+      metadata: snapshotMetadata,
+      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    });
+  };
+
+  if (repairTitleMirrorBeforeReadModel) {
+    await repairTitleMirror();
+  }
+
+  const readModel = await rebuildWorkspaceReadModel(canonicalRoot, {
+    ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+    ...(passiveTiptapSidecarReconcile ? { passiveTiptapSidecarReconcile } : {}),
+  });
+  assertWorkspaceUsable(assertUsable);
+
+  const index = await readOrRebuildIndex(canonicalRoot, {
+    assertBeforePersist: async () => {
+      assertWorkspaceUsable(assertUsable);
+      await readModel.assertMemoriesRootCurrent();
+    },
+    rebuiltMemories: readModel.memories,
+  });
+
+  if (repairTitleMirrorAfterIndexReconciliation) {
+    assertWorkspaceUsable(assertUsable);
+    await repairTitleMirror();
+    assertWorkspaceUsable(assertUsable);
+  }
+
+  const widgets = await readSnapshotWidgets({ canonicalRoot, metadata: snapshotMetadata });
+  const review = await writeWorkspaceNeedsReviewReport({
+    ...(assertUsable ? { assertUsable: () => assertWorkspaceUsable(assertUsable) } : {}),
+    entries: [...readModel.reviewEntries, ...widgets.reviewEntries],
+    rootPath: canonicalRoot,
+  });
+  assertWorkspaceUsable(assertUsable);
+
+  return snapshotFrom(snapshotMetadata, index, review, widgets.widgets);
+}
+
 async function repairWorkspaceTitleMetadataMirror({
   canonicalRoot,
   metadata,
@@ -1281,7 +1342,7 @@ export async function openWorkspaceFiles({
       return target;
     }
     const canonicalRoot = target.canonicalRoot;
-    let metadata = target.metadata;
+    const metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
     const draftsDirectory = await ensureWorkspaceDraftsDirectory(canonicalRoot, assertUsable);
     if (typeof draftsDirectory !== 'string') {
@@ -1304,34 +1365,15 @@ export async function openWorkspaceFiles({
       assertWorkspaceUsable: () => assertWorkspaceUsable(assertUsable),
     });
     assertWorkspaceUsable(assertUsable);
-    const readModel = await rebuildWorkspaceReadModel(canonicalRoot, {
-      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
-    });
-    assertWorkspaceUsable(assertUsable);
-    const index = await readOrRebuildIndex(canonicalRoot, {
-      assertBeforePersist: async () => {
-        assertWorkspaceUsable(assertUsable);
-        await readModel.assertMemoriesRootCurrent();
-      },
-      rebuiltMemories: readModel.memories,
-    });
-    assertWorkspaceUsable(assertUsable);
-    metadata = await repairWorkspaceTitleMetadataMirror({
+    const snapshot = await convergeWorkspaceSnapshotFromFileTruth({
       canonicalRoot,
       metadata,
+      mode: 'workspace-open',
       ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
     });
-    assertWorkspaceUsable(assertUsable);
-    const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
-    const review = await writeWorkspaceNeedsReviewReport({
-      ...(assertUsable ? { assertUsable: () => assertWorkspaceUsable(assertUsable) } : {}),
-      entries: [...readModel.reviewEntries, ...widgets.reviewEntries],
-      rootPath: canonicalRoot,
-    });
-    assertWorkspaceUsable(assertUsable);
     return {
       ok: true,
-      snapshot: snapshotFrom(metadata, index, review, widgets.widgets),
+      snapshot,
     };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {
@@ -1531,7 +1573,7 @@ export async function readWorkspaceSnapshotFromFileTruth({
     }
 
     const { canonicalRoot } = target;
-    let metadata = target.metadata;
+    const metadata = target.metadata;
     assertWorkspaceUsable(assertUsable);
     if (metadata.workspaceId !== workspaceId) {
       return workspaceError(
@@ -1541,33 +1583,15 @@ export async function readWorkspaceSnapshotFromFileTruth({
       );
     }
 
-    metadata = await repairWorkspaceTitleMetadataMirror({
+    const snapshot = await convergeWorkspaceSnapshotFromFileTruth({
       canonicalRoot,
       metadata,
+      mode: 'file-truth-refresh',
       ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
     });
-    const readModel = await rebuildWorkspaceReadModel(canonicalRoot, {
-      ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
-      passiveTiptapSidecarReconcile: true,
-    });
-    assertWorkspaceUsable(assertUsable);
-    const index = await readOrRebuildIndex(canonicalRoot, {
-      assertBeforePersist: async () => {
-        assertWorkspaceUsable(assertUsable);
-        await readModel.assertMemoriesRootCurrent();
-      },
-      rebuiltMemories: readModel.memories,
-    });
-    const widgets = await readSnapshotWidgets({ canonicalRoot, metadata });
-    const review = await writeWorkspaceNeedsReviewReport({
-      ...(assertUsable ? { assertUsable: () => assertWorkspaceUsable(assertUsable) } : {}),
-      entries: [...readModel.reviewEntries, ...widgets.reviewEntries],
-      rootPath: canonicalRoot,
-    });
-    assertWorkspaceUsable(assertUsable);
     return {
       ok: true,
-      snapshot: snapshotFrom(metadata, index, review, widgets.widgets),
+      snapshot,
     };
   } catch (error) {
     if (error instanceof WorkspaceOpenAborted) {

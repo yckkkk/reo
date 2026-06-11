@@ -17,6 +17,7 @@ import {
   artifactSegmentRuntimeUrl,
   artifactSupplementRuntimeUrl,
   homeComponentRuntimeUrl,
+  workspaceWidgetRuntimeUrl,
 } from '../../src/workspace-contract/artifact-runtime-url.js';
 
 function sha256Text(text: string): string {
@@ -404,6 +405,55 @@ test('home component runtime URLs resolve app-level runtime bundle files without
   if (asset.ok) {
     assert.equal(asset.mimeType, 'text/css');
     assert.equal(Buffer.from(asset.bytes).toString('utf8'), 'body { color: blue; }\n');
+  }
+});
+
+test('workspace widget runtime URLs resolve workspace widget bundle files', async () => {
+  const rootPath = await workspaceRoot();
+  const widgetId = 'wdg_protocol';
+  const widgetDirectory = path.join(rootPath, 'widgets', `${widgetId}--Protocol Widget`);
+  const html = '<!doctype html><html><body>Widget panel</body></html>\n';
+  await mkdir(path.join(widgetDirectory, 'assets'), { recursive: true });
+  await writeFile(
+    path.join(widgetDirectory, 'widget.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'widget',
+      data: {
+        title: 'Protocol Widget',
+        kind: 'widget',
+        format: 'html',
+        mount: 'workspace-rail',
+      },
+      content: '# Protocol Widget\n',
+    })
+  );
+  await writeFile(path.join(widgetDirectory, 'entry.html'), html);
+  await writeFile(path.join(widgetDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(widgetDirectory, 'assets', 'panel.css'), 'body { color: green; }\n');
+
+  const entryUrl = workspaceWidgetRuntimeUrl({
+    workspaceId: 'ws_artifact',
+    widgetId,
+    previewVersion: sha256Text(html),
+  });
+  const entry = await resolveArtifactProtocolRequest(entryUrl, rootResolver(rootPath));
+  assert.equal(entry.ok, true);
+  if (!entry.ok) {
+    return;
+  }
+  assert.equal(Buffer.from(entry.bytes).toString('utf8'), html);
+  assert.equal(entry.cacheControl, ARTIFACT_PROTOCOL_CACHE_CONTROL);
+  assert.equal(entry.contentSecurityPolicy, ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY);
+  assert.equal(entry.mimeType, 'text/html');
+
+  const asset = await resolveArtifactProtocolRequest(
+    entryUrl.replace('/entry.html?', '/assets/panel.css?'),
+    rootResolver(rootPath)
+  );
+  assert.equal(asset.ok, true);
+  if (asset.ok) {
+    assert.equal(asset.mimeType, 'text/css');
+    assert.equal(Buffer.from(asset.bytes).toString('utf8'), 'body { color: green; }\n');
   }
 });
 

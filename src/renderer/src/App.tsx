@@ -3351,6 +3351,42 @@ export function App() {
     );
   }
 
+  function applyMemoryProjectionTransaction({
+    beforeSessionUpdate,
+    memory,
+    segment,
+    session,
+  }: {
+    readonly beforeSessionUpdate?: () => void;
+    readonly memory: WorkspaceMemorySummary;
+    readonly segment?: WorkspaceMemoryDetail['segments'][number];
+    readonly session: WorkspaceSession;
+  }) {
+    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
+      workspaceSnapshotQueryKey(session),
+      (currentSnapshot) => mergeMemoryIntoSnapshot(currentSnapshot ?? session.snapshot, memory)
+    );
+
+    if (segment) {
+      queryClient.setQueryData<MemoryDetailQueryData | undefined>(
+        memoryDetailQueryKey({
+          workspaceId: session.workspaceId,
+          memoryId: memory.memoryId,
+        }),
+        (currentDetail) =>
+          mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, session.workspaceId)
+      );
+    }
+
+    beforeSessionUpdate?.();
+    setWorkspaceSession((currentSession) =>
+      currentSession?.workspaceHandle === session.workspaceHandle &&
+      currentSession.workspaceId === session.workspaceId
+        ? mergeMemoryIntoSession(currentSession, memory)
+        : currentSession
+    );
+  }
+
   function invalidateRecentExpressions() {
     void queryClient.invalidateQueries({ queryKey: recentExpressionsQueryRootKey() });
   }
@@ -3673,41 +3709,18 @@ export function App() {
       return;
     }
 
-    const snapshotQueryKey = workspaceSnapshotQueryKey(expectedSession);
-    const detailQueryKey = memoryDetailQueryKey({
-      workspaceId: expectedSession.workspaceId,
-      memoryId: finalized.memory.memoryId,
+    applyMemoryProjectionTransaction({
+      beforeSessionUpdate: () => {
+        setSelectedMemoryId(finalized.segment.memoryId);
+        setSegmentFocusIntent({
+          memoryId: finalized.segment.memoryId,
+          segmentId: finalized.segment.segmentId,
+        });
+      },
+      memory: finalized.memory,
+      segment: finalized.segment,
+      session: expectedSession,
     });
-    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-      snapshotQueryKey,
-      (currentSnapshot) =>
-        mergeMemoryIntoSession(
-          {
-            ...expectedSession,
-            snapshot: currentSnapshot ?? expectedSession.snapshot,
-          },
-          finalized.memory
-        ).snapshot
-    );
-    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
-      mergeSegmentIntoMemoryDetail(
-        currentDetail,
-        finalized.memory,
-        finalized.segment,
-        expectedSession.workspaceId
-      )
-    );
-    setSelectedMemoryId(finalized.segment.memoryId);
-    setSegmentFocusIntent({
-      memoryId: finalized.segment.memoryId,
-      segmentId: finalized.segment.segmentId,
-    });
-    setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceHandle === expectedSession.workspaceHandle &&
-      currentSession.workspaceId === expectedSession.workspaceId
-        ? mergeMemoryIntoSession(currentSession, finalized.memory)
-        : currentSession
-    );
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     invalidateRecentExpressions();
   }
@@ -3729,38 +3742,14 @@ export function App() {
       return;
     }
 
-    const snapshotQueryKey = workspaceSnapshotQueryKey(activeSession);
-    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-      snapshotQueryKey,
-      (currentSnapshot) =>
-        mergeMemoryIntoSession(
-          {
-            ...activeSession,
-            snapshot: currentSnapshot ?? activeSession.snapshot,
-          },
-          finalized.memory
-        ).snapshot
-    );
-    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
-      memoryDetailQueryKey({
-        workspaceId: activeSession.workspaceId,
-        memoryId: finalized.memory.memoryId,
-      }),
-      (currentDetail) =>
-        mergeSegmentIntoMemoryDetail(
-          currentDetail,
-          finalized.memory,
-          finalized.segment,
-          activeSession.workspaceId
-        )
-    );
-    setSelectedMemoryId(finalized.memory.memoryId);
-    setWorkspaceSession((session) =>
-      session?.workspaceHandle === activeSession.workspaceHandle &&
-      session.workspaceId === activeSession.workspaceId
-        ? mergeMemoryIntoSession(session, finalized.memory)
-        : session
-    );
+    applyMemoryProjectionTransaction({
+      beforeSessionUpdate: () => {
+        setSelectedMemoryId(finalized.memory.memoryId);
+      },
+      memory: finalized.memory,
+      segment: finalized.segment,
+      session: activeSession,
+    });
     invalidateRecentExpressions();
     if (options.refreshContent) {
       void queryClient.invalidateQueries({
@@ -3792,41 +3781,18 @@ export function App() {
       return;
     }
 
-    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
-    const detailQueryKey = memoryDetailQueryKey({
-      workspaceId: session.workspaceId,
-      memoryId: finalized.memory.memoryId,
+    applyMemoryProjectionTransaction({
+      beforeSessionUpdate: () => {
+        setSelectedMemoryId(finalized.segment.memoryId);
+        setSegmentFocusIntent({
+          memoryId: finalized.segment.memoryId,
+          segmentId: finalized.segment.segmentId,
+        });
+      },
+      memory: finalized.memory,
+      segment: finalized.segment,
+      session,
     });
-    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-      snapshotQueryKey,
-      (currentSnapshot) =>
-        mergeMemoryIntoSession(
-          {
-            ...session,
-            snapshot: currentSnapshot ?? session.snapshot,
-          },
-          finalized.memory
-        ).snapshot
-    );
-    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
-      mergeSegmentIntoMemoryDetail(
-        currentDetail,
-        finalized.memory,
-        finalized.segment,
-        session.workspaceId
-      )
-    );
-    setSelectedMemoryId(finalized.segment.memoryId);
-    setSegmentFocusIntent({
-      memoryId: finalized.segment.memoryId,
-      segmentId: finalized.segment.segmentId,
-    });
-    setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceHandle === session.workspaceHandle &&
-      currentSession.workspaceId === session.workspaceId
-        ? mergeMemoryIntoSession(currentSession, finalized.memory)
-        : currentSession
-    );
     setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
     void queryClient.invalidateQueries({
       exact: true,
@@ -3956,38 +3922,14 @@ export function App() {
       return;
     }
 
-    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
-    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-      snapshotQueryKey,
-      (currentSnapshot) =>
-        mergeMemoryIntoSession(
-          {
-            ...session,
-            snapshot: currentSnapshot ?? session.snapshot,
-          },
-          finalized.memory
-        ).snapshot
-    );
-    queryClient.setQueryData<MemoryDetailQueryData | undefined>(
-      memoryDetailQueryKey({
-        workspaceId: session.workspaceId,
-        memoryId: finalized.memory.memoryId,
-      }),
-      (currentDetail) =>
-        mergeSegmentIntoMemoryDetail(
-          currentDetail,
-          finalized.memory,
-          finalized.segment,
-          session.workspaceId
-        )
-    );
-    setSelectedMemoryId(finalized.memory.memoryId);
-    setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceHandle === session.workspaceHandle &&
-      currentSession.workspaceId === session.workspaceId
-        ? mergeMemoryIntoSession(currentSession, finalized.memory)
-        : currentSession
-    );
+    applyMemoryProjectionTransaction({
+      beforeSessionUpdate: () => {
+        setSelectedMemoryId(finalized.memory.memoryId);
+      },
+      memory: finalized.memory,
+      segment: finalized.segment,
+      session,
+    });
     void queryClient.invalidateQueries({
       exact: true,
       queryKey: segmentSupplementContentQueryKey({
@@ -4372,25 +4314,13 @@ export function App() {
         return workspaceErrorDisplayMessage(response.error, '无法新建记忆。');
       }
 
-      const snapshotQueryKey = workspaceSnapshotQueryKey(mutationSession);
-      queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-        snapshotQueryKey,
-        (currentSnapshot) =>
-          mergeMemoryIntoSession(
-            {
-              ...mutationSession,
-              snapshot: currentSnapshot ?? mutationSession.snapshot,
-            },
-            response.value
-          ).snapshot
-      );
-      setSelectedMemoryId(response.value.memoryId);
-      setWorkspaceSession((currentSession) =>
-        currentSession?.workspaceHandle === mutationSession.workspaceHandle &&
-        currentSession.workspaceId === mutationSession.workspaceId
-          ? mergeMemoryIntoSession(currentSession, response.value)
-          : currentSession
-      );
+      applyMemoryProjectionTransaction({
+        beforeSessionUpdate: () => {
+          setSelectedMemoryId(response.value.memoryId);
+        },
+        memory: response.value,
+        session: mutationSession,
+      });
 
       if (memoryCreateIntent?.afterCreate === 'record-memory') {
         setMemoryCreateIntent(null);
@@ -5080,35 +5010,6 @@ export function App() {
     return true;
   }
 
-  function applySegmentCoverUpdate({
-    memory,
-    segment,
-    session,
-  }: {
-    readonly memory: WorkspaceMemorySummary;
-    readonly segment: WorkspaceMemoryDetail['segments'][number];
-    readonly session: WorkspaceSession;
-  }) {
-    const snapshotQueryKey = workspaceSnapshotQueryKey(session);
-    const detailQueryKey = memoryDetailQueryKey({
-      workspaceId: session.workspaceId,
-      memoryId: memory.memoryId,
-    });
-    queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-      snapshotQueryKey,
-      (currentSnapshot) => mergeMemoryIntoSnapshot(currentSnapshot ?? session.snapshot, memory)
-    );
-    queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
-      mergeSegmentIntoMemoryDetail(currentDetail, memory, segment, session.workspaceId)
-    );
-    setWorkspaceSession((currentSession) =>
-      currentSession?.workspaceHandle === session.workspaceHandle &&
-      currentSession.workspaceId === session.workspaceId
-        ? mergeMemoryIntoSession(currentSession, memory)
-        : currentSession
-    );
-  }
-
   function openMemoryDeleteDialog(memory: WorkspaceMemorySummary) {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -5609,7 +5510,7 @@ export function App() {
         return;
       }
 
-      applySegmentCoverUpdate({
+      applyMemoryProjectionTransaction({
         memory: response.value.memory,
         segment: response.value.segment,
         session: mutationSession,
@@ -5659,7 +5560,7 @@ export function App() {
         return;
       }
 
-      applySegmentCoverUpdate({
+      applyMemoryProjectionTransaction({
         memory: response.value.memory,
         segment: response.value.segment,
         session: mutationSession,
@@ -5733,7 +5634,7 @@ export function App() {
         return;
       }
 
-      applySegmentCoverUpdate({
+      applyMemoryProjectionTransaction({
         memory: response.value.memory,
         segment: response.value.segment,
         session: mutationSession,
@@ -5871,36 +5772,11 @@ export function App() {
         return;
       }
 
-      const snapshotQueryKey = workspaceSnapshotQueryKey({
-        workspaceId: context.workspaceId,
-        workspaceHandle: context.workspaceHandle,
+      applyMemoryProjectionTransaction({
+        memory: response.value.memory,
+        segment: response.value.segment,
+        session: activeWorkspaceSession,
       });
-      const detailQueryKey = memoryDetailQueryKey({
-        workspaceId: context.workspaceId,
-        memoryId: context.memoryId,
-      });
-      queryClient.setQueryData<WorkspaceSession['snapshot'] | undefined>(
-        snapshotQueryKey,
-        (currentSnapshot) =>
-          mergeMemoryIntoSnapshot(
-            currentSnapshot ?? activeWorkspaceSession.snapshot,
-            response.value.memory
-          )
-      );
-      queryClient.setQueryData<MemoryDetailQueryData | undefined>(detailQueryKey, (currentDetail) =>
-        mergeSegmentIntoMemoryDetail(
-          currentDetail,
-          response.value.memory,
-          response.value.segment,
-          context.workspaceId
-        )
-      );
-      setWorkspaceSession((currentSession) =>
-        currentSession?.workspaceHandle === context.workspaceHandle &&
-        currentSession.workspaceId === context.workspaceId
-          ? mergeMemoryIntoSession(currentSession, response.value.memory)
-          : currentSession
-      );
       setSelectedMemoryId(context.memoryId);
       setSegmentFocusIntent({
         memoryId: context.memoryId,

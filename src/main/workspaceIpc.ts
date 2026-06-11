@@ -10032,6 +10032,12 @@ export function registerWorkspaceIpc({
       )
     );
   };
+  const workspaceIpcBaseOptions = {
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  } satisfies WorkspaceIpcBaseOptions;
+  const workspaceIpcAppDataOptions = appDataDir ? { appDataDir } : {};
   type ReadyBackfillWorkspace = {
     readonly assertWorkspaceUsable: () => { readonly ok: true } | WorkspaceErrorEnvelope;
     readonly isCurrent: () => boolean;
@@ -10105,9 +10111,7 @@ export function registerWorkspaceIpc({
     const trusted = validateWorkspaceSender({
       event,
       channel,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     });
     if (!trusted.ok) {
       return response;
@@ -10178,9 +10182,7 @@ export function registerWorkspaceIpc({
     handleChooseWorkspaceDirectory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       tokenStore,
       showOpenDirectoryDialog,
     })
@@ -10189,20 +10191,16 @@ export function registerWorkspaceIpc({
     handleListWorkspaceMemorySpaces({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL, (event, input) =>
     handleReadSystemDraftWorkspace({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL, async (event, input) =>
@@ -10210,35 +10208,29 @@ export function registerWorkspaceIpc({
       event,
       WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
       await handleOpenSystemDraftWorkspace({
-        ...(appDataDir ? { appDataDir } : {}),
+        ...workspaceIpcAppDataOptions,
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
     )
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, (event, input) =>
     handleReadRecentExpressions({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_HOME_COMPONENTS_CHANNEL, (event, input) =>
     handleReadHomeComponentsCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     }).then((response) => {
       if (response.ok) {
         watchHomeComponents(event);
@@ -10248,34 +10240,28 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL, (event, input) =>
     handleReadHomeComponentMemoryDetailCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, (event, input) =>
     handleReadExpressionPlaybackAudio({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL, (event, input) =>
     handleListEntityMoveTargets({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       memorySpaceRegistry,
     })
@@ -10287,9 +10273,7 @@ export function registerWorkspaceIpc({
       await handleInitializeWorkspace({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         tokenStore,
         handleStore,
         memorySpaceRegistry,
@@ -10303,9 +10287,7 @@ export function registerWorkspaceIpc({
       await handleOpenWorkspace({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         tokenStore,
         handleStore,
         memorySpaceRegistry,
@@ -10319,9 +10301,7 @@ export function registerWorkspaceIpc({
       await handleOpenWorkspaceMemorySpace({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         memorySpaceRegistry,
       })
@@ -10331,9 +10311,7 @@ export function registerWorkspaceIpc({
     handleRemoveMemorySpace({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -10341,9 +10319,7 @@ export function registerWorkspaceIpc({
     handleRevealMemorySpaceInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -10351,9 +10327,7 @@ export function registerWorkspaceIpc({
     handleOpenMemorySpaceAgentsFile({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -10361,9 +10335,7 @@ export function registerWorkspaceIpc({
     handleCopyMemorySpaceAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -10371,9 +10343,7 @@ export function registerWorkspaceIpc({
     handleRevealMemoryInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10381,9 +10351,7 @@ export function registerWorkspaceIpc({
     handleOpenMemoryDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10391,9 +10359,7 @@ export function registerWorkspaceIpc({
     handleCopyMemoryAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10401,9 +10367,7 @@ export function registerWorkspaceIpc({
     handleCopyMemoryRelativePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10411,9 +10375,7 @@ export function registerWorkspaceIpc({
     handleRevealSegmentInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10421,9 +10383,7 @@ export function registerWorkspaceIpc({
     handleOpenSegmentDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10431,9 +10391,7 @@ export function registerWorkspaceIpc({
     handleCopySegmentAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10441,9 +10399,7 @@ export function registerWorkspaceIpc({
     handleCopySegmentRelativePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10451,31 +10407,25 @@ export function registerWorkspaceIpc({
     handleCopyArtifactAgentPrompt({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
     handleReadArtifactRuntimeStateCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
     handleWriteArtifactRuntimeStateCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10483,9 +10433,7 @@ export function registerWorkspaceIpc({
     handleCopyNeedsReviewAgentPrompt({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10495,9 +10443,7 @@ export function registerWorkspaceIpc({
       handleRevealSegmentSupplementInFinder({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -10505,9 +10451,7 @@ export function registerWorkspaceIpc({
     handleOpenSegmentSupplementDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10517,9 +10461,7 @@ export function registerWorkspaceIpc({
       handleCopySegmentSupplementAbsolutePath({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -10529,9 +10471,7 @@ export function registerWorkspaceIpc({
       handleCopySegmentSupplementRelativePath({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -10539,9 +10479,7 @@ export function registerWorkspaceIpc({
     handleRevealWidgetInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10549,9 +10487,7 @@ export function registerWorkspaceIpc({
     handleOpenWidgetDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10559,9 +10495,7 @@ export function registerWorkspaceIpc({
     handleCopyWidgetAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10569,9 +10503,7 @@ export function registerWorkspaceIpc({
     handleCopyWidgetRelativePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10579,59 +10511,47 @@ export function registerWorkspaceIpc({
     handleCopyWidgetAgentPrompt({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL, (event, input) =>
     handleRevealHomeComponentInFinderCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL, (event, input) =>
     handleOpenHomeComponentDocumentCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL, (event, input) =>
     handleCopyHomeComponentAbsolutePathCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL, (event, input) =>
     handleCopyHomeComponentAgentPromptCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemorySpaceTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       memorySpaceRegistry,
     })
@@ -10640,9 +10560,7 @@ export function registerWorkspaceIpc({
     handleBeginMicrophoneIntent({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -10651,9 +10569,7 @@ export function registerWorkspaceIpc({
     handleClearMicrophoneIntent({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -10663,9 +10579,7 @@ export function registerWorkspaceIpc({
       event,
       input,
       channel: WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       schema: workspaceRecordingTranscriptionStartRequestSchema,
       invalidMessage: 'startRecordingTranscription request is invalid',
@@ -10690,9 +10604,7 @@ export function registerWorkspaceIpc({
         event,
         input,
         channel: WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         schema: workspaceRecordingTranscriptionAudioRequestSchema,
         invalidMessage: 'sendRecordingTranscriptionAudio request is invalid',
@@ -10715,9 +10627,7 @@ export function registerWorkspaceIpc({
     finishRecordingTranscriptionCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -10726,9 +10636,7 @@ export function registerWorkspaceIpc({
     closeRecordingTranscriptionCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -10739,9 +10647,7 @@ export function registerWorkspaceIpc({
       handleRequestSegmentTranscriptionBackfillCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         backfillRuntime,
         voiceSettingsStore,
@@ -10753,9 +10659,7 @@ export function registerWorkspaceIpc({
       handleRequestSegmentSupplementTranscriptionBackfillCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         backfillRuntime,
         voiceSettingsStore,
@@ -10765,9 +10669,7 @@ export function registerWorkspaceIpc({
     handleRequestSegmentSpeechSynthesisCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       speechSynthesisRuntime,
       voiceSettingsStore,
@@ -10779,9 +10681,7 @@ export function registerWorkspaceIpc({
       handleRequestSegmentSupplementSpeechSynthesisCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         speechSynthesisRuntime,
         voiceSettingsStore,
@@ -10791,9 +10691,7 @@ export function registerWorkspaceIpc({
     handleReadVoiceTranscriptionSettingsCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
     })
   );
@@ -10801,27 +10699,21 @@ export function registerWorkspaceIpc({
     handleReadAppPermissionStatusCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL, (event, input) =>
     handleRequestAppPermissionCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, input) =>
     handleSetVoiceTranscriptionEnabledCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
     }).then(handleVoiceSettingsResult)
   );
@@ -10831,9 +10723,7 @@ export function registerWorkspaceIpc({
       handleSetVoiceSpeechSynthesisSpeakerCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         speechSynthesisProbe: voiceSpeechSynthesisProbe,
         store: voiceSettingsStore,
       }).then(handleVoiceSettingsResult)
@@ -10844,9 +10734,7 @@ export function registerWorkspaceIpc({
       handleRegenerateImportedSpeechSynthesisCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         memorySpaceRegistry,
         speechSynthesisRuntime,
@@ -10857,9 +10745,7 @@ export function registerWorkspaceIpc({
     handleSaveVoiceTranscriptionApiKeyCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
       probe: voiceTranscriptionProbe,
       speechSynthesisProbe: voiceSpeechSynthesisProbe,
@@ -10869,9 +10755,7 @@ export function registerWorkspaceIpc({
     handleClearVoiceTranscriptionApiKeyCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
     }).then(handleVoiceSettingsResult)
   );
@@ -10881,9 +10765,7 @@ export function registerWorkspaceIpc({
       handleValidateVoiceTranscriptionCredentialsCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         store: voiceSettingsStore,
         probe: voiceTranscriptionProbe,
         speechSynthesisProbe: voiceSpeechSynthesisProbe,
@@ -10895,9 +10777,7 @@ export function registerWorkspaceIpc({
       handleOpenVoiceTranscriptionProviderConsoleCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         openExternal,
       })
   );
@@ -10905,9 +10785,7 @@ export function registerWorkspaceIpc({
     handleOpenMarkdownExternalLinkCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       openExternal,
     })
   );
@@ -10915,9 +10793,7 @@ export function registerWorkspaceIpc({
     handleUpdateMemoryTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10925,9 +10801,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10935,9 +10809,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentContentTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10945,9 +10817,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentSupplementTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10955,9 +10825,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentContentTabOrder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10965,9 +10833,7 @@ export function registerWorkspaceIpc({
     handleUpdateWidgetTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -10975,39 +10841,31 @@ export function registerWorkspaceIpc({
     handleUpdateWidgetTabOrder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL, (event, input) =>
     handleUpdateHomeComponentTitleCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL, (event, input) =>
     handleUpdateHomeComponentTabOrderCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
     handleCreateMemory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11015,20 +10873,16 @@ export function registerWorkspaceIpc({
     handleDeleteMemory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_MOVE_MEMORY_CHANNEL, (event, input) =>
     handleMoveMemory({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       memorySpaceRegistry,
     })
@@ -11037,9 +10891,7 @@ export function registerWorkspaceIpc({
     handleRestoreDeletedMemory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11047,9 +10899,7 @@ export function registerWorkspaceIpc({
     handleResetMemoryCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11057,9 +10907,7 @@ export function registerWorkspaceIpc({
     handleRestoreMemoryCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11067,9 +10915,7 @@ export function registerWorkspaceIpc({
     handleSwitchMemoryDefaultCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11077,9 +10923,7 @@ export function registerWorkspaceIpc({
     handleResetSegmentCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11087,9 +10931,7 @@ export function registerWorkspaceIpc({
     handleRestoreSegmentCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11097,9 +10939,7 @@ export function registerWorkspaceIpc({
     handleSwitchSegmentDefaultCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11107,20 +10947,16 @@ export function registerWorkspaceIpc({
     handleDeleteSegment({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_MOVE_SEGMENT_CHANNEL, (event, input) =>
     handleMoveSegment({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       memorySpaceRegistry,
     })
@@ -11129,9 +10965,7 @@ export function registerWorkspaceIpc({
     handleRestoreDeletedSegment({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11139,20 +10973,16 @@ export function registerWorkspaceIpc({
     handleDeleteSegmentSupplement({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL, (event, input) =>
     handleMoveSegmentSupplement({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       memorySpaceRegistry,
     })
@@ -11163,9 +10993,7 @@ export function registerWorkspaceIpc({
       handleRestoreDeletedSegmentSupplement({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11173,9 +11001,7 @@ export function registerWorkspaceIpc({
     handleDeleteWidget({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11183,39 +11009,31 @@ export function registerWorkspaceIpc({
     handleRestoreDeletedWidget({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL, (event, input) =>
     handleDeleteHomeComponentCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL, (event, input) =>
     handleRestoreDeletedHomeComponentCore({
-      ...(appDataDir ? { appDataDir } : {}),
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>
     handleReadMemoryDetail({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11223,9 +11041,7 @@ export function registerWorkspaceIpc({
     handleReadFinalizedAudioSegment({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11235,9 +11051,7 @@ export function registerWorkspaceIpc({
       handleReadFinalizedAudioSegmentSupplement({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11247,9 +11061,7 @@ export function registerWorkspaceIpc({
       handleReadFinalizedAudioSegmentAudio({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11259,9 +11071,7 @@ export function registerWorkspaceIpc({
       handleReadFinalizedAudioSegmentSupplementAudio({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11269,9 +11079,7 @@ export function registerWorkspaceIpc({
     handleCloseWorkspace({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       backfillRuntime,
       speechSynthesisRuntime,
       handleStore,
@@ -11293,9 +11101,7 @@ export function registerWorkspaceIpc({
     handleReadWorkspaceSnapshot({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11318,9 +11124,7 @@ export function registerWorkspaceIpc({
         event,
         input,
         channel,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         schema,
         invalidMessage,
@@ -11333,9 +11137,7 @@ export function registerWorkspaceIpc({
     handleCreateRecordingDraft({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     }).then((response) =>
       afterOk(response, () => {
@@ -11350,9 +11152,7 @@ export function registerWorkspaceIpc({
       handleCreateSegmentSupplementRecordingDraft({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       }).then((response) =>
         afterOk(response, () => {
@@ -11365,9 +11165,7 @@ export function registerWorkspaceIpc({
     handleCreateNoteSegmentDraft({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11377,9 +11175,7 @@ export function registerWorkspaceIpc({
       handleCreateSegmentSupplementNoteDraft({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11435,9 +11231,7 @@ export function registerWorkspaceIpc({
     handleFinalizeNoteSegmentDraftCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -11450,9 +11244,7 @@ export function registerWorkspaceIpc({
       handleFinalizeSegmentSupplementNoteDraftCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         now: nowIso,
       }).then((response) =>
@@ -11463,9 +11255,7 @@ export function registerWorkspaceIpc({
     handleReadSegmentContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11473,9 +11263,7 @@ export function registerWorkspaceIpc({
     handleReadSegmentSupplementContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11483,9 +11271,7 @@ export function registerWorkspaceIpc({
     handleReadSegmentSpeechAudioCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11495,9 +11281,7 @@ export function registerWorkspaceIpc({
       handleReadSegmentSupplementSpeechAudioCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11505,9 +11289,7 @@ export function registerWorkspaceIpc({
     handleWriteSegmentContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -11518,9 +11300,7 @@ export function registerWorkspaceIpc({
     handleWriteSegmentSupplementContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -11531,9 +11311,7 @@ export function registerWorkspaceIpc({
     handleSaveSegmentAttachmentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11541,9 +11319,7 @@ export function registerWorkspaceIpc({
     handleListSegmentAttachmentsCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -11553,9 +11329,7 @@ export function registerWorkspaceIpc({
       handleSaveSegmentSupplementAttachmentCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11565,9 +11339,7 @@ export function registerWorkspaceIpc({
       handleListSegmentSupplementAttachmentsCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -11664,9 +11436,7 @@ export function registerWorkspaceIpc({
     handleFinalizeRecordingDraft({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -11682,9 +11452,7 @@ export function registerWorkspaceIpc({
       handleFinalizeSegmentSupplementRecordingDraft({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         now: nowIso,
       }).then((response) =>

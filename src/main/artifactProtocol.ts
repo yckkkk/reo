@@ -11,13 +11,8 @@ import {
   artifactMimeTypeForFileName,
   parseArtifactRequestTarget,
 } from './artifactUrl.js';
-import {
-  resolveFinalizedArtifactSegmentDirectoryFromManifest,
-  resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest,
-} from './memoryFiles.js';
-import { resolveHomeComponentDirectoryFromFileTruth } from './homeComponents.js';
-import { resolveWorkspaceWidgetDirectoryFromFileTruth } from './workspaceWidgets.js';
 import { openExistingWorkspaceFileInDirectory } from './workspaceDirectoryTransactions.js';
+import { resolveArtifactRuntimeProtocolTargetDirectory } from './artifactRuntimeTarget.js';
 
 export const ARTIFACT_PROTOCOL_CACHE_CONTROL = 'no-store';
 export const ARTIFACT_VENDOR_PROTOCOL_CACHE_CONTROL = 'max-age=31536000, immutable';
@@ -163,17 +158,17 @@ export async function resolveArtifactProtocolRequest(
   }
 
   if (target.kind === 'home-component') {
-    if (!homeComponentAppDataRootPath) {
-      return { ok: false };
-    }
     try {
-      const componentDirectory = await resolveHomeComponentDirectoryFromFileTruth({
+      if (!homeComponentAppDataRootPath) {
+        return { ok: false };
+      }
+      const runtimeDirectory = await resolveArtifactRuntimeProtocolTargetDirectory({
         appDataRootPath: homeComponentAppDataRootPath,
-        componentId: target.componentId,
+        target,
       });
       return readArtifactFile({
         cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
-        directory: componentDirectory,
+        directory: runtimeDirectory,
         fileScope: target.fileScope,
         fileName: target.fileName,
         maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
@@ -187,48 +182,14 @@ export async function resolveArtifactProtocolRequest(
   if (!root.ok) {
     return { ok: false };
   }
-
   try {
-    if (target.kind === 'segment') {
-      const { segmentDirectory } = await resolveFinalizedArtifactSegmentDirectoryFromManifest({
-        rootPath: root.canonicalRoot,
-        workspaceId: target.workspaceId,
-        segmentId: target.segmentId,
-      });
-      return readArtifactFile({
-        cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
-        directory: segmentDirectory,
-        fileScope: target.fileScope,
-        fileName: target.fileName,
-        maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
-      });
-    }
-
-    if (target.kind === 'widget') {
-      const widgetDirectory = await resolveWorkspaceWidgetDirectoryFromFileTruth({
-        rootPath: root.canonicalRoot,
-        workspaceId: target.workspaceId,
-        widgetId: target.widgetId,
-      });
-      return readArtifactFile({
-        cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
-        directory: widgetDirectory,
-        fileScope: target.fileScope,
-        fileName: target.fileName,
-        maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
-      });
-    }
-
-    const { supplementDirectory } =
-      await resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest({
-        rootPath: root.canonicalRoot,
-        workspaceId: target.workspaceId,
-        segmentId: target.segmentId,
-        supplementId: target.supplementId,
-      });
+    const runtimeDirectory = await resolveArtifactRuntimeProtocolTargetDirectory({
+      rootPath: root.canonicalRoot,
+      target,
+    });
     return readArtifactFile({
       cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
-      directory: supplementDirectory,
+      directory: runtimeDirectory,
       fileScope: target.fileScope,
       fileName: target.fileName,
       maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,

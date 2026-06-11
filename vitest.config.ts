@@ -25,6 +25,7 @@ export default defineConfig({
             'src/renderer/src/workspace/galleryModel.test.ts',
             'src/renderer/src/workspace/noteEditorModel.test.ts',
             'src/renderer/src/workspace/noteMarkdownMode.test.ts',
+            'src/renderer/src/workspace/recording/recordingCaptureModel.test.ts',
             'src/renderer/src/workspace/recording/recordingTimeline.test.ts',
             'src/renderer/src/workspace/recordingMachine.test.ts',
             'src/renderer/src/workspace/segmentDeleteProjection.test.ts',
