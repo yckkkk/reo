@@ -188,7 +188,10 @@ export function registerAppShellProtocolWithOptions({
     const resolved = await resolveArtifactProtocolRequest(
       request.url,
       resolveArtifactRoot ?? denyArtifactRoot,
-      { vendorRoot: getArtifactVendorRootPath() }
+      {
+        homeComponentAppDataRootPath: app.getPath('userData'),
+        vendorRoot: getArtifactVendorRootPath(),
+      }
     );
     if (!resolved.ok) {
       return new Response('Not found', { status: 404 });

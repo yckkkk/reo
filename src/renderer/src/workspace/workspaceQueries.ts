@@ -2,6 +2,7 @@ import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import {
   listMemorySpaces,
   readRecentExpressions,
+  readHomeComponents,
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
@@ -27,6 +28,8 @@ import {
   type WorkspaceSystemDraftProjection,
   type WorkspaceRecentExpressionItem,
   type WorkspaceRecentExpressionSkipped,
+  type WorkspaceHomeComponent,
+  type WorkspaceHomeComponentShellState,
 } from './workspaceApi';
 import type { WorkspaceContentKind } from '../../../workspace-contract/workspace-contract';
 import { workspaceErrorDisplayMessage } from './workspaceErrorMessages';
@@ -1020,6 +1023,33 @@ export function recentExpressionsQueryOptions({
 
       if (!result.ok) {
         throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载近期表达。'));
+      }
+
+      return result.value;
+    },
+    retry: false,
+    staleTime: 30_000,
+  });
+}
+
+export function homeComponentsQueryRootKey() {
+  return ['workspace', 'home-components'] as const;
+}
+
+export function homeComponentsQueryOptions({
+  enabled = true,
+}: { readonly enabled?: boolean } = {}) {
+  return queryOptions({
+    enabled,
+    queryKey: homeComponentsQueryRootKey(),
+    queryFn: async (): Promise<{
+      readonly components: readonly WorkspaceHomeComponent[];
+      readonly shellState: WorkspaceHomeComponentShellState;
+    }> => {
+      const result = await readHomeComponents();
+
+      if (!result.ok) {
+        throw new Error(workspaceErrorDisplayMessage(result.error, '无法加载主页组件。'));
       }
 
       return result.value;

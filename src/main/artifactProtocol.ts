@@ -15,6 +15,7 @@ import {
   resolveFinalizedArtifactSegmentDirectoryFromManifest,
   resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest,
 } from './memoryFiles.js';
+import { resolveHomeComponentDirectoryFromFileTruth } from './homeComponents.js';
 import { resolveWorkspaceWidgetDirectoryFromFileTruth } from './workspaceWidgets.js';
 import { openExistingWorkspaceFileInDirectory } from './workspaceDirectoryTransactions.js';
 
@@ -35,6 +36,7 @@ export type ArtifactRootResolver = (workspaceId: string) => ArtifactRootResoluti
 export interface ArtifactProtocolOptions {
   readonly maxAssetBytes?: number | undefined;
   readonly maxEntryBytes?: number | undefined;
+  readonly homeComponentAppDataRootPath?: string | undefined;
   readonly vendorRoot?: string | undefined;
 }
 
@@ -133,6 +135,7 @@ export async function resolveArtifactProtocolRequest(
   {
     maxAssetBytes = MAX_ARTIFACT_ASSET_BYTES,
     maxEntryBytes = MAX_ARTIFACT_ENTRY_BYTES,
+    homeComponentAppDataRootPath,
     vendorRoot,
   }: ArtifactProtocolOptions = {}
 ): Promise<ArtifactProtocolResolution> {
@@ -157,6 +160,27 @@ export async function resolveArtifactProtocolRequest(
       fileName: target.fileName,
       maxBytes: maxAssetBytes,
     });
+  }
+
+  if (target.kind === 'home-component') {
+    if (!homeComponentAppDataRootPath) {
+      return { ok: false };
+    }
+    try {
+      const componentDirectory = await resolveHomeComponentDirectoryFromFileTruth({
+        appDataRootPath: homeComponentAppDataRootPath,
+        componentId: target.componentId,
+      });
+      return readArtifactFile({
+        cacheControl: ARTIFACT_PROTOCOL_CACHE_CONTROL,
+        directory: componentDirectory,
+        fileScope: target.fileScope,
+        fileName: target.fileName,
+        maxBytes: target.entry ? maxEntryBytes : maxAssetBytes,
+      });
+    } catch {
+      return { ok: false };
+    }
   }
 
   const root = resolveArtifactRoot(target.workspaceId);

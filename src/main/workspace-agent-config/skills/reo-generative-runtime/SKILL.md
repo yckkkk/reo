@@ -1,11 +1,11 @@
 ---
 name: reo-generative-runtime
-description: Shared Reo generative runtime skill for building small local Web app bundles used by works and workspace rail widgets. Use for entry.html/runtime.json/state.json/assets, widget.md, window.reo bridge, state, templates, network, scaffold and validation.
+description: Shared Reo generative runtime skill for building small local Web app bundles used by works, workspace rail widgets and home components. Use for entry.html/runtime.json/state.json/assets, widget.md, component.md, window.reo bridge, state, templates, network, scaffold and validation.
 ---
 
 # Reo Generative Runtime
 
-Use this skill whenever you create or update a Reo runtime object. A runtime object is a small local Web app bundle owned by the user. Works and workspace rail widgets are current consumers of the same runtime contract.
+Use this skill whenever you create or update a Reo runtime object. A runtime object is a small local Web app bundle owned by the user. Works, workspace rail widgets and home components are current consumers of the same runtime contract.
 
 ## Runtime Bundle
 
@@ -18,6 +18,8 @@ A valid runtime bundle lives beside the object Markdown file and uses four stabl
 
 For workspace rail widgets, the object directory is `widgets/<widget-directory>/`. The object Markdown file is `widget.md`; its frontmatter must contain only stable widget contract fields such as `id`, `title`, `kind: widget`, `format: html` and `mount: workspace-rail`. Do not add `workspaceId` or raw paths to `widget.md`.
 
+For home components, the app-level object directory is `home-components/<component-directory>/`. The object Markdown file is `component.md`; its frontmatter must contain `id`, `title`, `kind: home-component`, `format: html` and `mount: home`. Do not add `workspaceId` or raw paths to `component.md`.
+
 Read `references/bundle-contract.md` before writing files.
 
 ## State
@@ -28,7 +30,7 @@ Read `references/state-and-storage.md` for store naming, versioning and merge ru
 
 ## Bridge
 
-To use Reo data, state, media, UI, mutation or agent prompt actions, explicitly load `reo-render://vendor/reo-render/bridge.js` from `entry.html`. This provides `window.reo` inside the iframe. Do not invent any other host bridge. If a runtime needs playable Reo audio that already exists, call `window.reo.media.readPlaybackAudio({ memoryId, segmentId, supplementId?, kind })`; the work or widget owns the `<audio>` element, Blob URL cleanup, UI state and user-facing behavior. Memory summaries expose `memoryId`, not `id`; when iterating `workspace.memories`, use `const memoryId = memory.memoryId` before calling `selectMemory`, `selectObject` or `readMemoryDetail`. Workspace rail widgets may call `window.reo.ui.selectMemory({ memoryId })` to switch the main content Memory, or `window.reo.ui.selectObject({ memoryId, segmentId?, supplementId? })` after reading Memory detail to focus an active Segment or SegmentSupplement; this does not switch away from the widget tab.
+To use Reo data, state, media, UI, mutation or agent prompt actions, explicitly load `reo-render://vendor/reo-render/bridge.js` from `entry.html`. This provides `window.reo` inside the iframe. Do not invent any other host bridge. If a runtime needs playable Reo audio that already exists, call `window.reo.media.readPlaybackAudio({ workspaceId?, memoryId, segmentId, supplementId?, kind })`; the runtime owns the `<audio>` element, Blob URL cleanup, UI state and user-facing behavior. Memory summaries expose `memoryId`, not `id`; when iterating `workspace.memories`, use `const memoryId = memory.memoryId` before calling `selectMemory`, `selectObject` or `readMemoryDetail`. Workspace rail widgets may call `window.reo.ui.selectMemory({ memoryId })` to switch the main content Memory, or `window.reo.ui.selectObject({ memoryId, segmentId?, supplementId? })` after reading Memory detail to focus an active Segment or SegmentSupplement; this does not switch away from the widget tab. Home components may use `workspaceId` from `workspace.memorySpaces` or `workspace.recentExpressions` with `readMemoryDetail`, `readPlaybackAudio`, `selectMemory` and `selectObject`.
 
 Read `references/bridge-api.md` before using `window.reo`.
 

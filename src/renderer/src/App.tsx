@@ -44,7 +44,10 @@ import { PermissionSettingsPanel } from './settings/PermissionSettingsPanel';
 import { VoiceSettingsPanel } from './settings/VoiceSettingsPanel';
 import { voiceSettingsQueryOptions } from './settings/voiceSettingsQueries';
 import { LoadedWorkspaceFrame } from './workspace/LoadedWorkspaceFrame';
-import type { ArtifactRuntimeObjectSelectionTarget } from './workspace/artifactRuntimeBridge';
+import type {
+  ArtifactRuntimeMemorySelectionTarget,
+  ArtifactRuntimeObjectSelectionTarget,
+} from './workspace/artifactRuntimeBridge';
 import type {
   SavedSegmentSupplementTranscriptContent,
   SegmentSpeechSynthesisTarget,
@@ -99,6 +102,7 @@ import {
 } from './workspace/WorkspaceStarterHome';
 import { WorkspaceTitlebar } from './workspace/WorkspaceTitlebar';
 import { MEMORY_RAIL_TAB, type WorkspaceRailTab } from './workspace/workspaceRailTabs';
+import { HOME_RECENT_EXPRESSIONS_COMPONENT_ID } from '../../workspace-contract/workspace-contract';
 import {
   memorySummaryAfterSegmentRemoval,
   memorySummaryAfterSegmentRestore,
@@ -111,7 +115,9 @@ import {
 import {
   closeWorkspace,
   copyArtifactAgentPrompt,
+  copyHomeComponentAgentPrompt,
   copyWidgetAgentPrompt,
+  deleteHomeComponent,
   createMemory,
   deleteWidget,
   deleteMemory,
@@ -126,9 +132,11 @@ import {
   moveSegment,
   moveSegmentSupplement,
   onFileTruthChanged,
+  onHomeComponentsChanged,
   openWorkspace,
   openMemorySpace,
   openSystemDraftWorkspace,
+  readHomeComponentMemoryDetail,
   readWorkspaceSnapshot,
   removeMemorySpace,
   requestAppPermission,
@@ -139,6 +147,7 @@ import {
   requestSegmentSupplementTranscriptionBackfill,
   requestSegmentTranscriptionBackfill,
   restoreDeletedMemory,
+  restoreDeletedHomeComponent,
   restoreDeletedWidget,
   restoreMemoryCover,
   restoreSegmentCover,
@@ -149,6 +158,8 @@ import {
   switchSegmentDefaultCover,
   updateMemorySpaceTitle,
   updateWidgetTabOrder,
+  updateHomeComponentTabOrder,
+  updateHomeComponentTitle,
   updateWidgetTitle,
   updateMemoryTitle,
   updateSegmentContentTitle,
@@ -162,6 +173,8 @@ import {
   type WorkspaceMemoryDetail,
   type WorkspaceMemorySummary,
   type WorkspaceWidgetProjection,
+  type WorkspaceHomeComponent,
+  type WorkspaceHomeComponentShellState,
   type WorkspaceRecentExpressionItem,
   type WorkspaceNoteSegmentContent,
   type WorkspaceNoteSegmentSupplementContent,
@@ -195,6 +208,8 @@ import {
   memoryDetailQueryKey,
   memorySpacesQueryKey,
   memorySpacesQueryOptions,
+  homeComponentsQueryOptions,
+  homeComponentsQueryRootKey,
   recentExpressionsQueryRootKey,
   recentExpressionsQueryOptions,
   seedWorkspaceHandleScopedContentQueries,
@@ -334,6 +349,12 @@ function mapRecentExpressionToHomeRow(
     title: item.title,
     type: item.contentKind,
   };
+}
+
+function createHomeRuntimeMemoryDetailRequestId(workspaceId: string, memoryId: string) {
+  return `home-runtime-memory-detail:${workspaceId}:${memoryId}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
 }
 type SegmentSupplementRestoreContext = {
   readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
@@ -656,6 +677,17 @@ function widgetListFromRuntimeMutation(
     : null;
 }
 
+function homeComponentListFromRuntimeMutation(
+  value: unknown
+): readonly WorkspaceHomeComponent[] | null {
+  return typeof value === 'object' &&
+    value !== null &&
+    'components' in value &&
+    Array.isArray((value as { readonly components?: unknown }).components)
+    ? (value as { readonly components: readonly WorkspaceHomeComponent[] }).components
+    : null;
+}
+
 function sameWorkspaceSnapshot(
   first: WorkspaceSession['snapshot'],
   second: WorkspaceSession['snapshot']
@@ -948,6 +980,10 @@ export function App() {
   const [widgetRenameTarget, setWidgetRenameTarget] = useState<WorkspaceWidgetProjection | null>(
     null
   );
+  const [homeComponentDeleteTarget, setHomeComponentDeleteTarget] =
+    useState<WorkspaceHomeComponent | null>(null);
+  const [homeComponentRenameTarget, setHomeComponentRenameTarget] =
+    useState<WorkspaceHomeComponent | null>(null);
   const [segmentDeleteTarget, setSegmentDeleteTarget] = useState<SegmentDeleteTarget | null>(null);
   const [segmentContentClearTarget, setSegmentContentClearTarget] =
     useState<SegmentContentClearTarget | null>(null);
@@ -985,6 +1021,9 @@ export function App() {
     Readonly<Record<string, number>>
   >({});
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
+  const [activeHomeComponentId, setActiveHomeComponentId] = useState<string>(
+    HOME_RECENT_EXPRESSIONS_COMPONENT_ID
+  );
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>(HOME_VIEW);
   const [appMode, setAppMode] = useState<AppMode>('app');
   const [settingsBusy, setSettingsBusy] = useState(false);
@@ -1017,6 +1056,11 @@ export function App() {
   const entityMoveRequestIdRef = useRef(0);
   const widgetReorderMutationIdRef = useRef(0);
   const widgetReorderStateRef = useRef<WidgetReorderState | null>(null);
+  const homeComponentTabMutationIdRef = useRef(0);
+  const homeComponentShellStateAppliedRef = useRef(false);
+  const homeComponentStoredActiveIdRef = useRef<string | null>(null);
+  const homeComponentKnownIdsRef = useRef<ReadonlySet<string>>(new Set());
+  const pendingHomeComponentDiscoveryRef = useRef(false);
   const workspaceReleaseRecordsRef = useRef<Map<string, PendingWorkspaceRelease>>(new Map());
   const pendingPermissionRequestRef = useRef<RequestableAppPermission | null>(null);
   const recordingRecoveryActionIdRef = useRef(0);
@@ -1093,11 +1137,80 @@ export function App() {
       ...(workspaceView.name === 'library' ? { contentKinds: ['audio', 'note'] } : {}),
     })
   );
+  const homeComponentsQuery = useQuery(
+    homeComponentsQueryOptions({
+      enabled: appMode === 'app' && workspaceView.name === 'home',
+    })
+  );
   const voiceSettingsQuery = useQuery(voiceSettingsQueryOptions());
   const appPermissionStatusQuery = useQuery({
     ...appPermissionStatusQueryOptions(),
     enabled: permissionGuideTarget.kind === 'permission-guide',
   });
+
+  useEffect(() => {
+    const data = homeComponentsQuery.data;
+    if (!data) {
+      return;
+    }
+
+    const componentIds = new Set(data.components.map((component) => component.componentId));
+    const knownIds = homeComponentKnownIdsRef.current;
+    const newlyDiscoveredComponentId = pendingHomeComponentDiscoveryRef.current
+      ? data.components.filter((component) => !knownIds.has(component.componentId)).at(-1)
+          ?.componentId
+      : undefined;
+    const storedActiveId = data.shellState.lastActiveComponentId;
+    const storedActiveIdIsValid =
+      storedActiveId === HOME_RECENT_EXPRESSIONS_COMPONENT_ID ||
+      (storedActiveId !== undefined && componentIds.has(storedActiveId));
+    const fallbackActiveId =
+      storedActiveIdIsValid && storedActiveId !== undefined
+        ? storedActiveId
+        : HOME_RECENT_EXPRESSIONS_COMPONENT_ID;
+    const storedActiveIdChanged =
+      homeComponentStoredActiveIdRef.current !== null &&
+      homeComponentStoredActiveIdRef.current !== fallbackActiveId;
+
+    setActiveHomeComponentId((currentActiveId) => {
+      const currentActiveIdIsValid =
+        currentActiveId === HOME_RECENT_EXPRESSIONS_COMPONENT_ID ||
+        componentIds.has(currentActiveId);
+
+      if (!homeComponentShellStateAppliedRef.current) {
+        homeComponentShellStateAppliedRef.current = true;
+        return fallbackActiveId;
+      }
+
+      if (newlyDiscoveredComponentId) {
+        return newlyDiscoveredComponentId;
+      }
+
+      if (storedActiveIdChanged) {
+        return fallbackActiveId;
+      }
+
+      return currentActiveIdIsValid ? currentActiveId : fallbackActiveId;
+    });
+    if (newlyDiscoveredComponentId) {
+      persistHomeComponentTabState({
+        componentTabOrder: data.components.map((component) => component.componentId),
+        lastActiveComponentId: newlyDiscoveredComponentId,
+        failureTitle: '无法保存主页组件选择',
+      });
+    }
+    homeComponentStoredActiveIdRef.current = fallbackActiveId;
+    homeComponentKnownIdsRef.current = componentIds;
+    pendingHomeComponentDiscoveryRef.current = false;
+  }, [homeComponentsQuery.data, queryClient]);
+
+  useEffect(() => {
+    const unsubscribeHomeComponentsChanged = onHomeComponentsChanged(() => {
+      pendingHomeComponentDiscoveryRef.current = true;
+      void queryClient.invalidateQueries({ queryKey: homeComponentsQueryRootKey() });
+    });
+    return unsubscribeHomeComponentsChanged;
+  }, [queryClient]);
 
   useEffect(() => {
     if (
@@ -2608,6 +2721,7 @@ export function App() {
       : systemDraftWorkspaceQuery.isError || recentExpressionsQuery.isError
         ? 'error'
         : 'ready';
+  const homeComponents = homeComponentsQuery.data?.components ?? [];
   const workspaceSessionResource = workspaceSession;
 
   function handleOpenRecentExpression(row: WorkspaceStarterHomeRecentExpression) {
@@ -2617,6 +2731,270 @@ export function App() {
     }
 
     void openRecentExpression(item);
+  }
+
+  async function readHomeRuntimeMemoryDetail({
+    memoryId,
+    workspaceId,
+  }: {
+    readonly memoryId: string;
+    readonly workspaceId?: string | undefined;
+  }): Promise<WorkspaceMemoryDetail> {
+    const resolvedWorkspaceId = workspaceId ?? workspaceSessionRef.current?.workspaceId;
+    if (!resolvedWorkspaceId) {
+      throw new Error('Home component memory detail workspace is unavailable.');
+    }
+    const requestId = createHomeRuntimeMemoryDetailRequestId(resolvedWorkspaceId, memoryId);
+    const response = await readHomeComponentMemoryDetail({
+      workspaceId: resolvedWorkspaceId,
+      memoryId,
+      requestId,
+    });
+    if (!response.ok) {
+      throw new Error(workspaceErrorDisplayMessage(response.error, '记忆内容加载失败。'));
+    }
+    if (
+      response.value.requestId !== requestId ||
+      response.value.detail.workspaceId !== resolvedWorkspaceId ||
+      response.value.detail.memoryId !== memoryId
+    ) {
+      throw new Error('Stale home component memory detail response');
+    }
+    return response.value.detail;
+  }
+
+  async function openWorkspaceForHomeRuntimeTarget(
+    workspaceId: string | undefined,
+    failureCopy: string
+  ): Promise<WorkspaceSession | null> {
+    const resolvedWorkspaceId = workspaceId ?? workspaceSessionRef.current?.workspaceId;
+    if (!resolvedWorkspaceId) {
+      return null;
+    }
+    if (blockWorkspaceFlowInterruption()) {
+      return null;
+    }
+    if (!beginWorkspaceAction()) {
+      return null;
+    }
+
+    try {
+      const currentSession = workspaceSessionRef.current;
+      if (resolvedWorkspaceId === systemDraftWorkspaceQuery.data?.workspaceId) {
+        return await openSystemDraftWorkspaceAfterActionStarted(failureCopy);
+      }
+      if (currentSession?.workspaceId === resolvedWorkspaceId) {
+        handleWorkspaceCreateOpenChange(false);
+        setTopLevelWorkspaceView(WORKSPACE_STAGE_VIEW);
+        return currentSession;
+      }
+      if (!(await waitForWorkspaceReleaseBeforeOpen(resolvedWorkspaceId))) {
+        return null;
+      }
+      if (!(await retryFailedWorkspaceReleases())) {
+        return null;
+      }
+
+      const response = await openMemorySpace({ workspaceId: resolvedWorkspaceId });
+      if (!response.ok) {
+        setWorkspaceEntryError(workspaceErrorDisplayMessage(response.error, failureCopy));
+        return null;
+      }
+      await acceptWorkspaceSession(response.value);
+      return response.value;
+    } catch (error) {
+      setWorkspaceEntryError(unknownErrorDisplayMessage(error, failureCopy));
+      return null;
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function selectHomeRuntimeMemory(
+    target: ArtifactRuntimeMemorySelectionTarget
+  ): Promise<boolean> {
+    const targetSession = await openWorkspaceForHomeRuntimeTarget(
+      target.workspaceId,
+      '无法打开主页组件目标。'
+    );
+    if (!targetSession) {
+      return false;
+    }
+    setSelectedMemoryId(target.memoryId);
+    return true;
+  }
+
+  async function selectHomeRuntimeObject(
+    target: ArtifactRuntimeObjectSelectionTarget
+  ): Promise<boolean> {
+    const targetSession = await openWorkspaceForHomeRuntimeTarget(
+      target.workspaceId,
+      '无法打开主页组件目标。'
+    );
+    if (!targetSession) {
+      return false;
+    }
+    setSelectedMemoryId(target.memoryId);
+    if (target.segmentId) {
+      setSegmentFocusIntent({
+        memoryId: target.memoryId,
+        segmentId: target.segmentId,
+        ...(target.supplementId ? { supplementId: target.supplementId } : {}),
+      });
+    }
+    return true;
+  }
+
+  function copyHomeComponentPrompt(
+    payload:
+      | { readonly action: 'create-home-component' }
+      | { readonly action: 'update-home-component'; readonly componentId: string }
+  ) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    void copyHomeComponentAgentPrompt(payload)
+      .then((result) => {
+        if (!result.ok) {
+          showReoToast({
+            type: 'error',
+            title: '无法复制主页组件提示词',
+            description: workspaceErrorDisplayMessage(result.error, '无法复制主页组件提示词。'),
+          });
+          return;
+        }
+        showReoToast({
+          type: 'success',
+          title: '已复制主页组件提示词',
+          description:
+            payload.action === 'create-home-component'
+              ? '交给您的 Agent 后，它会创建 app-level 主页组件文件。'
+              : '交给您的 Agent 后，它会更新这个主页组件。',
+        });
+      })
+      .catch((error) => {
+        showReoToast({
+          type: 'error',
+          title: '无法复制主页组件提示词',
+          description: unknownErrorDisplayMessage(error, '无法复制主页组件提示词。'),
+        });
+      });
+  }
+
+  function requestCreateHomeComponent() {
+    copyHomeComponentPrompt({ action: 'create-home-component' });
+  }
+
+  function requestUpdateHomeComponent(component: WorkspaceHomeComponent) {
+    copyHomeComponentPrompt({
+      action: 'update-home-component',
+      componentId: component.componentId,
+    });
+  }
+
+  function applyHomeComponentListUpdate(
+    components: readonly WorkspaceHomeComponent[],
+    shellStateOverride?: Partial<WorkspaceHomeComponentShellState>
+  ) {
+    queryClient.setQueryData<{
+      readonly components: readonly WorkspaceHomeComponent[];
+      readonly shellState: WorkspaceHomeComponentShellState;
+    }>(homeComponentsQueryRootKey(), (current) => {
+      const componentIds = new Set(components.map((component) => component.componentId));
+      const currentShellState =
+        current?.shellState ??
+        ({
+          componentTabOrder: components.map((component) => component.componentId),
+          lastActiveComponentId: activeHomeComponentId ?? HOME_RECENT_EXPRESSIONS_COMPONENT_ID,
+        } satisfies WorkspaceHomeComponentShellState);
+      const requestedOrder =
+        shellStateOverride?.componentTabOrder ?? currentShellState.componentTabOrder;
+      const componentTabOrder = [
+        ...requestedOrder.filter((componentId) => componentIds.has(componentId)),
+        ...components
+          .map((component) => component.componentId)
+          .filter((componentId) => !requestedOrder.includes(componentId)),
+      ];
+      const requestedLastActiveComponentId =
+        shellStateOverride?.lastActiveComponentId ?? currentShellState.lastActiveComponentId;
+      const lastActiveComponentId =
+        requestedLastActiveComponentId === HOME_RECENT_EXPRESSIONS_COMPONENT_ID ||
+        componentIds.has(requestedLastActiveComponentId)
+          ? requestedLastActiveComponentId
+          : HOME_RECENT_EXPRESSIONS_COMPONENT_ID;
+      return {
+        components: [...components],
+        shellState: {
+          componentTabOrder,
+          lastActiveComponentId,
+        },
+      };
+    });
+  }
+
+  function handleHomeComponentRuntimeMutation(value: unknown): boolean {
+    const components = homeComponentListFromRuntimeMutation(value);
+    if (!components) {
+      return false;
+    }
+    applyHomeComponentListUpdate(components);
+    return true;
+  }
+
+  function persistHomeComponentTabState({
+    componentTabOrder,
+    failureTitle,
+    lastActiveComponentId,
+  }: {
+    readonly componentTabOrder: readonly string[];
+    readonly failureTitle: string;
+    readonly lastActiveComponentId: string;
+  }) {
+    const mutationId = (homeComponentTabMutationIdRef.current += 1);
+    void updateHomeComponentTabOrder({
+      componentTabOrder: [...componentTabOrder],
+      lastActiveComponentId,
+    })
+      .then((response) => {
+        if (mutationId !== homeComponentTabMutationIdRef.current) {
+          return;
+        }
+        if (!response.ok) {
+          showReoToast({
+            type: 'error',
+            title: failureTitle,
+            description: workspaceErrorDisplayMessage(response.error, `${failureTitle}。`),
+          });
+          return;
+        }
+        queryClient.setQueryData(homeComponentsQueryRootKey(), response.value);
+      })
+      .catch((error) => {
+        if (mutationId !== homeComponentTabMutationIdRef.current) {
+          return;
+        }
+        showReoToast({
+          type: 'error',
+          title: failureTitle,
+          description: unknownErrorDisplayMessage(error, `${failureTitle}。`),
+        });
+      });
+  }
+
+  function selectHomeComponentTab(componentId: string) {
+    if (componentId === activeHomeComponentId) {
+      return;
+    }
+
+    setActiveHomeComponentId(componentId);
+
+    const componentTabOrder = homeComponents.map((component) => component.componentId);
+    persistHomeComponentTabState({
+      componentTabOrder,
+      lastActiveComponentId: componentId,
+      failureTitle: '无法保存主页组件选择',
+    });
   }
 
   function closePermissionGuideAsSkipped() {
@@ -2912,7 +3290,20 @@ export function App() {
             />
           ) : (
             <WorkspaceStarterHome
+              activeHomeComponentId={activeHomeComponentId}
+              homeComponents={homeComponents}
+              homeMemorySpaces={memorySpaces}
+              homeRecentExpressionItems={recentExpressionItems}
               onOpenRecentExpression={handleOpenRecentExpression}
+              onCreateHomeComponent={requestCreateHomeComponent}
+              onDeleteHomeComponent={openHomeComponentDeleteDialog}
+              onHomeComponentRuntimeMutation={handleHomeComponentRuntimeMutation}
+              onHomeComponentSelectMemory={selectHomeRuntimeMemory}
+              onHomeComponentSelectObject={selectHomeRuntimeObject}
+              onHomeComponentTabChange={selectHomeComponentTab}
+              onRequestHomeComponentAgentUpdate={requestUpdateHomeComponent}
+              onRenameHomeComponent={openHomeComponentRenameDialog}
+              readHomeComponentMemoryDetail={readHomeRuntimeMemoryDetail}
               onStartArtifact={() => {
                 void requestStartDraftArtifactFromHome();
               }}
@@ -2925,6 +3316,7 @@ export function App() {
               recentExpressions={homeRecentExpressions}
               recentExpressionsSkippedCount={recentExpressionsQuery.data?.skipped.length ?? 0}
               recentExpressionsStatus={homeRecentExpressionsStatus}
+              workspaceSession={workspaceSession}
             />
           )}
         </AppShell>
@@ -3131,6 +3523,8 @@ export function App() {
     setMemoryRenameTarget(null);
     setWidgetDeleteTarget(null);
     setWidgetRenameTarget(null);
+    setHomeComponentDeleteTarget(null);
+    setHomeComponentRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentContentClearTarget(null);
     setSegmentContentRenameTarget(null);
@@ -4207,6 +4601,53 @@ export function App() {
     return null;
   }
 
+  async function saveRenamedHomeComponent(component: WorkspaceHomeComponent, title: string) {
+    const nextTitle = title.trim();
+    if (nextTitle === component.title.trim()) {
+      return null;
+    }
+
+    const previousComponents = homeComponents;
+    const optimisticComponents = previousComponents.map((candidate) =>
+      candidate.componentId === component.componentId
+        ? { ...candidate, title: nextTitle }
+        : candidate
+    );
+
+    setHomeComponentRenameTarget(null);
+    applyHomeComponentListUpdate(optimisticComponents);
+
+    void (async () => {
+      try {
+        const response = await updateHomeComponentTitle({
+          componentId: component.componentId,
+          title: nextTitle,
+        });
+
+        if (!response.ok) {
+          applyHomeComponentListUpdate(previousComponents);
+          showReoToast({
+            type: 'error',
+            title: '无法保存主页组件名称',
+            description: workspaceErrorDisplayMessage(response.error, '无法重命名主页组件。'),
+          });
+          return;
+        }
+
+        applyHomeComponentListUpdate(response.value.components);
+      } catch (error) {
+        applyHomeComponentListUpdate(previousComponents);
+        showReoToast({
+          type: 'error',
+          title: '无法保存主页组件名称',
+          description: unknownErrorDisplayMessage(error, '无法重命名主页组件。'),
+        });
+      }
+    })();
+
+    return null;
+  }
+
   async function saveRenamedSegment(target: SegmentRenameTarget, title: string) {
     const nextTitle = title.trim();
     if (nextTitle === target.segment.title.trim()) {
@@ -4709,6 +5150,8 @@ export function App() {
     setMemoryRenameTarget(null);
     setWidgetDeleteTarget(null);
     setWidgetRenameTarget(widget);
+    setHomeComponentDeleteTarget(null);
+    setHomeComponentRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
@@ -4727,12 +5170,66 @@ export function App() {
     setMemoryDeleteTarget(null);
     setMemoryRenameTarget(null);
     setWidgetRenameTarget(null);
+    setHomeComponentDeleteTarget(null);
+    setHomeComponentRenameTarget(null);
     setSegmentDeleteTarget(null);
     setSegmentRenameTarget(null);
     setSegmentSupplementDeleteTarget(null);
     setSegmentSupplementRenameTarget(null);
     setMemorySpaceRemoveTarget(null);
     setWidgetDeleteTarget(widget);
+  }
+
+  function openHomeComponentRenameDialog(component: WorkspaceHomeComponent) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
+    setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(null);
+    setHomeComponentDeleteTarget(null);
+    setHomeComponentRenameTarget(component);
+    setSegmentDeleteTarget(null);
+    setSegmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+  }
+
+  function openHomeComponentDeleteDialog(component: WorkspaceHomeComponent) {
+    if (blockWorkspaceFlowInterruption()) {
+      return;
+    }
+
+    setWorkspaceEntryError(null);
+    setWorkspaceCreateOpen(false);
+    setMemoryCreateIntent(null);
+    setMemoryDeleteTarget(null);
+    setMemoryRenameTarget(null);
+    setWidgetDeleteTarget(null);
+    setWidgetRenameTarget(null);
+    setHomeComponentRenameTarget(null);
+    setSegmentDeleteTarget(null);
+    setSegmentRenameTarget(null);
+    setSegmentSupplementDeleteTarget(null);
+    setSegmentSupplementRenameTarget(null);
+    setMemorySpaceRemoveTarget(null);
+    setHomeComponentDeleteTarget(component);
+  }
+
+  function handleHomeComponentDeleteOpenChange(nextOpen: boolean) {
+    if (!nextOpen && workspaceActionPending) {
+      return;
+    }
+
+    if (!nextOpen) {
+      setHomeComponentDeleteTarget(null);
+    }
   }
 
   function handleWidgetDeleteOpenChange(nextOpen: boolean) {
@@ -6637,6 +7134,90 @@ export function App() {
     }
   }
 
+  async function restoreDeletedHomeComponentFromUndo(restoreToken: string) {
+    if (!beginWorkspaceAction()) {
+      return;
+    }
+
+    try {
+      const response = await restoreDeletedHomeComponent({ restoreToken });
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: '无法恢复主页组件',
+          description: workspaceErrorDisplayMessage(response.error, '无法恢复主页组件。'),
+        });
+        return;
+      }
+
+      applyHomeComponentListUpdate(response.value.components, {
+        componentTabOrder: response.value.components.map((component) => component.componentId),
+        lastActiveComponentId: response.value.component.componentId,
+      });
+      setActiveHomeComponentId(response.value.component.componentId);
+      showReoToast({ type: 'success', title: '已恢复主页组件' });
+    } catch (error) {
+      showReoToast({
+        type: 'error',
+        title: '无法恢复主页组件',
+        description: unknownErrorDisplayMessage(error, '无法恢复主页组件。'),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
+  async function confirmDeleteHomeComponent() {
+    const target = homeComponentDeleteTarget;
+    if (!target || !beginWorkspaceAction()) {
+      return;
+    }
+
+    try {
+      const response = await deleteHomeComponent({ componentId: target.componentId });
+
+      if (!response.ok) {
+        showReoToast({
+          type: 'error',
+          title: '无法删除主页组件',
+          description: workspaceErrorDisplayMessage(response.error, '无法删除主页组件。'),
+        });
+        return;
+      }
+
+      const nextActiveComponentId =
+        activeHomeComponentId === target.componentId
+          ? HOME_RECENT_EXPRESSIONS_COMPONENT_ID
+          : activeHomeComponentId;
+      applyHomeComponentListUpdate(response.value.components, {
+        componentTabOrder: response.value.components.map((component) => component.componentId),
+        lastActiveComponentId: nextActiveComponentId ?? HOME_RECENT_EXPRESSIONS_COMPONENT_ID,
+      });
+      setHomeComponentDeleteTarget(null);
+      if (activeHomeComponentId === target.componentId) {
+        setActiveHomeComponentId(HOME_RECENT_EXPRESSIONS_COMPONENT_ID);
+      }
+      showReoToast({
+        title: '已删除主页组件',
+        description: target.title,
+        undo: {
+          onUndo: () => {
+            void restoreDeletedHomeComponentFromUndo(response.value.restoreToken);
+          },
+        },
+      });
+    } catch (error) {
+      showReoToast({
+        type: 'error',
+        title: '无法删除主页组件',
+        description: unknownErrorDisplayMessage(error, '无法删除主页组件。'),
+      });
+    } finally {
+      finishWorkspaceAction();
+    }
+  }
+
   function toggleMemoryRail() {
     setMemoryRailOpen((open) => !open);
   }
@@ -6830,6 +7411,26 @@ export function App() {
         onSave={saveRenamedWidget}
         open={widgetRenameTarget !== null}
       />
+      <MemoryTitleDialog
+        description="组件名称会写回 component.md。"
+        fieldLabel="组件名称"
+        initialTitle={homeComponentRenameTarget?.title ?? ''}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHomeComponentRenameTarget(null);
+          }
+        }}
+        onSubmitTitle={(title) =>
+          homeComponentRenameTarget
+            ? saveRenamedHomeComponent(homeComponentRenameTarget, title)
+            : Promise.resolve(null)
+        }
+        open={homeComponentRenameTarget !== null}
+        requiredMessage="请输入组件名称"
+        saveErrorTitle="无法保存主页组件名称"
+        submitLabel="保存"
+        title="重命名主页组件"
+      />
       <SegmentRenameDialog
         target={segmentRenameTarget}
         onOpenChange={(open) => {
@@ -6916,6 +7517,17 @@ export function App() {
         }}
         onOpenChange={handleWidgetDeleteOpenChange}
         open={widgetDeleteTarget !== null}
+      />
+      <WorkspaceDangerConfirmDialog
+        confirmLabel="删除组件"
+        description={`删除“${homeComponentDeleteTarget?.title ?? '这个组件'}”？Reo 会把这个主页组件移入回收区，可从提示中恢复。`}
+        disabled={workspaceActionPending}
+        onConfirm={() => {
+          void confirmDeleteHomeComponent();
+        }}
+        onOpenChange={handleHomeComponentDeleteOpenChange}
+        open={homeComponentDeleteTarget !== null}
+        title="删除主页组件"
       />
       <SegmentDeleteDialog
         disabled={workspaceActionPending}

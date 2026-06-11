@@ -15,6 +15,8 @@ import {
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
@@ -32,6 +34,7 @@ import {
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_WIDGET_CHANNEL,
+  WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
@@ -43,6 +46,7 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
+  WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
   WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
@@ -51,6 +55,7 @@ import {
   WORKSPACE_MOVE_SEGMENT_CHANNEL,
   WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
@@ -64,11 +69,13 @@ import {
   WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
   WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
@@ -79,6 +86,7 @@ import {
   WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
@@ -87,6 +95,7 @@ import {
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
@@ -113,6 +122,8 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
@@ -128,8 +139,12 @@ import {
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceChooseDirectoryResponseSchema,
+  workspaceCopyHomeComponentAbsolutePathRequestSchema,
+  workspaceCopyHomeComponentAgentPromptRequestSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
+  workspaceDeleteHomeComponentRequestSchema,
+  workspaceDeleteHomeComponentResponseSchema,
   workspaceDeleteSegmentSupplementRequestSchema,
   workspaceDeleteSegmentSupplementResponseSchema,
   workspaceDeleteSegmentRequestSchema,
@@ -150,6 +165,7 @@ import {
   workspaceFinalizeSegmentSupplementNoteDraftRequestSchema,
   workspaceFinalizeSegmentSupplementNoteDraftResponseSchema,
   workspaceFileTruthChangedEventSchema,
+  workspaceHomeComponentsChangedEventSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
   workspaceListEntityMoveTargetsRequestSchema,
@@ -165,6 +181,7 @@ import {
   workspaceMoveSegmentSupplementResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
+  workspaceOpenHomeComponentDocumentRequestSchema,
   workspaceOpenRequestSchema,
   workspaceOpenWidgetDocumentRequestSchema,
   workspaceOpenMemoryDocumentRequestSchema,
@@ -173,6 +190,9 @@ import {
   workspaceOpenMemorySpaceAgentsFileRequestSchema,
   workspaceOpenSegmentDocumentRequestSchema,
   workspaceOpenSegmentSupplementDocumentRequestSchema,
+  workspaceReadHomeComponentMemoryDetailRequestSchema,
+  workspaceReadHomeComponentsRequestSchema,
+  workspaceReadHomeComponentsResponseSchema,
   workspaceCopyArtifactAgentPromptRequestSchema,
   workspaceCopyWidgetAbsolutePathRequestSchema,
   workspaceCopyWidgetAgentPromptRequestSchema,
@@ -225,6 +245,7 @@ import {
   workspaceReadSystemDraftWorkspaceResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
+  workspaceRevealHomeComponentInFinderRequestSchema,
   workspaceRevealWidgetInFinderRequestSchema,
   workspaceRevealMemoryInFinderRequestSchema,
   workspaceRevealMemorySpaceInFinderRequestSchema,
@@ -240,6 +261,8 @@ import {
   workspaceRecordingAppendResponseSchema,
   workspaceDeleteWidgetRequestSchema,
   workspaceDeleteWidgetResponseSchema,
+  workspaceRestoreDeletedHomeComponentRequestSchema,
+  workspaceRestoreDeletedHomeComponentResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceRestoreMemoryCoverRequestSchema,
@@ -307,6 +330,10 @@ import {
   workspaceUpdateActiveMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleResponseSchema,
+  workspaceUpdateHomeComponentTabOrderRequestSchema,
+  workspaceUpdateHomeComponentTabOrderResponseSchema,
+  workspaceUpdateHomeComponentTitleRequestSchema,
+  workspaceUpdateHomeComponentTitleResponseSchema,
   workspaceUpdateWidgetTabOrderRequestSchema,
   workspaceUpdateWidgetTabOrderResponseSchema,
   workspaceUpdateWidgetTitleRequestSchema,
@@ -330,6 +357,7 @@ import {
   workspaceWriteSegmentSupplementContentResponseSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema,
+  type WorkspaceCopyHomeComponentAgentPromptRequest,
   type WorkspaceCopyArtifactAgentPromptRequest,
   type WorkspaceCopyWidgetAgentPromptRequest,
   type WorkspaceEntityActionResponse,
@@ -462,6 +490,15 @@ import {
   updateWorkspaceWidgetTabOrderFromFileTruth,
   updateWorkspaceWidgetTitleFromFileTruth,
 } from './workspaceWidgets.js';
+import {
+  deleteHomeComponentFromFileTruth,
+  readHomeComponentShellStateFromFileTruth,
+  readHomeComponentsFromFileTruth,
+  resolveHomeComponentDirectoryFromFileTruth,
+  restoreDeletedHomeComponentFromFileTruth,
+  updateHomeComponentTabOrderFromFileTruth,
+  updateHomeComponentTitleFromFileTruth,
+} from './homeComponents.js';
 import {
   clearAllMicrophoneIntents,
   clearMicrophoneIntent,
@@ -648,6 +685,7 @@ export interface HandleInitializeWorkspaceOptions extends WorkspaceIpcBaseOption
 }
 
 interface HandleWorkspaceRequestOptions {
+  readonly appDataDir?: string;
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
   readonly expectedSession: Session | object;
@@ -819,6 +857,14 @@ type HandleReadExpressionPlaybackAudioOptions = WorkspaceIpcBaseOptions & {
   readonly now?: () => string;
 };
 
+type HandleReadHomeComponentMemoryDetailOptions = HandleReadExpressionPlaybackAudioOptions;
+
+type HandleHomeComponentRequestOptions = WorkspaceIpcBaseOptions & {
+  readonly appDataDir?: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+};
+
 type HandleRemoveWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
@@ -924,6 +970,10 @@ interface HandleCopyWidgetAgentPromptOptions extends HandleWorkspaceRequestOptio
   readonly writeText?: WriteClipboardText;
 }
 
+interface HandleCopyHomeComponentAgentPromptOptions extends HandleHomeComponentRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
 interface HandleRevealMemoryInFinderOptions extends HandleWorkspaceRequestOptions {
   readonly fs?: FsProbe;
   readonly resolver?: ResolveMemoryPaths;
@@ -958,6 +1008,18 @@ interface HandleOpenSegmentSupplementDocumentOptions extends HandleWorkspaceRequ
   readonly fs?: FsProbe;
   readonly resolver?: ResolveSegmentSupplementPaths;
   readonly openPath?: OpenPath;
+}
+
+interface HandleRevealHomeComponentInFinderOptions extends HandleHomeComponentRequestOptions {
+  readonly showItemInFolder?: ShowItemInFolder;
+}
+
+interface HandleOpenHomeComponentDocumentOptions extends HandleHomeComponentRequestOptions {
+  readonly openPath?: OpenPath;
+}
+
+interface HandleCopyHomeComponentAbsolutePathOptions extends HandleHomeComponentRequestOptions {
+  readonly writeText?: WriteClipboardText;
 }
 
 interface HandleRevealWidgetInFinderOptions extends HandleWorkspaceRequestOptions {
@@ -1414,6 +1476,71 @@ export async function handleReadRecentExpressionsForTest(
   options: HandleReadRecentExpressionsOptions
 ): Promise<z.infer<typeof workspaceReadRecentExpressionsResponseSchema>> {
   return handleReadRecentExpressionsCore(options);
+}
+
+async function handleReadHomeComponentMemoryDetailCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleReadHomeComponentMemoryDetailOptions): Promise<
+  z.infer<typeof workspaceReadMemoryDetailResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadHomeComponentMemoryDetailRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readHomeComponentMemoryDetail request is invalid'
+    );
+  }
+
+  const root = await resolveExpressionPlaybackRootPath({
+    appDataDir,
+    memorySpaceRegistry,
+    now,
+    workspaceId: request.data.workspaceId,
+  });
+  if (!root.ok) {
+    return root;
+  }
+
+  const result = await readMemoryDetailFromFileTruth({
+    rootPath: root.rootPath,
+    workspaceId: request.data.workspaceId,
+    memoryId: request.data.memoryId,
+  });
+  return workspaceReadMemoryDetailResponseSchema.parse(
+    result.ok
+      ? {
+          ok: true,
+          value: {
+            requestId: request.data.requestId,
+            detail: result.value,
+          },
+        }
+      : result
+  );
+}
+
+export async function handleReadHomeComponentMemoryDetailForTest(
+  options: HandleReadHomeComponentMemoryDetailOptions
+): Promise<z.infer<typeof workspaceReadMemoryDetailResponseSchema>> {
+  return handleReadHomeComponentMemoryDetailCore(options);
 }
 
 async function resolveExpressionPlaybackRootPath({
@@ -1899,6 +2026,12 @@ export async function handleCopyWidgetAgentPromptForTest(
 function artifactRuntimeTargetFromRequest(
   request: z.infer<typeof workspaceReadArtifactRuntimeStateRequestSchema>
 ): ArtifactRuntimeTarget {
+  if (request.targetType === 'home-component') {
+    return {
+      targetType: 'home-component',
+      componentId: request.componentId,
+    };
+  }
   if (request.targetType === 'widget') {
     return {
       targetType: 'widget',
@@ -1933,59 +2066,131 @@ function artifactRuntimeWorkspaceMismatchError(): WorkspaceErrorEnvelope {
 function handleReadArtifactRuntimeStateCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadArtifactRuntimeStateResponseSchema>> {
-  return withWorkspaceHandleRequest({
-    ...options,
+  const trusted = validateWorkspaceSender({
+    event: options.event,
     channel: WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceReadArtifactRuntimeStateRequestSchema,
-    invalidMessage: 'readArtifactRuntimeState request is invalid',
-    run: (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return artifactRuntimeWorkspaceMismatchError();
-        }
-        const result = await readArtifactRuntimeState({
-          rootPath: handle.canonicalRoot,
-          target: artifactRuntimeTargetFromRequest(request),
-        });
-        return workspaceReadArtifactRuntimeStateResponseSchema.parse(
-          result.ok
-            ? { ok: true, value: { requestId: request.requestId, ...result.value } }
-            : result
-        );
-      }),
+    expectedSession: options.expectedSession,
+    expectedSessionKey: options.expectedSessionKey,
+    isTrustedUrl: options.isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return Promise.resolve(trusted);
+  }
+  const parsed = workspaceReadArtifactRuntimeStateRequestSchema.safeParse(options.input);
+  if (!parsed.success) {
+    return Promise.resolve(
+      workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'readArtifactRuntimeState request is invalid')
+    );
+  }
+  const request = parsed.data;
+  if (request.targetType === 'home-component') {
+    const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+    if (!appRoot.ok) {
+      return Promise.resolve(appRoot);
+    }
+    return readArtifactRuntimeState({
+      rootPath: appRoot.appDataRootPath,
+      target: artifactRuntimeTargetFromRequest(request),
+    }).then((result) =>
+      workspaceReadArtifactRuntimeStateResponseSchema.parse(
+        result.ok ? { ok: true, value: { requestId: request.requestId, ...result.value } } : result
+      )
+    );
+  }
+
+  const handleStore = options.handleStore ?? createWorkspaceHandleStore();
+  const required = handleStore.requireHandle({
+    workspaceHandle: request.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return Promise.resolve(required);
+  }
+  return withUsableWorkspaceHandle(required.handle.assertUsable, async () => {
+    if (request.workspaceId !== required.handle.workspaceId) {
+      return artifactRuntimeWorkspaceMismatchError();
+    }
+    const result = await readArtifactRuntimeState({
+      rootPath: required.handle.canonicalRoot,
+      target: artifactRuntimeTargetFromRequest(request),
+    });
+    return workspaceReadArtifactRuntimeStateResponseSchema.parse(
+      result.ok ? { ok: true, value: { requestId: request.requestId, ...result.value } } : result
+    );
   });
 }
 
 function handleWriteArtifactRuntimeStateCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceWriteArtifactRuntimeStateResponseSchema>> {
-  return withWorkspaceHandleRequest({
-    ...options,
+  const trusted = validateWorkspaceSender({
+    event: options.event,
     channel: WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceWriteArtifactRuntimeStateRequestSchema,
-    invalidMessage: 'writeArtifactRuntimeState request is invalid',
-    run: (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return artifactRuntimeWorkspaceMismatchError();
-        }
-        const result = await writeArtifactRuntimeState({
-          rootPath: handle.canonicalRoot,
-          target: artifactRuntimeTargetFromRequest(request),
-          baselineVersion: request.baselineVersion,
-          state: request.state,
-        });
-        return workspaceWriteArtifactRuntimeStateResponseSchema.parse(
-          result.ok
-            ? {
-                ok: true,
-                value: { requestId: request.requestId, ...result.value },
-              }
-            : result
-        );
-      }),
+    expectedSession: options.expectedSession,
+    expectedSessionKey: options.expectedSessionKey,
+    isTrustedUrl: options.isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return Promise.resolve(trusted);
+  }
+  const parsed = workspaceWriteArtifactRuntimeStateRequestSchema.safeParse(options.input);
+  if (!parsed.success) {
+    return Promise.resolve(
+      workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'writeArtifactRuntimeState request is invalid'
+      )
+    );
+  }
+  const request = parsed.data;
+  if (request.targetType === 'home-component') {
+    const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+    if (!appRoot.ok) {
+      return Promise.resolve(appRoot);
+    }
+    return writeArtifactRuntimeState({
+      rootPath: appRoot.appDataRootPath,
+      target: artifactRuntimeTargetFromRequest(request),
+      baselineVersion: request.baselineVersion,
+      state: request.state,
+    }).then((result) =>
+      workspaceWriteArtifactRuntimeStateResponseSchema.parse(
+        result.ok
+          ? {
+              ok: true,
+              value: { requestId: request.requestId, ...result.value },
+            }
+          : result
+      )
+    );
+  }
+
+  const handleStore = options.handleStore ?? createWorkspaceHandleStore();
+  const required = handleStore.requireHandle({
+    workspaceHandle: request.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return Promise.resolve(required);
+  }
+  return withUsableWorkspaceHandle(required.handle.assertUsable, async () => {
+    if (request.workspaceId !== required.handle.workspaceId) {
+      return artifactRuntimeWorkspaceMismatchError();
+    }
+    const result = await writeArtifactRuntimeState({
+      rootPath: required.handle.canonicalRoot,
+      target: artifactRuntimeTargetFromRequest(request),
+      baselineVersion: request.baselineVersion,
+      state: request.state,
+    });
+    return workspaceWriteArtifactRuntimeStateResponseSchema.parse(
+      result.ok
+        ? {
+            ok: true,
+            value: { requestId: request.requestId, ...result.value },
+          }
+        : result
+    );
   });
 }
 
@@ -3174,6 +3379,18 @@ function sendFileTruthChangedEvent(
   });
 }
 
+function sendHomeComponentsChangedEvent(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceHomeComponentsChangedEventSchema>
+): void {
+  sendWorkspaceRendererEvent({
+    channel: WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL,
+    event,
+    payload,
+    schema: workspaceHomeComponentsChangedEventSchema,
+  });
+}
+
 export function sendRecordingTranscriptionEventForTest(
   event: TrustedSenderEventAdapter,
   payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
@@ -3186,6 +3403,13 @@ export function sendFileTruthChangedEventForTest(
   payload: z.infer<typeof workspaceFileTruthChangedEventSchema>
 ): void {
   sendFileTruthChangedEvent(event, payload);
+}
+
+export function sendHomeComponentsChangedEventForTest(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceHomeComponentsChangedEventSchema>
+): void {
+  sendHomeComponentsChangedEvent(event, payload);
 }
 
 async function releaseWorkspaceLockAfterFailure(
@@ -4434,6 +4658,7 @@ type EntityActionMissingPathCode =
   | 'ERR_WORKSPACE_SEGMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_WIDGET_NOT_FOUND'
+  | 'ERR_HOME_COMPONENT_NOT_FOUND'
   | 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING'
   | 'ERR_ENTITY_DOCUMENT_MISSING';
 
@@ -4716,6 +4941,328 @@ async function resolveWidgetPaths({
     };
   } catch {
     return { ok: false, code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND' };
+  }
+}
+
+function homeComponentDocumentPath(directoryAbsolute: string): string {
+  return path.join(directoryAbsolute, 'component.md');
+}
+
+function resolveHomeComponentAppDataRoot({
+  appDataDir,
+}: {
+  readonly appDataDir?: string | undefined;
+}): { readonly ok: true; readonly appDataRootPath: string } | WorkspaceErrorEnvelope {
+  const resolvedAppDataDir = appDataDir ?? defaultAppDataDir();
+  if (typeof resolvedAppDataDir !== 'string') {
+    return resolvedAppDataDir;
+  }
+  return { ok: true, appDataRootPath: resolvedAppDataDir };
+}
+
+async function resolveHomeComponentPaths({
+  appDataRootPath,
+  componentId,
+}: {
+  readonly appDataRootPath: string;
+  readonly componentId: string;
+}): Promise<ResolverResult<WidgetPaths>> {
+  try {
+    const directoryAbsolute = await resolveHomeComponentDirectoryFromFileTruth({
+      appDataRootPath,
+      componentId,
+    });
+    return {
+      ok: true,
+      value: {
+        directoryAbsolute,
+        documentAbsolute: homeComponentDocumentPath(directoryAbsolute),
+      },
+    };
+  } catch {
+    return { ok: false, code: 'ERR_HOME_COMPONENT_NOT_FOUND' };
+  }
+}
+
+function validateHomeComponentSender<Schema extends z.ZodType>({
+  channel,
+  event,
+  expectedSession,
+  expectedSessionKey,
+  input,
+  invalidMessage,
+  isTrustedUrl,
+  schema,
+}: HandleHomeComponentRequestOptions & {
+  readonly channel: string;
+  readonly invalidMessage: string;
+  readonly schema: Schema;
+}): { readonly ok: true; readonly data: z.infer<Schema> } | WorkspaceErrorEnvelope {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+  const request = schema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', invalidMessage);
+  }
+  return { ok: true, data: request.data };
+}
+
+async function resolveHomeComponentPathsForRequest({
+  appDataDir,
+  componentId,
+}: {
+  readonly appDataDir?: string | undefined;
+  readonly componentId: string;
+}): Promise<{ readonly ok: true; readonly paths: WidgetPaths } | WorkspaceErrorEnvelope> {
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  const resolved = await resolveHomeComponentPaths({
+    appDataRootPath: appRoot.appDataRootPath,
+    componentId,
+  });
+  if (!resolved.ok) {
+    return workspaceError(resolved.code, 'Home component path could not be resolved');
+  }
+  return { ok: true, paths: resolved.value };
+}
+
+async function handleReadHomeComponentsCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+}: HandleHomeComponentRequestOptions): Promise<
+  z.infer<typeof workspaceReadHomeComponentsResponseSchema>
+> {
+  const request = validateHomeComponentSender({
+    channel: WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
+    event,
+    input,
+    expectedSession,
+    expectedSessionKey,
+    invalidMessage: 'readHomeComponents accepts no payload',
+    isTrustedUrl,
+    schema: workspaceReadHomeComponentsRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const shellState = readHomeComponentShellStateFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+    });
+    const result = await readHomeComponentsFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentTabOrder: shellState.componentTabOrder,
+    });
+    return workspaceReadHomeComponentsResponseSchema.parse({
+      ok: true,
+      value: { components: result.components, shellState },
+    });
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Home components could not be read',
+      'none-written'
+    );
+  }
+}
+
+async function handleRevealHomeComponentInFinderCore({
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealHomeComponentInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
+    invalidMessage: 'revealHomeComponentInFinder request is invalid',
+    schema: workspaceRevealHomeComponentInFinderRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const resolved = await resolveHomeComponentPathsForRequest({
+    appDataDir: options.appDataDir,
+    componentId: request.data.componentId,
+  });
+  if (!resolved.ok) {
+    return resolved;
+  }
+  return revealEntityDirectory({
+    paths: resolved.paths,
+    fs: nodeFsProbe,
+    missingCode: 'ERR_HOME_COMPONENT_NOT_FOUND',
+    missingMessage: 'Home component path is missing',
+    unsafeMessage: 'Home component path is unsafe',
+    showItemInFolder,
+    failureMessage: 'Home component could not be revealed',
+  });
+}
+
+async function handleOpenHomeComponentDocumentCore({
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenHomeComponentDocumentOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
+    invalidMessage: 'openHomeComponentDocument request is invalid',
+    schema: workspaceOpenHomeComponentDocumentRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const resolved = await resolveHomeComponentPathsForRequest({
+    appDataDir: options.appDataDir,
+    componentId: request.data.componentId,
+  });
+  if (!resolved.ok) {
+    return resolved;
+  }
+  return openEntityDocument({
+    paths: resolved.paths,
+    fs: nodeFsProbe,
+    missingCode: 'ERR_ENTITY_DOCUMENT_MISSING',
+    missingMessage: 'Home component document is missing',
+    unsafeMessage: 'Home component document path is unsafe',
+    openPath,
+    failureMessage: 'Home component document could not be opened',
+  });
+}
+
+async function handleCopyHomeComponentAbsolutePathCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyHomeComponentAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+    invalidMessage: 'copyHomeComponentAbsolutePath request is invalid',
+    schema: workspaceCopyHomeComponentAbsolutePathRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const resolved = await resolveHomeComponentPathsForRequest({
+    appDataDir: options.appDataDir,
+    componentId: request.data.componentId,
+  });
+  if (!resolved.ok) {
+    return resolved;
+  }
+  return copyEntityAbsoluteDirectoryPath({
+    paths: resolved.paths,
+    fs: nodeFsProbe,
+    missingCode: 'ERR_HOME_COMPONENT_NOT_FOUND',
+    missingMessage: 'Home component path is missing',
+    unsafeMessage: 'Home component path is unsafe',
+    writeText,
+    failureMessage: 'Home component path could not be copied',
+  });
+}
+
+function buildHomeComponentAgentPrompt({
+  appDataRootPath,
+  request,
+  targetDirectory,
+}: {
+  readonly appDataRootPath: string;
+  readonly request: WorkspaceCopyHomeComponentAgentPromptRequest;
+  readonly targetDirectory?: string | undefined;
+}): string {
+  const homeComponentsRoot = path.join(appDataRootPath, 'home-components');
+  const common = [
+    '请创建或更新 Reo 主页组件。主页组件是 app-level 组件，不属于任何记忆空间；不要编辑或移动记忆空间文件。',
+    '',
+    '文件真源：',
+    `- home components root: \`${homeComponentsRoot}\``,
+    '- 每个组件目录内必须包含 `component.md`、`entry.html`，可选 `runtime.json`、`state.json` 和 `assets/`。',
+    '- `component.md` frontmatter 必须包含 `id: hcmp_...`、`title`、`kind: home-component`、`format: html`、`mount: home`。',
+    '- 组件持久状态通过 `window.reo.state` 写入同目录 `state.json`。',
+    '- 不要创建空目录或占位组件；一次性写入可运行 bundle。',
+  ];
+  if (request.action === 'create-home-component') {
+    return [
+      '# 创建 Reo 主页组件',
+      '',
+      ...common,
+      '',
+      '创建要求：',
+      '- 在 home components root 下新建一个组件目录，目录名使用新的 `hcmp_...` id 和可读标题。',
+    ].join('\n');
+  }
+  return [
+    '# 更新 Reo 主页组件',
+    '',
+    ...common,
+    '',
+    '目标组件：',
+    `- componentId: ${request.componentId}`,
+    `- component directory: \`${targetDirectory ?? ''}\``,
+    '',
+    '更新要求：',
+    '- 保留现有组件身份和目录；如果需要改名，只更新 `component.md` 的 title。',
+  ].join('\n');
+}
+
+async function handleCopyHomeComponentAgentPromptCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyHomeComponentAgentPromptOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
+    invalidMessage: 'copyHomeComponentAgentPrompt request is invalid',
+    schema: workspaceCopyHomeComponentAgentPromptRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  let targetDirectory: string | undefined;
+  if (request.data.action === 'update-home-component') {
+    const resolved = await resolveHomeComponentPaths({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentId: request.data.componentId,
+    });
+    if (!resolved.ok) {
+      return workspaceError(resolved.code, 'Home component prompt target could not be resolved');
+    }
+    targetDirectory = resolved.value.directoryAbsolute;
+  }
+  try {
+    writeText(
+      buildHomeComponentAgentPrompt({
+        appDataRootPath: appRoot.appDataRootPath,
+        request: request.data as WorkspaceCopyHomeComponentAgentPromptRequest,
+        targetDirectory,
+      })
+    );
+    return workspaceEntityActionResponseSchema.parse({ ok: true });
+  } catch {
+    return workspaceError(
+      'ERR_CLIPBOARD_WRITE_FAILED',
+      'Home component prompt could not be copied'
+    );
   }
 }
 
@@ -5960,6 +6507,69 @@ export async function handleUpdateWidgetTabOrderForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceUpdateWidgetTabOrderResponseSchema>> {
   return handleUpdateWidgetTabOrderCore(options);
+}
+
+function homeComponentMutationError(message: string, error: unknown): WorkspaceErrorEnvelope {
+  if (error instanceof Error && /not found/i.test(error.message)) {
+    return workspaceError('ERR_HOME_COMPONENT_NOT_FOUND', 'Home component was not found');
+  }
+  return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', message, 'unknown');
+}
+
+async function handleUpdateHomeComponentTitleCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceUpdateHomeComponentTitleResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
+    invalidMessage: 'updateHomeComponentTitle request is invalid',
+    schema: workspaceUpdateHomeComponentTitleRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await updateHomeComponentTitleFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentId: request.data.componentId,
+      title: request.data.title,
+    });
+    return workspaceUpdateHomeComponentTitleResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component title could not be updated', error);
+  }
+}
+
+async function handleUpdateHomeComponentTabOrderCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceUpdateHomeComponentTabOrderResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+    invalidMessage: 'updateHomeComponentTabOrder request is invalid',
+    schema: workspaceUpdateHomeComponentTabOrderRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await updateHomeComponentTabOrderFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentTabOrder: request.data.componentTabOrder,
+      lastActiveComponentId: request.data.lastActiveComponentId,
+    });
+    return workspaceUpdateHomeComponentTabOrderResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component tab order could not be updated', error);
+  }
 }
 
 function handleUpdateSegmentSupplementTitleCore(
@@ -7230,6 +7840,60 @@ export async function handleRestoreDeletedWidgetForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceRestoreDeletedWidgetResponseSchema>> {
   return handleRestoreDeletedWidgetCore(options);
+}
+
+async function handleDeleteHomeComponentCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceDeleteHomeComponentResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
+    invalidMessage: 'deleteHomeComponent request is invalid',
+    schema: workspaceDeleteHomeComponentRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await deleteHomeComponentFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentId: request.data.componentId,
+    });
+    return workspaceDeleteHomeComponentResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component could not be deleted', error);
+  }
+}
+
+async function handleRestoreDeletedHomeComponentCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedHomeComponentResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
+    invalidMessage: 'restoreDeletedHomeComponent request is invalid',
+    schema: workspaceRestoreDeletedHomeComponentRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await restoreDeletedHomeComponentFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      restoreToken: request.data.restoreToken,
+    });
+    return workspaceRestoreDeletedHomeComponentResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component could not be restored', error);
+  }
 }
 
 function handleCreateRecordingDraftCore({
@@ -9487,6 +10151,17 @@ export function registerWorkspaceIpc({
     }
     return response;
   }
+
+  function watchHomeComponents(event: TrustedSenderEventAdapter): void {
+    const appRoot = resolveHomeComponentAppDataRoot({ appDataDir });
+    if (!appRoot.ok) {
+      return;
+    }
+    fileTruthWatcher.watchHomeComponents({
+      appDataRootPath: appRoot.appDataRootPath,
+      sendEvent: (payload) => sendHomeComponentsChangedEvent(event, payload),
+    });
+  }
   registerWorkspaceIpcHandler(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
     handleChooseWorkspaceDirectory({
       event,
@@ -9535,6 +10210,32 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, (event, input) =>
     handleReadRecentExpressions({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_HOME_COMPONENTS_CHANNEL, (event, input) =>
+    handleReadHomeComponentsCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    }).then((response) => {
+      if (response.ok) {
+        watchHomeComponents(event);
+      }
+      return response;
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL, (event, input) =>
+    handleReadHomeComponentMemoryDetailCore({
       ...(appDataDir ? { appDataDir } : {}),
       event,
       input,
@@ -9746,6 +10447,7 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
     handleReadArtifactRuntimeStateCore({
+      ...(appDataDir ? { appDataDir } : {}),
       event,
       input,
       expectedSession,
@@ -9756,6 +10458,7 @@ export function registerWorkspaceIpc({
   );
   registerWorkspaceIpcHandler(WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
     handleWriteArtifactRuntimeStateCore({
+      ...(appDataDir ? { appDataDir } : {}),
       event,
       input,
       expectedSession,
@@ -9868,6 +10571,46 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL, (event, input) =>
+    handleRevealHomeComponentInFinderCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL, (event, input) =>
+    handleOpenHomeComponentDocumentCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL, (event, input) =>
+    handleCopyHomeComponentAbsolutePathCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL, (event, input) =>
+    handleCopyHomeComponentAgentPromptCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
@@ -10226,6 +10969,26 @@ export function registerWorkspaceIpc({
       handleStore,
     })
   );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL, (event, input) =>
+    handleUpdateHomeComponentTitleCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL, (event, input) =>
+    handleUpdateHomeComponentTabOrderCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
   registerWorkspaceIpcHandler(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
     handleCreateMemory({
       event,
@@ -10412,6 +11175,26 @@ export function registerWorkspaceIpc({
       expectedSessionKey,
       isTrustedUrl,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL, (event, input) =>
+    handleDeleteHomeComponentCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL, (event, input) =>
+    handleRestoreDeletedHomeComponentCore({
+      ...(appDataDir ? { appDataDir } : {}),
+      event,
+      input,
+      expectedSession,
+      expectedSessionKey,
+      isTrustedUrl,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>

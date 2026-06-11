@@ -16,6 +16,7 @@ import {
   artifactSegmentRuntimeHost,
   artifactSegmentRuntimeUrl,
   artifactSupplementRuntimeUrl,
+  homeComponentRuntimeUrl,
 } from '../../src/workspace-contract/artifact-runtime-url.js';
 
 function sha256Text(text: string): string {
@@ -351,6 +352,59 @@ test('artifact runtime URLs keep per-object hosts ASCII-safe without losing obje
     segmentId: 'seg_Mixed_作品',
     supplementId: 'sup_Mixed_补充',
   });
+});
+
+test('home component runtime URLs resolve app-level runtime bundle files without a workspace id', async () => {
+  const appDataRootPath = await workspaceRoot();
+  const componentDirectory = path.join(
+    appDataRootPath,
+    'home-components',
+    'hcmp_protocol--Protocol Panel'
+  );
+  const html = '<!doctype html><html><body>Home panel</body></html>\n';
+  await mkdir(path.join(componentDirectory, 'assets'), { recursive: true });
+  await writeFile(
+    path.join(componentDirectory, 'component.md'),
+    '---\nid: hcmp_protocol\ntitle: Protocol Panel\nkind: home-component\nformat: html\nmount: home\n---\n# Protocol Panel\n'
+  );
+  await writeFile(path.join(componentDirectory, 'entry.html'), html);
+  await writeFile(path.join(componentDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(componentDirectory, 'assets', 'panel.css'), 'body { color: blue; }\n');
+
+  const entryUrl = homeComponentRuntimeUrl({
+    componentId: 'hcmp_protocol',
+    previewVersion: sha256Text(html),
+  });
+  assert.match(new URL(entryUrl).hostname, /^[a-z0-9-]+$/);
+  assert.deepEqual(parseArtifactRequestTarget(new URL(entryUrl)), {
+    kind: 'home-component',
+    componentId: 'hcmp_protocol',
+    entry: true,
+    fileScope: 'root',
+    fileName: 'entry.html',
+  });
+
+  const entry = await resolveArtifactProtocolRequest(entryUrl, rootResolver('/missing'), {
+    homeComponentAppDataRootPath: appDataRootPath,
+  });
+  assert.equal(entry.ok, true);
+  if (!entry.ok) {
+    return;
+  }
+  assert.equal(Buffer.from(entry.bytes).toString('utf8'), html);
+  assert.equal(entry.cacheControl, ARTIFACT_PROTOCOL_CACHE_CONTROL);
+  assert.equal(entry.mimeType, 'text/html');
+
+  const asset = await resolveArtifactProtocolRequest(
+    entryUrl.replace('/entry.html?', '/assets/panel.css?'),
+    rootResolver('/missing'),
+    { homeComponentAppDataRootPath: appDataRootPath }
+  );
+  assert.equal(asset.ok, true);
+  if (asset.ok) {
+    assert.equal(asset.mimeType, 'text/css');
+    assert.equal(Buffer.from(asset.bytes).toString('utf8'), 'body { color: blue; }\n');
+  }
 });
 
 async function writeArtifactSegmentForProtocolTest(

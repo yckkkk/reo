@@ -9,6 +9,8 @@ import {
   WORKSPACE_CLOSE_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
@@ -26,6 +28,7 @@ import {
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_WIDGET_CHANNEL,
+  WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
@@ -37,6 +40,7 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
+  WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
@@ -45,6 +49,7 @@ import {
   WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
@@ -60,7 +65,9 @@ import {
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL,
@@ -75,12 +82,14 @@ import {
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_SUPPLEMENT_IN_FINDER_CHANNEL,
   WORKSPACE_REGENERATE_IMPORTED_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
@@ -106,6 +115,8 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
@@ -163,6 +174,16 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
         payload
       ),
+    readHomeComponents: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readHomeComponents'>>(
+        WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
+        payload
+      ),
+    readHomeComponentMemoryDetail: (payload) =>
+      invoke<WorkspaceBridgeResponse<'readHomeComponentMemoryDetail'>>(
+        WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
+        payload
+      ),
     readExpressionPlaybackAudio: (payload) =>
       invoke<WorkspaceBridgeResponse<'readExpressionPlaybackAudio'>>(
         WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
@@ -207,6 +228,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
         payload
       ),
+    revealHomeComponentInFinder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'revealHomeComponentInFinder'>>(
+        WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
+        payload
+      ),
     openMemorySpaceAgentsFile: (payload) =>
       invoke<WorkspaceBridgeResponse<'openMemorySpaceAgentsFile'>>(
         WORKSPACE_OPEN_MEMORY_SPACE_AGENTS_FILE_CHANNEL,
@@ -232,6 +258,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
         WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
         payload
       ),
+    openHomeComponentDocument: (payload) =>
+      invoke<WorkspaceBridgeResponse<'openHomeComponentDocument'>>(
+        WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
+        payload
+      ),
     copyMemorySpaceAbsolutePath: (payload) =>
       invoke<WorkspaceBridgeResponse<'copyMemorySpaceAbsolutePath'>>(
         WORKSPACE_COPY_MEMORY_SPACE_ABSOLUTE_PATH_CHANNEL,
@@ -255,6 +286,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     copyWidgetAbsolutePath: (payload) =>
       invoke<WorkspaceBridgeResponse<'copyWidgetAbsolutePath'>>(
         WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
+        payload
+      ),
+    copyHomeComponentAbsolutePath: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyHomeComponentAbsolutePath'>>(
+        WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
         payload
       ),
     copyMemoryRelativePath: (payload) =>
@@ -285,6 +321,11 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     copyWidgetAgentPrompt: (payload) =>
       invoke<WorkspaceBridgeResponse<'copyWidgetAgentPrompt'>>(
         WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
+        payload
+      ),
+    copyHomeComponentAgentPrompt: (payload) =>
+      invoke<WorkspaceBridgeResponse<'copyHomeComponentAgentPrompt'>>(
+        WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
         payload
       ),
     readArtifactRuntimeState: (payload) =>
@@ -384,6 +425,26 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
     restoreDeletedWidget: (payload) =>
       invoke<WorkspaceBridgeResponse<'restoreDeletedWidget'>>(
         WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
+        payload
+      ),
+    updateHomeComponentTitle: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateHomeComponentTitle'>>(
+        WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
+        payload
+      ),
+    updateHomeComponentTabOrder: (payload) =>
+      invoke<WorkspaceBridgeResponse<'updateHomeComponentTabOrder'>>(
+        WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+        payload
+      ),
+    deleteHomeComponent: (payload) =>
+      invoke<WorkspaceBridgeResponse<'deleteHomeComponent'>>(
+        WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
+        payload
+      ),
+    restoreDeletedHomeComponent: (payload) =>
+      invoke<WorkspaceBridgeResponse<'restoreDeletedHomeComponent'>>(
+        WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
         payload
       ),
     readMemoryDetail: (payload) =>
@@ -693,6 +754,10 @@ export function createWorkspaceBridge(invoker: WorkspaceBridgeInvoker): ReoWorks
       ) ?? (() => {}),
     onFileTruthChanged: (callback) =>
       invoker.on?.(WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL, (payload) =>
+        callback(payload as Parameters<typeof callback>[0])
+      ) ?? (() => {}),
+    onHomeComponentsChanged: (callback) =>
+      invoker.on?.(WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL, (payload) =>
         callback(payload as Parameters<typeof callback>[0])
       ) ?? (() => {}),
   };

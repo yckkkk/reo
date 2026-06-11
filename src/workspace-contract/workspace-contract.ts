@@ -11,11 +11,18 @@ export const MEMORY_ID_PATTERN = /^mem_[A-Za-z0-9_-]+$/;
 export const SEGMENT_ID_PATTERN = /^seg_[A-Za-z0-9_-]+$/;
 export const SUPPLEMENT_ID_PATTERN = /^sup_[A-Za-z0-9_-]+$/;
 export const WIDGET_ID_PATTERN = /^wdg_[A-Za-z0-9_-]+$/;
+export const HOME_COMPONENT_ID_PATTERN = /^hcmp_[A-Za-z0-9_-]+$/;
+export const HOME_RECENT_EXPRESSIONS_COMPONENT_ID = 'recent-expressions' as const;
 
 const memoryIdSchema = z.string().regex(MEMORY_ID_PATTERN);
 const segmentIdSchema = z.string().regex(SEGMENT_ID_PATTERN);
 const supplementIdSchema = z.string().regex(SUPPLEMENT_ID_PATTERN);
 const widgetIdSchema = z.string().regex(WIDGET_ID_PATTERN);
+const homeComponentIdSchema = z.string().regex(HOME_COMPONENT_ID_PATTERN);
+const homeComponentTabIdSchema = z.union([
+  z.literal(HOME_RECENT_EXPRESSIONS_COMPONENT_ID),
+  homeComponentIdSchema,
+]);
 export const workspaceSegmentContentTabOrderItemSchema = z.union([
   z.literal('segment'),
   z.templateLiteral([z.literal('supplement:'), supplementIdSchema]),
@@ -25,6 +32,10 @@ export type WorkspaceSegmentContentTabOrderItem = z.infer<
 >;
 export const workspaceWidgetTabOrderItemSchema = widgetIdSchema;
 export type WorkspaceWidgetTabOrderItem = z.infer<typeof workspaceWidgetTabOrderItemSchema>;
+export const workspaceHomeComponentTabOrderItemSchema = homeComponentIdSchema;
+export type WorkspaceHomeComponentTabOrderItem = z.infer<
+  typeof workspaceHomeComponentTabOrderItemSchema
+>;
 export const LAST_TRANSCRIPTION_ATTEMPTS = ['success', 'failed', 'never'] as const;
 export type LastTranscriptionAttempt = (typeof LAST_TRANSCRIPTION_ATTEMPTS)[number];
 export const lastTranscriptionAttemptSchema = z.enum(LAST_TRANSCRIPTION_ATTEMPTS);
@@ -168,6 +179,7 @@ export const workspaceErrorCodeSchema = z.enum([
   'ERR_WORKSPACE_SEGMENT_COVER_NOT_FOUND',
   'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
   'ERR_WORKSPACE_WIDGET_NOT_FOUND',
+  'ERR_HOME_COMPONENT_NOT_FOUND',
   'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING',
   'ERR_ENTITY_DOCUMENT_MISSING',
   'ERR_SHELL_OPEN_FAILED',
@@ -702,6 +714,40 @@ export const workspaceWidgetProjectionSchema = z.union([
   workspaceReadyWidgetProjectionSchema,
   workspaceFaultWidgetProjectionSchema,
 ]);
+
+const workspaceHomeComponentProjectionBaseSchema = z.strictObject({
+  componentId: homeComponentIdSchema,
+  type: z.literal('home-component'),
+  format: z.literal('html'),
+  mount: z.literal('home'),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  icon: workspaceWidgetIconProjectionSchema,
+});
+
+const workspaceReadyHomeComponentProjectionSchema =
+  workspaceHomeComponentProjectionBaseSchema.extend({
+    runtimeFault: z.undefined().optional(),
+    entryByteLength: z.number().int().nonnegative(),
+    entryHash: workspaceContentHashSchema,
+    previewVersion: workspaceContentHashSchema,
+  });
+
+const workspaceFaultHomeComponentProjectionSchema =
+  workspaceHomeComponentProjectionBaseSchema.extend({
+    runtimeFault: workspaceArtifactRuntimeFaultSchema,
+  });
+
+export const workspaceHomeComponentProjectionSchema = z.union([
+  workspaceReadyHomeComponentProjectionSchema,
+  workspaceFaultHomeComponentProjectionSchema,
+]);
+
+export const workspaceHomeComponentShellStateSchema = z.strictObject({
+  componentTabOrder: z.array(workspaceHomeComponentTabOrderItemSchema),
+  lastActiveComponentId: homeComponentTabIdSchema,
+});
 
 const workspaceAudioSegmentSupplementProjectionSchema = z.strictObject({
   workspaceId: z.string().min(1),
@@ -1269,6 +1315,29 @@ export const workspaceUpdateWidgetTabOrderRequestSchema = workspaceHandleSchema
   })
   .strict();
 
+export const workspaceReadHomeComponentsRequestSchema = workspaceNoInputSchema;
+
+export const workspaceHomeComponentIdRequestSchema = z.strictObject({
+  componentId: homeComponentIdSchema,
+});
+
+export const workspaceReadHomeComponentMemoryDetailRequestSchema = z.strictObject({
+  workspaceId: z.string().min(1),
+  memoryId: memoryIdSchema,
+  requestId: z.string().min(1),
+});
+
+export const workspaceUpdateHomeComponentTitleRequestSchema = workspaceHomeComponentIdRequestSchema
+  .extend({
+    title: workspaceRecordingTitleSchema,
+  })
+  .strict();
+
+export const workspaceUpdateHomeComponentTabOrderRequestSchema = z.strictObject({
+  componentTabOrder: z.array(workspaceHomeComponentTabOrderItemSchema),
+  lastActiveComponentId: homeComponentTabIdSchema,
+});
+
 export const workspaceCreateMemoryRequestSchema = workspaceHandleSchema
   .extend({
     title: workspaceMemoryTitleSchema,
@@ -1388,6 +1457,12 @@ export const workspaceRestoreDeletedWidgetRequestSchema = workspaceHandleSchema
     restoreToken: widgetIdSchema,
   })
   .strict();
+
+export const workspaceDeleteHomeComponentRequestSchema = workspaceHomeComponentIdRequestSchema;
+
+export const workspaceRestoreDeletedHomeComponentRequestSchema = z.strictObject({
+  restoreToken: homeComponentIdSchema,
+});
 
 export const workspaceReadMemoryDetailRequestSchema = workspaceMemoryIdRequestSchema
   .extend({
@@ -1607,12 +1682,16 @@ export const workspaceRevealSegmentInFinderRequestSchema = workspaceSegmentEntit
 export const workspaceRevealSegmentSupplementInFinderRequestSchema =
   workspaceSegmentSupplementEntityRequestSchema;
 export const workspaceRevealWidgetInFinderRequestSchema = workspaceWidgetIdRequestSchema;
+export const workspaceRevealHomeComponentInFinderRequestSchema =
+  workspaceHomeComponentIdRequestSchema;
 export const workspaceOpenMemorySpaceAgentsFileRequestSchema = workspaceMemorySpaceIdRequestSchema;
 export const workspaceOpenMemoryDocumentRequestSchema = workspaceMemoryEntityRequestSchema;
 export const workspaceOpenSegmentDocumentRequestSchema = workspaceSegmentEntityRequestSchema;
 export const workspaceOpenSegmentSupplementDocumentRequestSchema =
   workspaceSegmentSupplementEntityRequestSchema;
 export const workspaceOpenWidgetDocumentRequestSchema = workspaceWidgetIdRequestSchema;
+export const workspaceOpenHomeComponentDocumentRequestSchema =
+  workspaceHomeComponentIdRequestSchema;
 export const workspaceCopyMemorySpaceAbsolutePathRequestSchema =
   workspaceMemorySpaceIdRequestSchema;
 export const workspaceCopyMemoryAbsolutePathRequestSchema = workspaceMemoryEntityRequestSchema;
@@ -1620,6 +1699,8 @@ export const workspaceCopySegmentAbsolutePathRequestSchema = workspaceSegmentEnt
 export const workspaceCopySegmentSupplementAbsolutePathRequestSchema =
   workspaceSegmentSupplementEntityRequestSchema;
 export const workspaceCopyWidgetAbsolutePathRequestSchema = workspaceWidgetIdRequestSchema;
+export const workspaceCopyHomeComponentAbsolutePathRequestSchema =
+  workspaceHomeComponentIdRequestSchema;
 export const workspaceCopyMemoryRelativePathRequestSchema = workspaceMemoryEntityRequestSchema;
 export const workspaceCopySegmentRelativePathRequestSchema = workspaceSegmentEntityRequestSchema;
 export const workspaceCopySegmentSupplementRelativePathRequestSchema =
@@ -1668,6 +1749,16 @@ export const workspaceCopyWidgetAgentPromptRequestSchema = z.discriminatedUnion(
     })
     .strict(),
 ]);
+export const workspaceCopyHomeComponentAgentPromptRequestSchema = z.discriminatedUnion('action', [
+  z.strictObject({
+    action: z.literal('create-home-component'),
+  }),
+  workspaceHomeComponentIdRequestSchema
+    .extend({
+      action: z.literal('update-home-component'),
+    })
+    .strict(),
+]);
 
 const workspaceArtifactRuntimeTargetBaseSchema = workspaceHandleSchema.extend({
   workspaceId: z.string().min(1),
@@ -1693,6 +1784,10 @@ export const workspaceArtifactRuntimeTargetRequestSchema = z.discriminatedUnion(
       widgetId: widgetIdSchema,
     })
     .strict(),
+  z.strictObject({
+    targetType: z.literal('home-component'),
+    componentId: homeComponentIdSchema,
+  }),
 ]);
 export const workspaceReadArtifactRuntimeStateRequestSchema =
   workspaceArtifactRuntimeTargetRequestSchema.and(
@@ -1788,6 +1883,39 @@ export const workspaceUpdateWidgetTabOrderResponseSchema = z.discriminatedUnion(
     ok: z.literal(true),
     value: z.strictObject({
       widgets: z.array(workspaceWidgetProjectionSchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceReadHomeComponentsResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      components: z.array(workspaceHomeComponentProjectionSchema),
+      shellState: workspaceHomeComponentShellStateSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceUpdateHomeComponentTitleResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      component: workspaceHomeComponentProjectionSchema,
+      components: z.array(workspaceHomeComponentProjectionSchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceUpdateHomeComponentTabOrderResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      components: z.array(workspaceHomeComponentProjectionSchema),
+      shellState: workspaceHomeComponentShellStateSchema,
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -1945,6 +2073,28 @@ export const workspaceRestoreDeletedWidgetResponseSchema = z.discriminatedUnion(
     value: z.strictObject({
       widget: workspaceWidgetProjectionSchema,
       widgets: z.array(workspaceWidgetProjectionSchema),
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceDeleteHomeComponentResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      components: z.array(workspaceHomeComponentProjectionSchema),
+      restoreToken: homeComponentIdSchema,
+    }),
+  }),
+  workspaceErrorEnvelopeSchema,
+]);
+
+export const workspaceRestoreDeletedHomeComponentResponseSchema = z.discriminatedUnion('ok', [
+  z.strictObject({
+    ok: z.literal(true),
+    value: z.strictObject({
+      component: workspaceHomeComponentProjectionSchema,
+      components: z.array(workspaceHomeComponentProjectionSchema),
     }),
   }),
   workspaceErrorEnvelopeSchema,
@@ -2569,6 +2719,12 @@ export const workspaceFileTruthChangedEventSchema = z.strictObject({
   workspaceId: z.string().min(1),
 });
 
+export const workspaceHomeComponentsChangedEventSchema = z.strictObject({
+  kind: z.literal('changed'),
+  reason: z.literal('file-system'),
+  sequence: z.number().int().positive(),
+});
+
 export const workspaceRecordingFinalizeRequestSchema = workspaceSegmentIdRequestSchema
   .extend({
     memoryId: memoryIdSchema,
@@ -2819,6 +2975,12 @@ export type WorkspaceArtifactRuntimeFaultProjection = z.infer<
   typeof workspaceArtifactRuntimeFaultSchema
 >;
 export type WorkspaceWidgetProjection = z.infer<typeof workspaceWidgetProjectionSchema>;
+export type WorkspaceHomeComponentProjection = z.infer<
+  typeof workspaceHomeComponentProjectionSchema
+>;
+export type WorkspaceHomeComponentShellState = z.infer<
+  typeof workspaceHomeComponentShellStateSchema
+>;
 export type WorkspaceMemorySummary = z.infer<typeof workspaceMemorySummarySchema>;
 export type WorkspaceSegmentProjection = z.infer<typeof workspaceSegmentProjectionSchema>;
 export type WorkspaceSegmentSupplementProjection = z.infer<
@@ -2840,6 +3002,9 @@ export type WorkspaceSegmentSupplementEntityActionRequest = z.infer<
   typeof workspaceSegmentSupplementEntityRequestSchema
 >;
 export type WorkspaceWidgetEntityActionRequest = z.infer<typeof workspaceWidgetIdRequestSchema>;
+export type WorkspaceHomeComponentEntityActionRequest = z.infer<
+  typeof workspaceHomeComponentIdRequestSchema
+>;
 export type WorkspaceRevealMemorySpaceInFinderRequest = z.infer<
   typeof workspaceRevealMemorySpaceInFinderRequestSchema
 >;
@@ -2854,6 +3019,9 @@ export type WorkspaceRevealSegmentSupplementInFinderRequest = z.infer<
 >;
 export type WorkspaceRevealWidgetInFinderRequest = z.infer<
   typeof workspaceRevealWidgetInFinderRequestSchema
+>;
+export type WorkspaceRevealHomeComponentInFinderRequest = z.infer<
+  typeof workspaceRevealHomeComponentInFinderRequestSchema
 >;
 export type WorkspaceOpenMemorySpaceAgentsFileRequest = z.infer<
   typeof workspaceOpenMemorySpaceAgentsFileRequestSchema
@@ -2870,6 +3038,9 @@ export type WorkspaceOpenSegmentSupplementDocumentRequest = z.infer<
 export type WorkspaceOpenWidgetDocumentRequest = z.infer<
   typeof workspaceOpenWidgetDocumentRequestSchema
 >;
+export type WorkspaceOpenHomeComponentDocumentRequest = z.infer<
+  typeof workspaceOpenHomeComponentDocumentRequestSchema
+>;
 export type WorkspaceCopyMemorySpaceAbsolutePathRequest = z.infer<
   typeof workspaceCopyMemorySpaceAbsolutePathRequestSchema
 >;
@@ -2884,6 +3055,9 @@ export type WorkspaceCopySegmentSupplementAbsolutePathRequest = z.infer<
 >;
 export type WorkspaceCopyWidgetAbsolutePathRequest = z.infer<
   typeof workspaceCopyWidgetAbsolutePathRequestSchema
+>;
+export type WorkspaceCopyHomeComponentAbsolutePathRequest = z.infer<
+  typeof workspaceCopyHomeComponentAbsolutePathRequestSchema
 >;
 export type WorkspaceCopyMemoryRelativePathRequest = z.infer<
   typeof workspaceCopyMemoryRelativePathRequestSchema
@@ -2902,6 +3076,9 @@ export type WorkspaceCopyArtifactAgentPromptRequest = z.infer<
 >;
 export type WorkspaceCopyWidgetAgentPromptRequest = z.infer<
   typeof workspaceCopyWidgetAgentPromptRequestSchema
+>;
+export type WorkspaceCopyHomeComponentAgentPromptRequest = z.infer<
+  typeof workspaceCopyHomeComponentAgentPromptRequestSchema
 >;
 export type WorkspaceArtifactRuntimeStateJson = z.infer<
   typeof workspaceArtifactRuntimeStateJsonSchema
@@ -2924,6 +3101,18 @@ export type WorkspaceWriteArtifactRuntimeStateResponse = z.infer<
 export type WorkspaceCopyNeedsReviewAgentPromptRequest = z.infer<
   typeof workspaceCopyNeedsReviewAgentPromptRequestSchema
 >;
+export type WorkspaceReadHomeComponentsRequest = z.infer<
+  typeof workspaceReadHomeComponentsRequestSchema
+>;
+export type WorkspaceReadHomeComponentsResponse = z.infer<
+  typeof workspaceReadHomeComponentsResponseSchema
+>;
+export type WorkspaceReadHomeComponentMemoryDetailRequest = z.infer<
+  typeof workspaceReadHomeComponentMemoryDetailRequestSchema
+>;
+export type WorkspaceReadHomeComponentMemoryDetailResponse = z.infer<
+  typeof workspaceReadMemoryDetailResponseSchema
+>;
 export type WorkspaceUpdateWidgetTitleRequest = z.infer<
   typeof workspaceUpdateWidgetTitleRequestSchema
 >;
@@ -2936,6 +3125,18 @@ export type WorkspaceUpdateWidgetTabOrderRequest = z.infer<
 export type WorkspaceUpdateWidgetTabOrderResponse = z.infer<
   typeof workspaceUpdateWidgetTabOrderResponseSchema
 >;
+export type WorkspaceUpdateHomeComponentTitleRequest = z.infer<
+  typeof workspaceUpdateHomeComponentTitleRequestSchema
+>;
+export type WorkspaceUpdateHomeComponentTitleResponse = z.infer<
+  typeof workspaceUpdateHomeComponentTitleResponseSchema
+>;
+export type WorkspaceUpdateHomeComponentTabOrderRequest = z.infer<
+  typeof workspaceUpdateHomeComponentTabOrderRequestSchema
+>;
+export type WorkspaceUpdateHomeComponentTabOrderResponse = z.infer<
+  typeof workspaceUpdateHomeComponentTabOrderResponseSchema
+>;
 export type WorkspaceDeleteWidgetRequest = z.infer<typeof workspaceDeleteWidgetRequestSchema>;
 export type WorkspaceDeleteWidgetResponse = z.infer<typeof workspaceDeleteWidgetResponseSchema>;
 export type WorkspaceRestoreDeletedWidgetRequest = z.infer<
@@ -2943,6 +3144,18 @@ export type WorkspaceRestoreDeletedWidgetRequest = z.infer<
 >;
 export type WorkspaceRestoreDeletedWidgetResponse = z.infer<
   typeof workspaceRestoreDeletedWidgetResponseSchema
+>;
+export type WorkspaceDeleteHomeComponentRequest = z.infer<
+  typeof workspaceDeleteHomeComponentRequestSchema
+>;
+export type WorkspaceDeleteHomeComponentResponse = z.infer<
+  typeof workspaceDeleteHomeComponentResponseSchema
+>;
+export type WorkspaceRestoreDeletedHomeComponentRequest = z.infer<
+  typeof workspaceRestoreDeletedHomeComponentRequestSchema
+>;
+export type WorkspaceRestoreDeletedHomeComponentResponse = z.infer<
+  typeof workspaceRestoreDeletedHomeComponentResponseSchema
 >;
 export type WorkspaceUpdateMemorySpaceTitleRequest = z.infer<
   typeof workspaceUpdateMemorySpaceTitleRequestSchema
@@ -3318,6 +3531,9 @@ export type WorkspaceRecordingTranscriptionEvent = z.infer<
   typeof workspaceRecordingTranscriptionEventSchema
 >;
 export type WorkspaceFileTruthChangedEvent = z.infer<typeof workspaceFileTruthChangedEventSchema>;
+export type WorkspaceHomeComponentsChangedEvent = z.infer<
+  typeof workspaceHomeComponentsChangedEventSchema
+>;
 export type WorkspaceRecordingFinalizeRequest = z.infer<
   typeof workspaceRecordingFinalizeRequestSchema
 >;

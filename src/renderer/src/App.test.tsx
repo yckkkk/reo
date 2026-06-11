@@ -23,12 +23,14 @@ import { createReoQueryClient, ReoQueryProvider } from './queryClient';
 import type {
   WorkspaceMemoryDetail,
   WorkspaceMemorySummary,
+  WorkspaceHomeComponent,
   WorkspaceNoteSegmentContent,
   WorkspaceNoteSegmentSupplementContent,
   WorkspaceWidgetProjection,
 } from './workspace/workspaceApi';
 import {
   memoryDetailQueryKey,
+  homeComponentsQueryRootKey,
   segmentSupplementContentQueryKey,
   segmentContentQueryKey,
   workspaceSnapshotQueryKey,
@@ -127,6 +129,16 @@ describe('App', () => {
     copyWidgetAbsolutePath: vi.fn(),
     copyWidgetRelativePath: vi.fn(),
     copyWidgetAgentPrompt: vi.fn(),
+    readHomeComponents: vi.fn(),
+    updateHomeComponentTitle: vi.fn(),
+    updateHomeComponentTabOrder: vi.fn(),
+    deleteHomeComponent: vi.fn(),
+    restoreDeletedHomeComponent: vi.fn(),
+    revealHomeComponentInFinder: vi.fn(),
+    openHomeComponentDocument: vi.fn(),
+    copyHomeComponentAbsolutePath: vi.fn(),
+    copyHomeComponentAgentPrompt: vi.fn(),
+    readHomeComponentMemoryDetail: vi.fn(),
     saveTranscript: vi.fn(),
     saveSegmentSupplementTranscript: vi.fn(),
     requestSegmentTranscriptionBackfill: vi.fn(),
@@ -151,6 +163,7 @@ describe('App', () => {
     openMarkdownExternalLink: vi.fn(),
     onRecordingTranscriptionEvent: vi.fn(),
     onFileTruthChanged: vi.fn(),
+    onHomeComponentsChanged: vi.fn(),
   };
 
   function createDeferred<T>() {
@@ -636,6 +649,40 @@ describe('App', () => {
     reoWorkspace.copyWidgetAbsolutePath.mockResolvedValue({ ok: true });
     reoWorkspace.copyWidgetRelativePath.mockResolvedValue({ ok: true });
     reoWorkspace.copyWidgetAgentPrompt.mockResolvedValue({ ok: true });
+    reoWorkspace.readHomeComponents.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [],
+        shellState: {
+          componentTabOrder: [],
+          lastActiveComponentId: 'recent-expressions',
+        },
+      },
+    });
+    reoWorkspace.updateHomeComponentTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.updateHomeComponentTabOrder.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.deleteHomeComponent.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.restoreDeletedHomeComponent.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.revealHomeComponentInFinder.mockResolvedValue({ ok: true });
+    reoWorkspace.openHomeComponentDocument.mockResolvedValue({ ok: true });
+    reoWorkspace.copyHomeComponentAbsolutePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyHomeComponentAgentPrompt.mockResolvedValue({ ok: true });
+    reoWorkspace.readHomeComponentMemoryDetail.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
+    });
     reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
       ok: false,
       error: {
@@ -813,6 +860,7 @@ describe('App', () => {
     });
     reoWorkspace.onRecordingTranscriptionEvent.mockReturnValue(() => {});
     reoWorkspace.onFileTruthChanged.mockReturnValue(() => {});
+    reoWorkspace.onHomeComponentsChanged.mockReturnValue(() => {});
     Object.defineProperty(window, 'reoWorkspace', {
       configurable: true,
       value: reoWorkspace,
@@ -1540,6 +1588,25 @@ describe('App', () => {
     };
   }
 
+  function readyHomeComponent(
+    overrides: Partial<WorkspaceHomeComponent> = {}
+  ): WorkspaceHomeComponent {
+    return {
+      componentId: 'hcmp_codex_review_test',
+      type: 'home-component',
+      format: 'html',
+      mount: 'home',
+      title: 'Codex Review Test',
+      createdAt: '2026-06-10T22:00:00.000Z',
+      updatedAt: '2026-06-10T22:00:00.000Z',
+      icon: { source: 'default' },
+      entryByteLength: 512,
+      entryHash: BASELINE_HASH_A,
+      previewVersion: BASELINE_HASH_B,
+      ...overrides,
+    };
+  }
+
   it('renders starter home without a page plus and opens creation from the sidebar entry', async () => {
     const user = userEvent.setup();
     render(
@@ -1569,6 +1636,155 @@ describe('App', () => {
     expect(screen.queryByText(/video/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/file/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/film/i)).not.toBeInTheDocument();
+  });
+
+  it('syncs the active home component when file-truth shell state becomes valid after component discovery', async () => {
+    let notifyHomeComponentsChanged: (() => void) | null = null;
+    const component = readyHomeComponent();
+    const shellState = {
+      componentTabOrder: [component.componentId],
+      lastActiveComponentId: component.componentId,
+    };
+    reoWorkspace.readHomeComponents
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          components: [],
+          shellState,
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          components: [component],
+          shellState,
+        },
+      });
+    reoWorkspace.onHomeComponentsChanged.mockImplementation((callback) => {
+      notifyHomeComponentsChanged = callback;
+      return () => {};
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await waitFor(() => expect(reoWorkspace.readHomeComponents).toHaveBeenCalledOnce());
+    expect(screen.getByRole('heading', { name: '近期表达' })).toBeInTheDocument();
+
+    await act(async () => {
+      notifyHomeComponentsChanged?.();
+    });
+
+    await waitFor(() => expect(reoWorkspace.readHomeComponents).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('tab', { name: 'Codex Review Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByRole('heading', { name: 'Codex Review Test' })).toBeInTheDocument();
+    expect(screen.getByTitle('组件：Codex Review Test')).toBeInTheDocument();
+  });
+
+  it('opens the stored active home component on the first home component read', async () => {
+    const component = readyHomeComponent();
+    reoWorkspace.readHomeComponents.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [component],
+        shellState: {
+          componentTabOrder: [component.componentId],
+          lastActiveComponentId: component.componentId,
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(await screen.findByRole('tab', { name: 'Codex Review Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByRole('heading', { name: 'Codex Review Test' })).toBeInTheDocument();
+    expect(screen.getByTitle('组件：Codex Review Test')).toBeInTheDocument();
+  });
+
+  it('does not persist the home component tab state when selecting the already active tab', async () => {
+    const user = userEvent.setup();
+    const component = readyHomeComponent();
+    reoWorkspace.readHomeComponents.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [component],
+        shellState: {
+          componentTabOrder: [component.componentId],
+          lastActiveComponentId: component.componentId,
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const activeTab = await screen.findByRole('tab', { name: 'Codex Review Test' });
+    expect(activeTab).toHaveAttribute('aria-selected', 'true');
+    expect(reoWorkspace.updateHomeComponentTabOrder).not.toHaveBeenCalled();
+
+    await user.click(activeTab);
+
+    expect(reoWorkspace.updateHomeComponentTabOrder).not.toHaveBeenCalled();
+  });
+
+  it('syncs active home component when persisted shell active changes for the same component list', async () => {
+    const component = readyHomeComponent();
+    const queryClient = createReoQueryClient();
+    reoWorkspace.readHomeComponents
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          components: [component],
+          shellState: {
+            componentTabOrder: [component.componentId],
+            lastActiveComponentId: 'recent-expressions',
+          },
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          components: [component],
+          shellState: {
+            componentTabOrder: [component.componentId],
+            lastActiveComponentId: component.componentId,
+          },
+        },
+      });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByRole('heading', { name: '近期表达' })).toBeInTheDocument();
+
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: homeComponentsQueryRootKey() });
+    });
+
+    expect(await screen.findByRole('tab', { name: 'Codex Review Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByRole('heading', { name: 'Codex Review Test' })).toBeInTheDocument();
   });
 
   it('opens the workspace library page from the sidebar', async () => {

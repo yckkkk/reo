@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   createWorkspaceFileTruthWatcherRegistry,
+  isIgnoredHomeComponentFileEventPath,
   isIgnoredWorkspaceFileEventPath,
 } from '../../src/main/workspaceFileTruthWatcher.js';
-import type { WorkspaceFileTruthChangedEvent } from '../../src/workspace-contract/workspace-contract.js';
+import type {
+  WorkspaceFileTruthChangedEvent,
+  WorkspaceHomeComponentsChangedEvent,
+} from '../../src/workspace-contract/workspace-contract.js';
 
 class FakeWatcher {
   readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
@@ -177,6 +181,66 @@ test('workspace file truth watcher closes pending events', async () => {
   assert.equal(fakeWatcher.closeCalls, 1);
 });
 
+test('home components watcher coalesces app-level changes without exposing paths', () => {
+  const timers = createManualTimerScheduler();
+  const fakeWatcher = new FakeWatcher();
+  let watchedOptions: Record<string, unknown> | null = null;
+  const sent: WorkspaceHomeComponentsChangedEvent[] = [];
+  const registry = createWorkspaceFileTruthWatcherRegistry({
+    clearTimer: timers.clearTimer,
+    setTimer: timers.setTimer,
+    settlementDelayMs: 25,
+    watch: (_rootPath, options) => {
+      watchedOptions = options;
+      return fakeWatcher;
+    },
+  });
+
+  registry.watchHomeComponents({
+    appDataRootPath: '/app/data',
+    sendEvent: (event) => sent.push(event),
+  });
+
+  fakeWatcher.emit('all', 'change', '/app/data/home-components.json');
+  fakeWatcher.emit('all', 'change', '/app/data/home-components/hcmp_live/component.md');
+  timers.flush();
+
+  assert.deepEqual(sent, [
+    {
+      kind: 'changed',
+      reason: 'file-system',
+      sequence: 1,
+    },
+  ]);
+  assert.ok(watchedOptions);
+  assert.equal((watchedOptions as Record<string, unknown>)['followSymlinks'], false);
+});
+
+test('home components watcher ignores runtime state and trash changes', () => {
+  const timers = createManualTimerScheduler();
+  const fakeWatcher = new FakeWatcher();
+  const sent: WorkspaceHomeComponentsChangedEvent[] = [];
+  const registry = createWorkspaceFileTruthWatcherRegistry({
+    clearTimer: timers.clearTimer,
+    setTimer: timers.setTimer,
+    settlementDelayMs: 25,
+    watch: () => fakeWatcher,
+  });
+
+  registry.watchHomeComponents({
+    appDataRootPath: '/app/data',
+    sendEvent: (event) => sent.push(event),
+  });
+
+  fakeWatcher.emit('all', 'change', '/app/data/home-components/hcmp_live/state.json');
+  fakeWatcher.emit('all', 'change', '/app/data/home-components-trash/hcmp_old/component.md');
+  fakeWatcher.emit('all', 'change', '/app/data/.git/index');
+  fakeWatcher.emit('all', 'change', '/app/data/.home-components.json.tmp');
+  timers.flush();
+
+  assert.deepEqual(sent, []);
+});
+
 test('workspace file truth watcher ignore rules are path-bound to the workspace root', () => {
   assert.equal(isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root'), false);
   assert.equal(
@@ -237,6 +301,33 @@ test('workspace file truth watcher ignore rules are path-bound to the workspace 
   assert.equal(
     isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root/..not-parent/segment.md'),
     false
+  );
+});
+
+test('home components watcher ignore rules are app-root scoped', () => {
+  assert.equal(isIgnoredHomeComponentFileEventPath('/app/data', '/app/data'), false);
+  assert.equal(
+    isIgnoredHomeComponentFileEventPath('/app/data', '/app/data/home-components.json'),
+    false
+  );
+  assert.equal(
+    isIgnoredHomeComponentFileEventPath('/app/data', '/app/data/home-components/hcmp_1/entry.html'),
+    false
+  );
+  assert.equal(
+    isIgnoredHomeComponentFileEventPath('/app/data', '/app/data/home-components/hcmp_1/state.json'),
+    true
+  );
+  assert.equal(
+    isIgnoredHomeComponentFileEventPath(
+      '/app/data',
+      '/app/data/home-components-trash/hcmp_1/component.md'
+    ),
+    true
+  );
+  assert.equal(
+    isIgnoredHomeComponentFileEventPath('/app/data', '/other/data/home-components.json'),
+    true
   );
 });
 

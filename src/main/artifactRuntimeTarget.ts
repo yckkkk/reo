@@ -2,6 +2,7 @@ import {
   resolveFinalizedArtifactSegmentDirectoryFromManifest,
   resolveFinalizedArtifactSegmentSupplementDirectoryFromManifest,
 } from './memoryFiles.js';
+import { resolveHomeComponentDirectoryFromFileTruth } from './homeComponents.js';
 import { resolveWorkspaceWidgetDirectoryFromFileTruth } from './workspaceWidgets.js';
 
 export type ArtifactRuntimeTarget =
@@ -22,6 +23,10 @@ export type ArtifactRuntimeTarget =
       readonly targetType: 'widget';
       readonly workspaceId: string;
       readonly widgetId: string;
+    }
+  | {
+      readonly targetType: 'home-component';
+      readonly componentId: string;
     };
 
 export async function resolveArtifactRuntimeTargetDirectory({
@@ -48,6 +53,13 @@ export async function resolveArtifactRuntimeTargetDirectory({
       rootPath,
       workspaceId: target.workspaceId,
       widgetId: target.widgetId,
+    });
+  }
+
+  if (target.targetType === 'home-component') {
+    return resolveHomeComponentDirectoryFromFileTruth({
+      appDataRootPath: rootPath,
+      componentId: target.componentId,
     });
   }
 

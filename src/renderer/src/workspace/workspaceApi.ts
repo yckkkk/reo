@@ -32,6 +32,16 @@ export function readRecentExpressions(
   return window.reoWorkspace.readRecentExpressions(payload);
 }
 
+export function readHomeComponents() {
+  return window.reoWorkspace.readHomeComponents(undefined);
+}
+
+export function readHomeComponentMemoryDetail(
+  payload: Parameters<Window['reoWorkspace']['readHomeComponentMemoryDetail']>[0]
+) {
+  return window.reoWorkspace.readHomeComponentMemoryDetail(payload);
+}
+
 export function readExpressionPlaybackAudio(
   payload: Parameters<Window['reoWorkspace']['readExpressionPlaybackAudio']>[0]
 ) {
@@ -82,6 +92,12 @@ export function revealWidgetInFinder(
   return window.reoWorkspace.revealWidgetInFinder(payload);
 }
 
+export function revealHomeComponentInFinder(
+  payload: Parameters<Window['reoWorkspace']['revealHomeComponentInFinder']>[0]
+) {
+  return window.reoWorkspace.revealHomeComponentInFinder(payload);
+}
+
 export function openMemorySpaceAgentsFile(
   payload: Parameters<Window['reoWorkspace']['openMemorySpaceAgentsFile']>[0]
 ) {
@@ -122,6 +138,12 @@ export function openWidgetDocument(
   return window.reoWorkspace.openWidgetDocument(payload);
 }
 
+export function openHomeComponentDocument(
+  payload: Parameters<Window['reoWorkspace']['openHomeComponentDocument']>[0]
+) {
+  return window.reoWorkspace.openHomeComponentDocument(payload);
+}
+
 export function copyMemorySpaceAbsolutePath(
   payload: Parameters<Window['reoWorkspace']['copyMemorySpaceAbsolutePath']>[0]
 ) {
@@ -150,6 +172,12 @@ export function copyWidgetAbsolutePath(
   payload: Parameters<Window['reoWorkspace']['copyWidgetAbsolutePath']>[0]
 ) {
   return window.reoWorkspace.copyWidgetAbsolutePath(payload);
+}
+
+export function copyHomeComponentAbsolutePath(
+  payload: Parameters<Window['reoWorkspace']['copyHomeComponentAbsolutePath']>[0]
+) {
+  return window.reoWorkspace.copyHomeComponentAbsolutePath(payload);
 }
 
 export function copyMemoryRelativePath(
@@ -186,6 +214,12 @@ export function copyWidgetAgentPrompt(
   payload: Parameters<Window['reoWorkspace']['copyWidgetAgentPrompt']>[0]
 ) {
   return window.reoWorkspace.copyWidgetAgentPrompt(payload);
+}
+
+export function copyHomeComponentAgentPrompt(
+  payload: Parameters<Window['reoWorkspace']['copyHomeComponentAgentPrompt']>[0]
+) {
+  return window.reoWorkspace.copyHomeComponentAgentPrompt(payload);
 }
 
 export function readArtifactRuntimeState(
@@ -238,6 +272,18 @@ export function updateWidgetTabOrder(
   return window.reoWorkspace.updateWidgetTabOrder(payload);
 }
 
+export function updateHomeComponentTitle(
+  payload: Parameters<Window['reoWorkspace']['updateHomeComponentTitle']>[0]
+) {
+  return window.reoWorkspace.updateHomeComponentTitle(payload);
+}
+
+export function updateHomeComponentTabOrder(
+  payload: Parameters<Window['reoWorkspace']['updateHomeComponentTabOrder']>[0]
+) {
+  return window.reoWorkspace.updateHomeComponentTabOrder(payload);
+}
+
 export function deleteWidget(payload: Parameters<Window['reoWorkspace']['deleteWidget']>[0]) {
   return window.reoWorkspace.deleteWidget(payload);
 }
@@ -246,6 +292,18 @@ export function restoreDeletedWidget(
   payload: Parameters<Window['reoWorkspace']['restoreDeletedWidget']>[0]
 ) {
   return window.reoWorkspace.restoreDeletedWidget(payload);
+}
+
+export function deleteHomeComponent(
+  payload: Parameters<Window['reoWorkspace']['deleteHomeComponent']>[0]
+) {
+  return window.reoWorkspace.deleteHomeComponent(payload);
+}
+
+export function restoreDeletedHomeComponent(
+  payload: Parameters<Window['reoWorkspace']['restoreDeletedHomeComponent']>[0]
+) {
+  return window.reoWorkspace.restoreDeletedHomeComponent(payload);
 }
 
 export function deleteMemory(payload: Parameters<Window['reoWorkspace']['deleteMemory']>[0]) {
@@ -674,6 +732,12 @@ export function onFileTruthChanged(
   return window.reoWorkspace.onFileTruthChanged(callback);
 }
 
+export function onHomeComponentsChanged(
+  callback: Parameters<Window['reoWorkspace']['onHomeComponentsChanged']>[0]
+) {
+  return window.reoWorkspace.onHomeComponentsChanged(callback);
+}
+
 export type WorkspaceInitializeResponse = Awaited<ReturnType<typeof initializeWorkspace>>;
 export type WorkspaceSession = Extract<WorkspaceInitializeResponse, { readonly ok: true }>['value'];
 export type WorkspaceSystemDraftProjection = Extract<
@@ -692,6 +756,14 @@ export type WorkspaceRecentExpressionSkipped = Extract<
   Awaited<ReturnType<typeof readRecentExpressions>>,
   { readonly ok: true }
 >['value']['skipped'][number];
+export type WorkspaceHomeComponent = Extract<
+  Awaited<ReturnType<typeof readHomeComponents>>,
+  { readonly ok: true }
+>['value']['components'][number];
+export type WorkspaceHomeComponentShellState = Extract<
+  Awaited<ReturnType<typeof readHomeComponents>>,
+  { readonly ok: true }
+>['value']['shellState'];
 export type WorkspaceSnapshot = WorkspaceSession['snapshot'];
 export type WorkspaceError = Extract<WorkspaceInitializeResponse, { readonly ok: false }>['error'];
 export type FinalizedAudioSegment = Extract<
