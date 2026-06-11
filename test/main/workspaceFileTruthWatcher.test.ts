@@ -241,6 +241,57 @@ test('home components watcher ignores runtime state and trash changes', () => {
   assert.deepEqual(sent, []);
 });
 
+test('home components watcher reuses the watcher for repeated reads of the same app root', async () => {
+  const timers = createManualTimerScheduler();
+  const watchers: FakeWatcher[] = [];
+  const firstSent: WorkspaceHomeComponentsChangedEvent[] = [];
+  const secondSent: WorkspaceHomeComponentsChangedEvent[] = [];
+  const registry = createWorkspaceFileTruthWatcherRegistry({
+    clearTimer: timers.clearTimer,
+    setTimer: timers.setTimer,
+    settlementDelayMs: 25,
+    watch: () => {
+      const watcher = new FakeWatcher();
+      watchers.push(watcher);
+      return watcher;
+    },
+  });
+
+  registry.watchHomeComponents({
+    appDataRootPath: '/app/data',
+    sendEvent: (event) => firstSent.push(event),
+  });
+  registry.watchHomeComponents({
+    appDataRootPath: '/app/data',
+    sendEvent: (event) => secondSent.push(event),
+  });
+
+  await Promise.resolve();
+
+  assert.equal(watchers.length, 1);
+  assert.equal(watchers[0]?.closeCalls, 0);
+  watchers[0]?.emit('all', 'change', '/app/data/home-components/hcmp_live/component.md');
+  timers.flush();
+  assert.deepEqual(firstSent, []);
+  assert.deepEqual(secondSent, [
+    {
+      kind: 'changed',
+      reason: 'file-system',
+      sequence: 1,
+    },
+  ]);
+
+  registry.watchHomeComponents({
+    appDataRootPath: '/app/other-data',
+    sendEvent: () => undefined,
+  });
+
+  await Promise.resolve();
+
+  assert.equal(watchers.length, 2);
+  assert.equal(watchers[0]?.closeCalls, 1);
+});
+
 test('workspace file truth watcher ignore rules are path-bound to the workspace root', () => {
   assert.equal(isIgnoredWorkspaceFileEventPath('/workspace/root', '/workspace/root'), false);
   assert.equal(

@@ -487,6 +487,11 @@ async function readWidgetCandidate({
       directory,
       directoryIdentity,
       entry,
+      readDirectoryEntries: (assetsDirectory, assetsDirectoryIdentity) =>
+        readWorkspaceDirectoryEntriesInDirectory({
+          directory: assetsDirectory,
+          directoryIdentity: assetsDirectoryIdentity,
+        }),
       readDirectoryIdentity: readSafeDirectoryIdentity,
       readOptionalFileDescriptor: readOptionalWorkspaceFileDescriptor,
       signature: 'reo-render-widget-preview-v1',

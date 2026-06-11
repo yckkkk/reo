@@ -448,6 +448,11 @@ async function readHomeComponentCandidate({
       directory,
       directoryIdentity,
       entry,
+      readDirectoryEntries: (assetsDirectory, assetsDirectoryIdentity) =>
+        readWorkspaceDirectoryEntriesInDirectory({
+          directory: assetsDirectory,
+          directoryIdentity: assetsDirectoryIdentity,
+        }),
       readDirectoryIdentity: (assetsDirectory) =>
         readSafeDirectoryIdentitySync(
           assetsDirectory,

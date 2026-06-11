@@ -51,12 +51,12 @@ import {
   renderWorkspaceMarkdownObject,
   type ParsedWorkspaceMarkdownObjectCandidate,
 } from './workspaceMarkdownObjects.js';
-import { MAX_ARTIFACT_ASSET_BYTES, MAX_ARTIFACT_ENTRY_BYTES } from './artifactLimits.js';
+import { MAX_ARTIFACT_ENTRY_BYTES } from './artifactLimits.js';
+import { ARTIFACT_RUNTIME_ENTRY_FILE, ARTIFACT_RUNTIME_MANIFEST_FILE } from './artifactUrl.js';
 import {
-  ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
-  ARTIFACT_RUNTIME_ENTRY_FILE,
-  ARTIFACT_RUNTIME_MANIFEST_FILE,
-} from './artifactUrl.js';
+  createArtifactRuntimePreviewVersionSync,
+  type ArtifactRuntimePreviewOptionalFileDescriptor,
+} from './artifactRuntimePreview.js';
 import { recordDiagnosticEvent } from './diagnostics.js';
 import { plainTextFromMarkdown } from './markdownPlainText.js';
 import {
@@ -4700,17 +4700,12 @@ function readArtifactEntryDescriptorInKnownDirectory(
   );
 }
 
-type ArtifactRuntimeFileDescriptor =
-  | { readonly status: 'file'; readonly byteLength: number; readonly hash: string }
-  | { readonly status: 'missing' }
-  | { readonly status: 'blocked'; readonly reason: string }
-  | { readonly status: 'oversized'; readonly byteLength: number };
-
 function readArtifactOptionalFileDescriptorInKnownDirectory(
   directory: string,
   directoryIdentity: DirectoryIdentity,
-  fileName: string
-): ArtifactRuntimeFileDescriptor {
+  fileName: string,
+  maxBytes: number
+): ArtifactRuntimePreviewOptionalFileDescriptor {
   let fd: number;
   try {
     fd = openExistingWorkspaceFileInDirectory({
@@ -4730,7 +4725,7 @@ function readArtifactOptionalFileDescriptorInKnownDirectory(
     if (!entry.isFile()) {
       return { status: 'blocked', reason: 'not-file' };
     }
-    if (entry.size > MAX_ARTIFACT_ASSET_BYTES) {
+    if (entry.size > maxBytes) {
       return { status: 'oversized', byteLength: entry.size };
     }
     const descriptor = {
@@ -4745,96 +4740,32 @@ function readArtifactOptionalFileDescriptorInKnownDirectory(
   }
 }
 
-function appendArtifactPreviewDescriptor(
-  hash: ReturnType<typeof createHash>,
-  descriptor: {
-    readonly fileName: string;
-    readonly fileScope: 'asset' | 'root';
-    readonly value: ArtifactRuntimeFileDescriptor;
-  }
-): void {
-  hash.update(
-    `${JSON.stringify({
-      fileName: descriptor.fileName,
-      fileScope: descriptor.fileScope,
-      value: descriptor.value,
-    })}\n`
-  );
-}
-
-function appendArtifactPreviewAssetDescriptors(
-  hash: ReturnType<typeof createHash>,
-  directory: string,
-  directoryIdentity: DirectoryIdentity
-): void {
-  const assetsDirectory = path.join(directory, ARTIFACT_RUNTIME_ASSETS_DIRECTORY);
-  let assetsDirectoryIdentity: DirectoryIdentity;
-  try {
-    assetsDirectoryIdentity = readDirectoryIdentitySync(
-      assetsDirectory,
-      'Artifact assets directory is not safe'
-    );
-  } catch (error) {
-    appendArtifactPreviewDescriptor(hash, {
-      fileName: ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
-      fileScope: 'root',
-      value:
-        (error as NodeJS.ErrnoException).code === 'ENOENT'
-          ? { status: 'missing' }
-          : { status: 'blocked', reason: (error as NodeJS.ErrnoException).code ?? 'unknown' },
-    });
-    assertSameDirectoryPath(directory, directoryIdentity);
-    return;
-  }
-
-  const assetEntries = runInWorkspaceDirectorySync(
-    { directory: assetsDirectory, directoryIdentity: assetsDirectoryIdentity },
-    () =>
-      readdirSync('.', { withFileTypes: true })
-        .map((entry) => entry.name)
-        .sort()
-  );
-
-  for (const assetFileName of assetEntries) {
-    appendArtifactPreviewDescriptor(hash, {
-      fileName: `${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/${assetFileName}`,
-      fileScope: 'asset',
-      value: readArtifactOptionalFileDescriptorInKnownDirectory(
-        assetsDirectory,
-        assetsDirectoryIdentity,
-        assetFileName
-      ),
-    });
-  }
-
-  assertSameDirectoryPath(directory, directoryIdentity);
-}
-
 function readArtifactRuntimeBundlePreviewVersionInKnownDirectory(
   directory: string,
   directoryIdentity: DirectoryIdentity,
   entry: { readonly byteLength: number; readonly hash: string }
 ): string {
-  const hash = createHash('sha256');
-  hash.update('reo-render-preview-v1\n');
-  appendArtifactPreviewDescriptor(hash, {
-    fileName: ARTIFACT_RUNTIME_ENTRY_FILE,
-    fileScope: 'root',
-    value: { status: 'file', byteLength: entry.byteLength, hash: entry.hash },
-  });
-  for (const fileName of [ARTIFACT_RUNTIME_MANIFEST_FILE]) {
-    appendArtifactPreviewDescriptor(hash, {
-      fileName,
-      fileScope: 'root',
-      value: readArtifactOptionalFileDescriptorInKnownDirectory(
-        directory,
-        directoryIdentity,
-        fileName
+  return createArtifactRuntimePreviewVersionSync({
+    assertDirectoryIdentity: assertSameDirectoryPath,
+    directory,
+    directoryIdentity,
+    entry,
+    readDirectoryEntries: (assetsDirectory, assetsDirectoryIdentity) =>
+      readWorkspaceDirectoryEntriesInDirectory({
+        directory: assetsDirectory,
+        directoryIdentity: assetsDirectoryIdentity,
+      }),
+    readDirectoryIdentity: (assetsDirectory) =>
+      readDirectoryIdentitySync(assetsDirectory, 'Artifact assets directory is not safe'),
+    readOptionalFileDescriptor: (targetDirectory, targetDirectoryIdentity, fileName, maxBytes) =>
+      readArtifactOptionalFileDescriptorInKnownDirectory(
+        targetDirectory,
+        targetDirectoryIdentity,
+        fileName,
+        maxBytes
       ),
-    });
-  }
-  appendArtifactPreviewAssetDescriptors(hash, directory, directoryIdentity);
-  return hash.digest('hex');
+    signature: 'reo-render-preview-v1',
+  });
 }
 
 function markdownBodyByteLength(markdownContent: string): number {

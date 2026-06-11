@@ -29,6 +29,13 @@ type WatcherEntry = {
   readonly close: () => Promise<void>;
 };
 
+type HomeComponentsWatcherEntry = WatcherEntry & {
+  readonly appDataRootPath: string;
+  readonly updateSendEvent: (
+    sendEvent: (event: WorkspaceHomeComponentsChangedEvent) => void
+  ) => void;
+};
+
 type TimerId = unknown;
 
 export type WorkspaceFileTruthWatcherRegistry = {
@@ -205,10 +212,19 @@ export function createWorkspaceFileTruthWatcherRegistry({
     closeWorkspace,
 
     watchHomeComponents({ appDataRootPath, sendEvent }) {
+      const existingEntry = entries.get(HOME_COMPONENTS_WATCHER_KEY) as
+        | HomeComponentsWatcherEntry
+        | undefined;
+      if (existingEntry?.appDataRootPath === appDataRootPath) {
+        existingEntry.updateSendEvent(sendEvent);
+        return;
+      }
+
       void closeHomeComponents();
 
       let disposed = false;
       let timer: TimerId | null = null;
+      let currentSendEvent = sendEvent;
       const watcher = watch(appDataRootPath, {
         awaitWriteFinish: {
           pollInterval: 25,
@@ -237,7 +253,7 @@ export function createWorkspaceFileTruthWatcherRegistry({
           if (disposed) {
             return;
           }
-          sendEvent({
+          currentSendEvent({
             kind: 'changed',
             reason: 'file-system',
             sequence: ++nextSequence,
@@ -264,13 +280,18 @@ export function createWorkspaceFileTruthWatcherRegistry({
         });
       });
 
-      entries.set(HOME_COMPONENTS_WATCHER_KEY, {
+      const watcherEntry: HomeComponentsWatcherEntry = {
+        appDataRootPath,
         close: async () => {
           disposed = true;
           clearPendingTimer();
           await watcher.close();
         },
-      });
+        updateSendEvent(nextSendEvent) {
+          currentSendEvent = nextSendEvent;
+        },
+      };
+      entries.set(HOME_COMPONENTS_WATCHER_KEY, watcherEntry);
     },
 
     watchWorkspace({ rootPath, sendEvent, workspaceHandle, workspaceId }) {
