@@ -925,12 +925,16 @@ test('managed Reo entry presents ordinary file editing before Reo internals', ()
   assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works-design\/references\//);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /短提示创建作品、Widget 或主页组件/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /通过后停止，不继续打磨/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /不要先进入通用 brainstorming/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /app-level `home components root`/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /不要把 app-level 组件补丁套到当前记忆空间根目录/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /验证直接文件效果后停止/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /Reo 明确提示 needs-review/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /workspace-relative 信息与 recovery hint/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /\.reo\/REO\.md/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /固定的官方同名 Reo skills/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /`reo-doctor`/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /不要先启动通用 brainstorming/);
   assert.doesNotMatch(DEFAULT_WORKSPACE_AGENTS_MD, /## 核心实体/);
 });
 
@@ -1105,6 +1109,12 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /validate-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /inspect-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /do not run headless browser screenshots/i);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /Generic global workflow gates/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /provided home components root/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
+    /Do not apply patches against the memory-space cwd/
+  );
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
     /do not hand-write an abbreviated token block/
@@ -2020,9 +2030,9 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     await readFile(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), 'utf8'),
     /^name: reo-cover-aesthetic/m
   );
-  assert.match(
+  assert.equal(
     await readFile(path.join(root, 'skills', 'reo-generative-runtime', 'SKILL.md'), 'utf8'),
-    /^name: reo-generative-runtime/m
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD
   );
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-works', 'SKILL.md'), 'utf8'),

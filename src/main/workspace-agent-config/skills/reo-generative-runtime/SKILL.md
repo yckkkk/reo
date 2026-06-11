@@ -20,6 +20,8 @@ For workspace rail widgets, the object directory is `widgets/<widget-directory>/
 
 For home components, the app-level object directory is `home-components/<component-directory>/`. The object Markdown file is `component.md`; its frontmatter must contain `id`, `title`, `kind: home-component`, `format: html` and `mount: home`. Do not add `workspaceId` or raw paths to `component.md`.
 
+For app-level home component prompts, treat the provided home components root as authoritative. For new bundles, run `scaffold-runtime.mjs` from the parent app data root that contains `home-components/`; for updates, edit the existing bundle directly. Run `validate-runtime.mjs` and `inspect-runtime.mjs` from that parent app data root, using `home-components/<component-directory>` as the target. Do not apply patches against the memory-space cwd when the target root is outside it.
+
 Read `references/bundle-contract.md` before writing files.
 
 ## State
@@ -61,5 +63,7 @@ Do not put literal local file URL scheme examples, machine paths or usernames in
 - Inspect a bundle summary: `node skills/reo-generative-runtime/scripts/inspect-runtime.mjs <target-directory>`.
 
 Validation is about file contract and runnability. It does not judge content quality, network choices or user intent.
+
+Generic global workflow gates are not required for short Reo runtime-object creation prompts. Do not start brainstorming, product-design, test-driven-development, practical-ui, visual companion, browser screenshots or broad repo-search flows unless the current user prompt explicitly asks for them.
 
 For short memory-space creation prompts, run `validate-runtime.mjs` and `inspect-runtime.mjs`, then stop as soon as they pass. Do not run headless browser screenshots, broad repo searches or extra visual-polish loops unless the user explicitly asks for that in the current prompt.

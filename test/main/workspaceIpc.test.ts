@@ -70,6 +70,7 @@ import {
   handleCopyMemorySpaceAbsolutePathForTest,
   handleCopyMemoryRelativePathForTest,
   handleCopyArtifactAgentPromptForTest,
+  handleCopyHomeComponentAgentPromptForTest,
   handleCopyWidgetAgentPromptForTest,
   handleCopyNeedsReviewAgentPromptForTest,
   handleCopySegmentAbsolutePathForTest,
@@ -170,6 +171,11 @@ const event: TrustedSenderEventAdapter = {
     url: 'reo-app://renderer/index.html',
   },
 };
+
+function literalPattern(value: string): RegExp {
+  return new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+}
+
 const microphoneEvent = {
   ...event,
   sender: { ...event.sender, id: 101 },
@@ -8416,6 +8422,95 @@ test('copyWidgetAgentPrompt writes an update prompt scoped to an existing Widget
   assert.match(prompt, /widgetId: wdg_prompt/);
   assert.equal(prompt.includes(root), false);
   assert.equal(prompt.includes('wh_ipc'), false);
+});
+
+test('copyHomeComponentAgentPrompt writes a create prompt scoped to app-level file truth', async () => {
+  const appDataRootPath = await mkdtemp(
+    path.join(os.tmpdir(), 'reo-home-component-prompt-create-')
+  );
+  const copiedText: string[] = [];
+
+  const result = await handleCopyHomeComponentAgentPromptForTest({
+    event,
+    input: {
+      action: 'create-home-component',
+    },
+    appDataDir: appDataRootPath,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  const prompt = copiedText[0] ?? '';
+  assert.match(prompt, /创建 Reo 主页组件/);
+  assert.match(prompt, /app-level 组件，不属于任何记忆空间/);
+  assert.match(
+    prompt,
+    literalPattern(`home components root: \`${path.join(appDataRootPath, 'home-components')}\``)
+  );
+  assert.match(prompt, literalPattern(`app data root: \`${appDataRootPath}\``));
+  assert.match(
+    prompt,
+    /不要先进入 brainstorming、test-driven-development、TDD、product-design、practical-ui 或浏览器 smoke 流程/
+  );
+  assert.match(prompt, /不要把补丁套到记忆空间内的 `home-components\/`/);
+  assert.match(prompt, /验证主页组件时先 `cd` 到 app data root/);
+  assert.match(prompt, /home-components\/<component-dir>/);
+  assert.match(prompt, /kind: home-component/);
+  assert.match(prompt, /mount: home/);
+});
+
+test('copyHomeComponentAgentPrompt writes an update prompt scoped to an existing app-level component', async () => {
+  const appDataRootPath = await mkdtemp(
+    path.join(os.tmpdir(), 'reo-home-component-prompt-update-')
+  );
+  const componentDirectory = path.join(appDataRootPath, 'home-components', 'hcmp_prompt--Daily');
+  await mkdir(path.join(componentDirectory, 'assets'), { recursive: true });
+  await writeFile(
+    path.join(componentDirectory, 'component.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'home-component',
+      data: {
+        id: 'hcmp_prompt',
+        title: 'Daily',
+        kind: 'home-component',
+        format: 'html',
+        mount: 'home',
+      },
+      content: '# Daily\n',
+    })
+  );
+  await writeFile(path.join(componentDirectory, 'entry.html'), '<!doctype html><p>Daily</p>');
+  const copiedText: string[] = [];
+
+  const result = await handleCopyHomeComponentAgentPromptForTest({
+    event,
+    input: {
+      action: 'update-home-component',
+      componentId: 'hcmp_prompt',
+    },
+    appDataDir: appDataRootPath,
+    expectedSession,
+    expectedSessionKey: 'default',
+    isTrustedUrl: (url: string) => url.startsWith('reo-app://renderer/'),
+    writeText: (text: string) => {
+      copiedText.push(text);
+    },
+  });
+
+  assert.deepEqual(result, { ok: true });
+  assert.equal(copiedText.length, 1);
+  const prompt = copiedText[0] ?? '';
+  assert.match(prompt, /更新 Reo 主页组件/);
+  assert.match(prompt, /componentId: hcmp_prompt/);
+  assert.match(prompt, literalPattern(`component directory: \`${componentDirectory}\``));
+  assert.match(prompt, /保留现有组件身份和目录/);
+  assert.match(prompt, /验证主页组件时先 `cd` 到 app data root/);
 });
 
 test('copyWidgetAgentPrompt rejects unsafe Widget markdown before clipboard write', async () => {

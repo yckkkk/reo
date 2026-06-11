@@ -5191,11 +5191,17 @@ function buildHomeComponentAgentPrompt({
     '请创建或更新 Reo 主页组件。主页组件是 app-level 组件，不属于任何记忆空间；不要编辑或移动记忆空间文件。',
     '',
     '文件真源：',
+    `- app data root: \`${appDataRootPath}\``,
     `- home components root: \`${homeComponentsRoot}\``,
     '- 每个组件目录内必须包含 `component.md`、`entry.html`，可选 `runtime.json`、`state.json` 和 `assets/`。',
     '- `component.md` frontmatter 必须包含 `id: hcmp_...`、`title`、`kind: home-component`、`format: html`、`mount: home`。',
     '- 组件持久状态通过 `window.reo.state` 写入同目录 `state.json`。',
     '- 不要创建空目录或占位组件；一次性写入可运行 bundle。',
+    '',
+    '执行约束：',
+    '- 这是已收敛的 Reo 文件任务；不要先进入 brainstorming、test-driven-development、TDD、product-design、practical-ui 或浏览器 smoke 流程，除非用户明确要求。',
+    '- 如果当前 shell cwd 是记忆空间根目录，写文件时仍要使用上面的 home components root 绝对路径；不要把补丁套到记忆空间内的 `home-components/`。',
+    '- runtime 脚本 target 必须在当前 cwd 内；验证主页组件时先 `cd` 到 app data root，再用 `home-components/<component-dir>` 作为 target。',
   ];
   if (request.action === 'create-home-component') {
     return [
@@ -5264,6 +5270,12 @@ async function handleCopyHomeComponentAgentPromptCore({
       'Home component prompt could not be copied'
     );
   }
+}
+
+export async function handleCopyHomeComponentAgentPromptForTest(
+  options: HandleCopyHomeComponentAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyHomeComponentAgentPromptCore(options);
 }
 
 async function resolveArtifactPromptTargetDirectory({
