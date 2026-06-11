@@ -23,16 +23,18 @@ description: 用于在 Reo 记忆空间中创建或更新 agent-created 作品�
 - 用户从 Reo 的作品入口复制 prompt，要求你在当前记忆空间内落文件。
 - 用户要求更新已有作品，让作品反映新的片段、笔记、录音转录或记忆数据。
 
-如果目标不清楚，先用 2-4 个问题确认目标、受众、数据来源、更新频率和交互复杂度。目标足够明确时，先给 3 个方向供用户选择；用户已经指定方向时直接执行。
+短提示也要直接执行。If the user says "make/build/create a work" and does not name a target, do not ask where to put it: create a new standalone work Segment in the only Memory, current Memory, or the Memory whose title/content best matches the prompt. Only create a work Supplement when the user explicitly says "supplement", "补充", "挂在这个片段下面", or provides a concrete Segment/Supplement target. Ask at most one question only when there is no Memory target you can infer or the requested data source cannot be found.
 
 ## 创建作品片段
 
-1. 从 prompt 中读取目标 Memory 目录和建议标题；必要时读取该 Memory 下的 `memory.md`、相关 `segment.md`、`supplement.md` 和普通数据文件。
+1. 从 prompt 中读取目标 Memory 目录和建议标题；如果 prompt 没有给目标但当前空间只有一个 Memory，或有一个 Memory 与主题最匹配，直接选它作为落点，不追问。必要时读取该 Memory 下的 `memory.md`、相关 `segment.md`、`supplement.md` 和普通数据文件。
 2. 生成 Reo Segment id：`seg_YYYYMMDDHHMMSS_8hex`，例如 `seg_20260604024800_a1b2c3d4`；目录名前缀和 `segment.md` frontmatter 必须使用同一个 id。
 3. 在 `memories/<memory-directory>/segments/` 下创建一个清楚命名的 Segment 目录，例如 `seg_20260604024800_a1b2c3d4--间隔复习表`。
 4. 写入 `segment.md`，frontmatter 必须包含稳定 `id`、`title`、`kind: artifact`、`format: html`。
-5. 按 `skills/reo-generative-runtime/SKILL.md` 写入同目录 runtime bundle：`entry.html`、`runtime.json`、`state.json`、`assets/`。
-6. 可先运行 `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <segment-directory> --title "标题" --template <family>`，再把 scaffold 改成用户需要的作品。
+5. 按 `skills/reo-generative-runtime/SKILL.md` 写入同目录 runtime bundle：`entry.html`、`runtime.json`、`state.json`、`assets/`；`entry.html` 的标准 UI token block 规则与作品 Segment 相同。
+6. 优先运行 `node skills/reo-generative-runtime/scripts/scaffold-runtime.mjs <segment-directory> --title "标题" --template <family>`，再把 scaffold 改成用户需要的作品；如果手写 HTML，`<style>` 开头必须完整复制 `skills/reo-works-design/references/core-design-system.md` 的第一个 CSS fence，不要写缩略 token block。
+
+Do not leave a runtime-only half object: a work Segment is not complete until `segment.md`, `entry.html`, `runtime.json`, `state.json` and `assets/` all exist in the same directory.
 
 最小形态：
 

@@ -32,6 +32,7 @@
 
 - 业务 TSX 只能消费现有语义 token，例如 `bg-background`、`bg-card`、`bg-secondary`、`bg-accent`、`text-foreground`、`text-muted-foreground`、`bg-primary`、`text-primary-foreground`、`bg-popover`、`shadow-float` 和 `shadow-modal`。
 - 业务 TSX 不写硬编码颜色，不为单个组件新增设计系统 token，不把 feature-local geometry 提升成全局 token。
+- Agent-created works、workspace rail widgets 和 Home Components 的 managed templates 使用同一 Reo semantic token block 与 `runtime.json.theme: { tokens: "reo-semantic-v1", modes: ["light", "dark"], default: "system" }`。token 约束标准 UI 画框：page surface、cards、buttons、inputs、tabs、lists、popovers、focus rings、spacing、radius 和 shadows；真正的内容画布（插画、图表、游戏场景、地图、封面、艺术画面）可以使用 scoped 自定义色彩、纹理、图片或生成资产，但不得接管标准组件 token，且必须在浅色和深色下保持可读。
 - Tiptap Simple Editor 模板是编辑器 toolbar、dropdown、popover、image upload 和 node chrome 的视觉基线。Reo 只负责主题 owner、全局 Tiptap template variables、editor 容器几何、中文命名、Markdown/附件 I/O 和 Electron 文件边界；Tiptap portal、dropdown、popover、card 和 node view 的视觉问题优先通过 Reo theme root、template variables 和 surface geometry 解决，不在 Tiptap UI primitive 内写业务分支。Tiptap template 的 brand、cursor、selection、浮层 chrome 颜色和 elevation 映射到 Reo token，`--tt-shadow-elevated-md` 派生自 `--shadow-float`；Tiptap 浮层 primitive 保留自身几何并共享 Reo squircle corner treatment。富文本内容高亮色板仍保留 `var(--tt-color-highlight-*)` durable palette。
 - 同平面的 Card、Button、Input、列表项、tab、workspace panel 和内容区不用 border 分割；难以区分时增加间距或调整灰度填充。跨区域边界和浮在内容之上的局部 overlay control 可以使用 token 化细边框来维持可读性。
 - Button、Input、Textarea、Field、Memory card、Segment card 和普通 action 默认无阴影。

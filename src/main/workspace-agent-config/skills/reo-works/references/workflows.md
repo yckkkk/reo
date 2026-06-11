@@ -12,6 +12,17 @@ Use this reference after `SKILL.md` when the user copied a Reo prompt or asks fo
 6. Create the Markdown contract and runtime bundle in one object directory.
 7. Run `node skills/reo-generative-runtime/scripts/validate-runtime.mjs <target-directory>`.
 
+## Short user prompt
+
+When the user only says something like "做一个复习进度作品", "做个图表", or "生成一个看板", do not offer choices. Pick a sensible default and write files:
+
+- If there is one Memory, create a new standalone work Segment under that Memory.
+- If several Memories exist, choose the Memory whose title, body or nearby Segment text best matches the prompt.
+- If the user says "补充", "supplement", or names a concrete Segment, create a work Supplement under that Segment.
+- If no Memory target can be inferred, ask one concise question about the target Memory.
+- Write the Markdown contract, runtime bundle and `state.json`, then run `validate-runtime.mjs` and `inspect-runtime.mjs`.
+- Stop as soon as validation passes. Do not run browser screenshots, headless Chrome, broad repo searches or extra polish loops unless the user explicitly asked for that inside this memory-space task.
+
 ## Update an existing work
 
 1. Read target `segment.md` or `supplement.md`; confirm `kind: artifact` and `format: html`.

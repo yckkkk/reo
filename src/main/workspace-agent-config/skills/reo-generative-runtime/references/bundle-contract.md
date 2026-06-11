@@ -13,7 +13,7 @@ A runtime bundle contains:
 
 ## Markdown object contract
 
-Works and workspace rail widgets use Markdown frontmatter to become Reo objects.
+Works, workspace rail widgets and home components use Markdown frontmatter to become Reo objects.
 
 Work Segment:
 
@@ -48,6 +48,23 @@ Right rail widget. Entry: `entry.html`.
 
 For new widgets, create `widgets/<wdg_YYYYMMDDHHMMSS_8hex--Readable-title>/widget.md` with the same `wdg_` id as the directory prefix. Keep `widget.md` frontmatter strict: do not add `workspaceId`, raw paths, state, cache, preview or `.reo` fields.
 
+Home component:
+
+```markdown
+---
+id: hcmp_20260605075957_755b96e2
+title: 今日复习
+kind: home-component
+format: html
+mount: home
+---
+# 今日复习
+
+Home component. Entry: `entry.html`.
+```
+
+For new home components, create `home-components/<hcmp_YYYYMMDDHHMMSS_8hex--Readable-title>/component.md` with the same `hcmp_` id as the directory prefix. Keep `component.md` frontmatter strict: do not add `workspaceId`, raw paths, state, cache, preview or `.reo` fields.
+
 ## runtime.json
 
 Minimum shape:
@@ -58,12 +75,13 @@ Minimum shape:
   "title": "间隔复习表",
   "entry": "entry.html",
   "template": "spaced-review",
+  "theme": { "tokens": "reo-semantic-v1", "modes": ["light", "dark"], "default": "system" },
   "state": { "schemaVersion": 1, "stores": ["ui", "data", "progress", "draft"] },
   "bridge": { "needs": ["state"] }
 }
 ```
 
-`runtime.json` is not a permission approval file. It describes intent and helps future agents update the work.
+`runtime.json` is not a permission approval file. It describes intent and helps future agents update the work. New works, widgets and home components use `theme.tokens: "reo-semantic-v1"` with `light` and `dark` modes so their standard UI frame follows Reo's current token model.
 
 If the work uses Reo runtime APIs, add the vendor bridge script before your own script:
 

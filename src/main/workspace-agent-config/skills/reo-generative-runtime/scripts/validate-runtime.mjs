@@ -36,6 +36,75 @@ function validateInlineScripts(html) {
   }
 }
 
+const reoThemeTokenChecks = [
+  [/:root,\s*\[data-theme=['"]light['"]\]\s*\{/i, ":root + light theme selector"],
+  [/\[data-theme=['"]dark['"]\]\s*\{/i, "dark theme selector"],
+  [/:root:not\(\[data-theme\]\)/i, "system dark fallback selector"],
+  [/--background:\s*var\(--surface-1\)/, "--background"],
+  [/--foreground:\s*#18181b/, "--foreground"],
+  [/--card:\s*var\(--surface-2\)/, "--card"],
+  [/--popover:\s*var\(--surface-4\)/, "--popover"],
+  [/--primary-hover:/, "--primary-hover"],
+  [/--secondary:/, "--secondary"],
+  [/--muted-foreground:/, "--muted-foreground"],
+  [/--accent-foreground:/, "--accent-foreground"],
+  [/--destructive-hover:/, "--destructive-hover"],
+  [/--scrim:/, "--scrim"],
+  [/--border:/, "--border"],
+  [/--input:\s*var\(--surface-3\)/, "--input"],
+  [/--font-memory-serif:/, "--font-memory-serif"],
+  [/--tracking-heading:\s*0/, "--tracking-heading"],
+  [/--font-weight-medium:\s*500/, "--font-weight-medium"],
+  [/--spacing-160:\s*160px/, "--spacing-160"],
+  [/--container-form:\s*720px/, "--container-form"],
+  [/--radius-4xl:\s*32px/, "--radius-4xl"],
+  [/--shadow-modal:/, "--shadow-modal"],
+  [/--shadow-hero-fill:/, "--shadow-hero-fill"],
+  [/--shadow-surface-inset:/, "--shadow-surface-inset"],
+];
+
+function validateReoThemeTokenBlock(html) {
+  const missing = reoThemeTokenChecks
+    .filter(([pattern]) => !pattern.test(html))
+    .map(([, label]) => label);
+  if (missing.length === 0) return;
+  add(
+    "reo-theme-token-block-incomplete",
+    "entry.html",
+    `runtime.json declares reo-semantic-v1, so entry.html must include the full Reo semantic token block. Missing: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ", ..." : ""}.`
+  );
+}
+
+function expectedObjectMarkdownFile() {
+  const parts = relative.split(path.sep).filter(Boolean);
+  if (parts.length >= 2 && parts[0] === "widgets") return "widget.md";
+  if (parts.length >= 2 && parts[0] === "home-components") return "component.md";
+  if (parts.length === 4 && parts[0] === "memories" && parts[2] === "segments") return "segment.md";
+  if (
+    parts.length === 6 &&
+    parts[0] === "memories" &&
+    parts[2] === "segments" &&
+    parts[4] === "supplements"
+  ) {
+    return "supplement.md";
+  }
+  return null;
+}
+
+async function validateObjectMarkdownFile() {
+  const fileName = expectedObjectMarkdownFile();
+  if (!fileName) return;
+  const filePath = path.join(target, fileName);
+  try {
+    const stats = await lstat(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      add("invalid-object-markdown", fileName, `${fileName} must be an ordinary file.`);
+    }
+  } catch {
+    add("missing-object-markdown", fileName, `${fileName} is required beside this runtime bundle.`);
+  }
+}
+
 async function readRequired(fileName) {
   const filePath = path.join(target, fileName);
   try {
@@ -70,6 +139,9 @@ if (!lexicalInsideRoot() || relative.split(path.sep).includes(".reo")) {
 const entry = targetUsable ? await readRequired("entry.html") : null;
 const runtime = targetUsable ? await readRequired("runtime.json") : null;
 const state = targetUsable ? await readRequired("state.json") : null;
+let runtimeManifest = null;
+
+if (targetUsable) await validateObjectMarkdownFile();
 
 if (entry && !/<!doctype html>/i.test(entry)) add("entry-not-html-document", "entry.html", "entry.html should be a complete HTML document.");
 if (entry && /file:\/\//i.test(entry)) add("file-url", "entry.html", "Copy local resources into assets/ instead of using file://.");
@@ -77,7 +149,15 @@ if (entry && /window\.reo\b/.test(entry) && !/reo-render:\/\/vendor\/reo-render\
 if (entry) validateInlineScripts(entry);
 for (const [fileName, text] of [["runtime.json", runtime], ["state.json", state]]) {
   if (!text) continue;
-  try { JSON.parse(text); } catch { add("invalid-json", fileName, "File must parse as JSON."); }
+  try {
+    const parsed = JSON.parse(text);
+    if (fileName === "runtime.json") runtimeManifest = parsed;
+  } catch {
+    add("invalid-json", fileName, "File must parse as JSON.");
+  }
+}
+if (entry && runtimeManifest?.theme?.tokens === "reo-semantic-v1") {
+  validateReoThemeTokenBlock(entry);
 }
 
 if (targetUsable) {

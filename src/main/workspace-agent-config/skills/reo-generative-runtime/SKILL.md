@@ -12,7 +12,7 @@ Use this skill whenever you create or update a Reo runtime object. A runtime obj
 A valid runtime bundle lives beside the object Markdown file and uses four stable entries:
 
 - `entry.html`: the runnable HTML app entry.
-- `runtime.json`: description, entry, template family, state stores and bridge needs.
+- `runtime.json`: description, entry, template family, theme token contract, state stores and bridge needs.
 - `state.json`: user-visible state stores that agents can inspect and edit.
 - `assets/`: local images, CSS, JS, fonts or data files copied into the bundle.
 
@@ -42,6 +42,8 @@ Read `references/bridge-api.md` before using `window.reo`.
 
 Choose a template family to move fast, then adapt it freely. Useful families include report, explainer, explorable, dashboard, editor, spaced review, todo, game, gallery, map, prototype and data tool. An explorable is an explainer driven by a source->derive->render reactive model (1-2 source variables driving a live chart); for those, references/templates.md links the reo-works-design explorables guide and runnable examples. Templates are starting points, not capability limits.
 
+New works, widgets and home components should write `runtime.json.theme` as `{ "tokens": "reo-semantic-v1", "modes": ["light", "dark"], "default": "system" }`. Use the full Reo semantic token block from `skills/reo-works-design/references/core-design-system.md` for the standard UI frame and controls; do not hand-write an abbreviated token block. Creative content inside the frame can use its own scoped palette when that better serves the user's request.
+
 Read `references/templates.md` before choosing structure.
 
 ## Responsive Layout
@@ -59,3 +61,5 @@ Do not put literal local file URL scheme examples, machine paths or usernames in
 - Inspect a bundle summary: `node skills/reo-generative-runtime/scripts/inspect-runtime.mjs <target-directory>`.
 
 Validation is about file contract and runnability. It does not judge content quality, network choices or user intent.
+
+For short memory-space creation prompts, run `validate-runtime.mjs` and `inspect-runtime.mjs`, then stop as soon as they pass. Do not run headless browser screenshots, broad repo searches or extra visual-polish loops unless the user explicitly asks for that in the current prompt.

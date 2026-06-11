@@ -16,6 +16,16 @@ Pick one dominant template family. Do not combine everything into one work.
 
 Start with the closest family, ship a runnable bundle, then add only the interactions the user asked for.
 
+## Theme contract
+
+Every scaffolded work, workspace rail widget and home component should declare the template theme in `runtime.json`:
+
+```json
+"theme": { "tokens": "reo-semantic-v1", "modes": ["light", "dark"], "default": "system" }
+```
+
+Use the full token block from `skills/reo-works-design/references/core-design-system.md` for the standard UI frame: page surface, cards, buttons, inputs, tabs, lists, popovers, focus rings, spacing, radius and shadows. Do not hand-write an abbreviated copy of that block. Creative content inside the frame can be expressive: illustrations, charts, game scenes, maps, covers and artwork may use bespoke colors, gradients, textures, photos or generated assets. Keep that palette scoped to the content layer and make sure it remains readable in light and dark mode.
+
 ## Responsive text
 
 Right rail widgets are narrow. Put `min-width: 0` on flex/grid text columns and any parent that should shrink. Single-line titles, memory names, counters and menu labels should use `display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`. Long ids, URLs or user text that may not contain spaces should use `overflow-wrap: anywhere` instead of forcing horizontal scroll.
