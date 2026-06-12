@@ -15,6 +15,8 @@ import {
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
@@ -32,6 +34,7 @@ import {
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DELETE_WIDGET_CHANNEL,
+  WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
@@ -43,10 +46,16 @@ import {
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_NOTE_DRAFT_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL,
+  WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL,
   WORKSPACE_INITIALIZE_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
   WORKSPACE_LIST_MEMORY_SPACES_CHANNEL,
+  WORKSPACE_MOVE_MEMORY_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_OPEN_CHANNEL,
+  WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
@@ -59,11 +68,14 @@ import {
   WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
   WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+  WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_MEMORY_DETAIL_CHANNEL,
   WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_READ_VOICE_TRANSCRIPTION_SETTINGS_CHANNEL,
@@ -74,6 +86,7 @@ import {
   WORKSPACE_READ_SEGMENT_SUPPLEMENT_SPEECH_AUDIO_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
+  WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_MEMORY_SPACE_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_SEGMENT_IN_FINDER_CHANNEL,
@@ -82,6 +95,7 @@ import {
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
   WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
   WORKSPACE_RESTORE_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESTORE_SEGMENT_COVER_CHANNEL,
@@ -108,6 +122,8 @@ import {
   WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
   WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL,
   WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
@@ -123,8 +139,12 @@ import {
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceChooseDirectoryResponseSchema,
+  workspaceCopyHomeComponentAbsolutePathRequestSchema,
+  workspaceCopyHomeComponentAgentPromptRequestSchema,
   workspaceDeleteMemoryRequestSchema,
   workspaceDeleteMemoryResponseSchema,
+  workspaceDeleteHomeComponentRequestSchema,
+  workspaceDeleteHomeComponentResponseSchema,
   workspaceDeleteSegmentSupplementRequestSchema,
   workspaceDeleteSegmentSupplementResponseSchema,
   workspaceDeleteSegmentRequestSchema,
@@ -145,13 +165,23 @@ import {
   workspaceFinalizeSegmentSupplementNoteDraftRequestSchema,
   workspaceFinalizeSegmentSupplementNoteDraftResponseSchema,
   workspaceFileTruthChangedEventSchema,
+  workspaceHomeComponentsChangedEventSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListEntityMoveTargetsRequestSchema,
+  workspaceListEntityMoveTargetsResponseSchema,
   workspaceListMemorySpacesResponseSchema,
   workspaceMicrophoneIntentRequestSchema,
   workspaceMicrophoneIntentResponseSchema,
+  workspaceMoveMemoryRequestSchema,
+  workspaceMoveMemoryResponseSchema,
+  workspaceMoveSegmentRequestSchema,
+  workspaceMoveSegmentResponseSchema,
+  workspaceMoveSegmentSupplementRequestSchema,
+  workspaceMoveSegmentSupplementResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceNoInputSchema,
+  workspaceOpenHomeComponentDocumentRequestSchema,
   workspaceOpenRequestSchema,
   workspaceOpenWidgetDocumentRequestSchema,
   workspaceOpenMemoryDocumentRequestSchema,
@@ -160,6 +190,9 @@ import {
   workspaceOpenMemorySpaceAgentsFileRequestSchema,
   workspaceOpenSegmentDocumentRequestSchema,
   workspaceOpenSegmentSupplementDocumentRequestSchema,
+  workspaceReadHomeComponentMemoryDetailRequestSchema,
+  workspaceReadHomeComponentsRequestSchema,
+  workspaceReadHomeComponentsResponseSchema,
   workspaceCopyArtifactAgentPromptRequestSchema,
   workspaceCopyWidgetAbsolutePathRequestSchema,
   workspaceCopyWidgetAgentPromptRequestSchema,
@@ -182,6 +215,8 @@ import {
   workspaceReadFinalizedAudioSegmentSupplementAudioRequestSchema,
   workspaceReadFinalizedAudioSegmentSupplementAudioResponseSchema,
   workspaceReadFinalizedAudioSegmentSupplementResponseSchema,
+  workspaceReadExpressionPlaybackAudioRequestSchema,
+  workspaceReadExpressionPlaybackAudioResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
   workspaceReadRecentExpressionsRequestSchema,
@@ -210,6 +245,7 @@ import {
   workspaceReadSystemDraftWorkspaceResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
   workspaceReadWorkspaceSnapshotResponseSchema,
+  workspaceRevealHomeComponentInFinderRequestSchema,
   workspaceRevealWidgetInFinderRequestSchema,
   workspaceRevealMemoryInFinderRequestSchema,
   workspaceRevealMemorySpaceInFinderRequestSchema,
@@ -225,6 +261,8 @@ import {
   workspaceRecordingAppendResponseSchema,
   workspaceDeleteWidgetRequestSchema,
   workspaceDeleteWidgetResponseSchema,
+  workspaceRestoreDeletedHomeComponentRequestSchema,
+  workspaceRestoreDeletedHomeComponentResponseSchema,
   workspaceRestoreDeletedMemoryRequestSchema,
   workspaceRestoreDeletedMemoryResponseSchema,
   workspaceRestoreMemoryCoverRequestSchema,
@@ -292,6 +330,10 @@ import {
   workspaceUpdateActiveMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleRequestSchema,
   workspaceUpdateMemorySpaceTitleResponseSchema,
+  workspaceUpdateHomeComponentTabOrderRequestSchema,
+  workspaceUpdateHomeComponentTabOrderResponseSchema,
+  workspaceUpdateHomeComponentTitleRequestSchema,
+  workspaceUpdateHomeComponentTitleResponseSchema,
   workspaceUpdateWidgetTabOrderRequestSchema,
   workspaceUpdateWidgetTabOrderResponseSchema,
   workspaceUpdateWidgetTitleRequestSchema,
@@ -315,6 +357,7 @@ import {
   workspaceWriteSegmentSupplementContentResponseSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema,
   workspaceWriteSegmentSupplementNoteDraftBodyResponseSchema,
+  type WorkspaceCopyHomeComponentAgentPromptRequest,
   type WorkspaceCopyArtifactAgentPromptRequest,
   type WorkspaceCopyWidgetAgentPromptRequest,
   type WorkspaceEntityActionResponse,
@@ -402,6 +445,7 @@ import {
   writeNoteSegmentDraftBody,
   writeSegmentSupplementNoteDraftBody,
 } from './noteDrafts.js';
+import { resolveExpressionPlaybackAudio } from './expressionPlaybackAudio.js';
 import {
   listNoteSegmentAttachments,
   listNoteSegmentSupplementAttachments,
@@ -413,6 +457,9 @@ import {
   deleteMemoryFromFileTruth,
   deleteSegmentSupplementFromFileTruth,
   deleteSegmentFromFileTruth,
+  moveMemoryBetweenFileTruthRoots,
+  moveSegmentBetweenFileTruthRoots,
+  moveSegmentSupplementBetweenFileTruthRoots,
   readMemoryDetailFromFileTruth,
   resetMemoryCoverToDefaultFromFileTruth,
   resetSegmentCoverToDefaultFromFileTruth,
@@ -443,6 +490,15 @@ import {
   updateWorkspaceWidgetTabOrderFromFileTruth,
   updateWorkspaceWidgetTitleFromFileTruth,
 } from './workspaceWidgets.js';
+import {
+  deleteHomeComponentFromFileTruth,
+  readHomeComponentShellStateFromFileTruth,
+  readHomeComponentsFromFileTruth,
+  resolveHomeComponentDirectoryFromFileTruth,
+  restoreDeletedHomeComponentFromFileTruth,
+  updateHomeComponentTabOrderFromFileTruth,
+  updateHomeComponentTitleFromFileTruth,
+} from './homeComponents.js';
 import {
   clearAllMicrophoneIntents,
   clearMicrophoneIntent,
@@ -585,6 +641,7 @@ type ResolveSegmentSupplementPaths = (
 type MaybePromise<T> = T | Promise<T>;
 
 export interface RegisterWorkspaceIpcOptions {
+  readonly appDataDir?: string;
   readonly expectedSession: Session | object;
   readonly expectedSessionKey: string;
   readonly isTrustedUrl: (url: string) => boolean;
@@ -628,6 +685,7 @@ export interface HandleInitializeWorkspaceOptions extends WorkspaceIpcBaseOption
 }
 
 interface HandleWorkspaceRequestOptions {
+  readonly appDataDir?: string;
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
   readonly expectedSession: Session | object;
@@ -663,6 +721,12 @@ export interface HandleCreateMemoryOptions extends HandleWorkspaceRequestOptions
   readonly createMemoryId?: () => string;
   readonly now?: () => string;
 }
+
+type HandleEntityMoveOptions = HandleWorkspaceRequestOptions & {
+  readonly appDataDir?: string;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly now?: () => string;
+};
 
 export interface HandleCreateRecordingDraftOptions extends HandleWorkspaceRequestOptions {
   readonly createSegmentId?: () => string;
@@ -785,6 +849,22 @@ type HandleReadRecentExpressionsOptions = WorkspaceIpcBaseOptions & {
   readonly now?: () => string;
 };
 
+type HandleReadExpressionPlaybackAudioOptions = WorkspaceIpcBaseOptions & {
+  readonly appDataDir?: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+  readonly memorySpaceRegistry?: WorkspaceMemorySpaceRegistry;
+  readonly now?: () => string;
+};
+
+type HandleReadHomeComponentMemoryDetailOptions = HandleReadExpressionPlaybackAudioOptions;
+
+type HandleHomeComponentRequestOptions = WorkspaceIpcBaseOptions & {
+  readonly appDataDir?: string;
+  readonly event: TrustedSenderEventAdapter;
+  readonly input: unknown;
+};
+
 type HandleRemoveWorkspaceMemorySpaceOptions = WorkspaceIpcBaseOptions & {
   readonly event: TrustedSenderEventAdapter;
   readonly input: unknown;
@@ -890,6 +970,10 @@ interface HandleCopyWidgetAgentPromptOptions extends HandleWorkspaceRequestOptio
   readonly writeText?: WriteClipboardText;
 }
 
+interface HandleCopyHomeComponentAgentPromptOptions extends HandleHomeComponentRequestOptions {
+  readonly writeText?: WriteClipboardText;
+}
+
 interface HandleRevealMemoryInFinderOptions extends HandleWorkspaceRequestOptions {
   readonly fs?: FsProbe;
   readonly resolver?: ResolveMemoryPaths;
@@ -924,6 +1008,18 @@ interface HandleOpenSegmentSupplementDocumentOptions extends HandleWorkspaceRequ
   readonly fs?: FsProbe;
   readonly resolver?: ResolveSegmentSupplementPaths;
   readonly openPath?: OpenPath;
+}
+
+interface HandleRevealHomeComponentInFinderOptions extends HandleHomeComponentRequestOptions {
+  readonly showItemInFolder?: ShowItemInFolder;
+}
+
+interface HandleOpenHomeComponentDocumentOptions extends HandleHomeComponentRequestOptions {
+  readonly openPath?: OpenPath;
+}
+
+interface HandleCopyHomeComponentAbsolutePathOptions extends HandleHomeComponentRequestOptions {
+  readonly writeText?: WriteClipboardText;
 }
 
 interface HandleRevealWidgetInFinderOptions extends HandleWorkspaceRequestOptions {
@@ -1382,6 +1478,189 @@ export async function handleReadRecentExpressionsForTest(
   return handleReadRecentExpressionsCore(options);
 }
 
+async function handleReadHomeComponentMemoryDetailCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleReadHomeComponentMemoryDetailOptions): Promise<
+  z.infer<typeof workspaceReadMemoryDetailResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadHomeComponentMemoryDetailRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readHomeComponentMemoryDetail request is invalid'
+    );
+  }
+
+  const root = await resolveExpressionPlaybackRootPath({
+    appDataDir,
+    memorySpaceRegistry,
+    now,
+    workspaceId: request.data.workspaceId,
+  });
+  if (!root.ok) {
+    return root;
+  }
+
+  const result = await readMemoryDetailFromFileTruth({
+    rootPath: root.rootPath,
+    workspaceId: request.data.workspaceId,
+    memoryId: request.data.memoryId,
+  });
+  return workspaceReadMemoryDetailResponseSchema.parse(
+    result.ok
+      ? {
+          ok: true,
+          value: {
+            requestId: request.data.requestId,
+            detail: result.value,
+          },
+        }
+      : result
+  );
+}
+
+export async function handleReadHomeComponentMemoryDetailForTest(
+  options: HandleReadHomeComponentMemoryDetailOptions
+): Promise<z.infer<typeof workspaceReadMemoryDetailResponseSchema>> {
+  return handleReadHomeComponentMemoryDetailCore(options);
+}
+
+async function resolveExpressionPlaybackRootPath({
+  appDataDir,
+  memorySpaceRegistry,
+  now,
+  workspaceId,
+}: {
+  readonly appDataDir?: string | undefined;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly now: () => string;
+  readonly workspaceId: string;
+}): Promise<{ readonly ok: true; readonly rootPath: string } | WorkspaceErrorEnvelope> {
+  if (workspaceId === SYSTEM_DRAFT_WORKSPACE_ID) {
+    const ensuredDraft = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+    return ensuredDraft.ok ? { ok: true, rootPath: ensuredDraft.value.rootPath } : ensuredDraft;
+  }
+
+  try {
+    const resolved = await resolveMemorySpacePaths(workspaceId, {
+      registry: memorySpaceRegistry,
+    });
+    if (resolved.ok) {
+      return { ok: true, rootPath: resolved.value.rootAbsolute };
+    }
+    if (resolved.code === 'ERR_WORKSPACE_ROOT_MISSING') {
+      return workspaceError(
+        'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+        'Expression workspace could not be resolved'
+      );
+    }
+    if (
+      resolved.code === 'ERR_WORKSPACE_METADATA_INVALID' ||
+      resolved.code === 'ERR_WORKSPACE_UNSAFE_PATH'
+    ) {
+      return workspaceError(resolved.code, 'Expression workspace root is unavailable');
+    }
+    return workspaceError('ERR_WORKSPACE_ROOT_MISSING', 'Expression workspace root is unavailable');
+  } catch (error) {
+    return workspaceMemorySpaceRegistryReadError(error);
+  }
+}
+
+async function handleReadExpressionPlaybackAudioCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleReadExpressionPlaybackAudioOptions): Promise<
+  z.infer<typeof workspaceReadExpressionPlaybackAudioResponseSchema>
+> {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel: WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+
+  const request = workspaceReadExpressionPlaybackAudioRequestSchema.safeParse(input);
+  if (!request.success) {
+    return workspaceError(
+      'ERR_WORKSPACE_INVALID_REQUEST',
+      'readExpressionPlaybackAudio request is invalid'
+    );
+  }
+
+  const root = await resolveExpressionPlaybackRootPath({
+    appDataDir,
+    memorySpaceRegistry,
+    now,
+    workspaceId: request.data.workspaceId,
+  });
+  if (!root.ok) {
+    return root;
+  }
+
+  const result = await resolveExpressionPlaybackAudio({
+    request: request.data,
+    rootPath: root.rootPath,
+  });
+
+  return workspaceReadExpressionPlaybackAudioResponseSchema.parse(
+    result.ok
+      ? {
+          ok: true,
+          value: {
+            requestId: request.data.requestId,
+            workspaceId: request.data.workspaceId,
+            memoryId: request.data.memoryId,
+            segmentId: request.data.segmentId,
+            ...(request.data.supplementId ? { supplementId: request.data.supplementId } : {}),
+            kind: request.data.kind,
+            audio: result.audio,
+            mimeType: result.mimeType,
+          },
+        }
+      : result
+  );
+}
+
+export async function handleReadExpressionPlaybackAudio(
+  options: HandleReadExpressionPlaybackAudioOptions
+): Promise<z.infer<typeof workspaceReadExpressionPlaybackAudioResponseSchema>> {
+  return handleReadExpressionPlaybackAudioCore(options);
+}
+
+export async function handleReadExpressionPlaybackAudioForTest(
+  options: HandleReadExpressionPlaybackAudioOptions
+): Promise<z.infer<typeof workspaceReadExpressionPlaybackAudioResponseSchema>> {
+  return handleReadExpressionPlaybackAudioCore(options);
+}
+
 async function handleRemoveMemorySpaceCore({
   event,
   input,
@@ -1747,6 +2026,12 @@ export async function handleCopyWidgetAgentPromptForTest(
 function artifactRuntimeTargetFromRequest(
   request: z.infer<typeof workspaceReadArtifactRuntimeStateRequestSchema>
 ): ArtifactRuntimeTarget {
+  if (request.targetType === 'home-component') {
+    return {
+      targetType: 'home-component',
+      componentId: request.componentId,
+    };
+  }
   if (request.targetType === 'widget') {
     return {
       targetType: 'widget',
@@ -1781,59 +2066,131 @@ function artifactRuntimeWorkspaceMismatchError(): WorkspaceErrorEnvelope {
 function handleReadArtifactRuntimeStateCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceReadArtifactRuntimeStateResponseSchema>> {
-  return withWorkspaceHandleRequest({
-    ...options,
+  const trusted = validateWorkspaceSender({
+    event: options.event,
     channel: WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceReadArtifactRuntimeStateRequestSchema,
-    invalidMessage: 'readArtifactRuntimeState request is invalid',
-    run: (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return artifactRuntimeWorkspaceMismatchError();
-        }
-        const result = await readArtifactRuntimeState({
-          rootPath: handle.canonicalRoot,
-          target: artifactRuntimeTargetFromRequest(request),
-        });
-        return workspaceReadArtifactRuntimeStateResponseSchema.parse(
-          result.ok
-            ? { ok: true, value: { requestId: request.requestId, ...result.value } }
-            : result
-        );
-      }),
+    expectedSession: options.expectedSession,
+    expectedSessionKey: options.expectedSessionKey,
+    isTrustedUrl: options.isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return Promise.resolve(trusted);
+  }
+  const parsed = workspaceReadArtifactRuntimeStateRequestSchema.safeParse(options.input);
+  if (!parsed.success) {
+    return Promise.resolve(
+      workspaceError('ERR_WORKSPACE_INVALID_REQUEST', 'readArtifactRuntimeState request is invalid')
+    );
+  }
+  const request = parsed.data;
+  if (request.targetType === 'home-component') {
+    const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+    if (!appRoot.ok) {
+      return Promise.resolve(appRoot);
+    }
+    return readArtifactRuntimeState({
+      rootPath: appRoot.appDataRootPath,
+      target: artifactRuntimeTargetFromRequest(request),
+    }).then((result) =>
+      workspaceReadArtifactRuntimeStateResponseSchema.parse(
+        result.ok ? { ok: true, value: { requestId: request.requestId, ...result.value } } : result
+      )
+    );
+  }
+
+  const handleStore = options.handleStore ?? createWorkspaceHandleStore();
+  const required = handleStore.requireHandle({
+    workspaceHandle: request.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return Promise.resolve(required);
+  }
+  return withUsableWorkspaceHandle(required.handle.assertUsable, async () => {
+    if (request.workspaceId !== required.handle.workspaceId) {
+      return artifactRuntimeWorkspaceMismatchError();
+    }
+    const result = await readArtifactRuntimeState({
+      rootPath: required.handle.canonicalRoot,
+      target: artifactRuntimeTargetFromRequest(request),
+    });
+    return workspaceReadArtifactRuntimeStateResponseSchema.parse(
+      result.ok ? { ok: true, value: { requestId: request.requestId, ...result.value } } : result
+    );
   });
 }
 
 function handleWriteArtifactRuntimeStateCore(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceWriteArtifactRuntimeStateResponseSchema>> {
-  return withWorkspaceHandleRequest({
-    ...options,
+  const trusted = validateWorkspaceSender({
+    event: options.event,
     channel: WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL,
-    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
-    schema: workspaceWriteArtifactRuntimeStateRequestSchema,
-    invalidMessage: 'writeArtifactRuntimeState request is invalid',
-    run: (request, handle, assertUsable) =>
-      withUsableWorkspaceHandle(assertUsable, async () => {
-        if (request.workspaceId !== handle.workspaceId) {
-          return artifactRuntimeWorkspaceMismatchError();
-        }
-        const result = await writeArtifactRuntimeState({
-          rootPath: handle.canonicalRoot,
-          target: artifactRuntimeTargetFromRequest(request),
-          baselineVersion: request.baselineVersion,
-          state: request.state,
-        });
-        return workspaceWriteArtifactRuntimeStateResponseSchema.parse(
-          result.ok
-            ? {
-                ok: true,
-                value: { requestId: request.requestId, ...result.value },
-              }
-            : result
-        );
-      }),
+    expectedSession: options.expectedSession,
+    expectedSessionKey: options.expectedSessionKey,
+    isTrustedUrl: options.isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return Promise.resolve(trusted);
+  }
+  const parsed = workspaceWriteArtifactRuntimeStateRequestSchema.safeParse(options.input);
+  if (!parsed.success) {
+    return Promise.resolve(
+      workspaceError(
+        'ERR_WORKSPACE_INVALID_REQUEST',
+        'writeArtifactRuntimeState request is invalid'
+      )
+    );
+  }
+  const request = parsed.data;
+  if (request.targetType === 'home-component') {
+    const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+    if (!appRoot.ok) {
+      return Promise.resolve(appRoot);
+    }
+    return writeArtifactRuntimeState({
+      rootPath: appRoot.appDataRootPath,
+      target: artifactRuntimeTargetFromRequest(request),
+      baselineVersion: request.baselineVersion,
+      state: request.state,
+    }).then((result) =>
+      workspaceWriteArtifactRuntimeStateResponseSchema.parse(
+        result.ok
+          ? {
+              ok: true,
+              value: { requestId: request.requestId, ...result.value },
+            }
+          : result
+      )
+    );
+  }
+
+  const handleStore = options.handleStore ?? createWorkspaceHandleStore();
+  const required = handleStore.requireHandle({
+    workspaceHandle: request.workspaceHandle,
+    sender: trusted.sender,
+  });
+  if (!required.ok) {
+    return Promise.resolve(required);
+  }
+  return withUsableWorkspaceHandle(required.handle.assertUsable, async () => {
+    if (request.workspaceId !== required.handle.workspaceId) {
+      return artifactRuntimeWorkspaceMismatchError();
+    }
+    const result = await writeArtifactRuntimeState({
+      rootPath: required.handle.canonicalRoot,
+      target: artifactRuntimeTargetFromRequest(request),
+      baselineVersion: request.baselineVersion,
+      state: request.state,
+    });
+    return workspaceWriteArtifactRuntimeStateResponseSchema.parse(
+      result.ok
+        ? {
+            ok: true,
+            value: { requestId: request.requestId, ...result.value },
+          }
+        : result
+    );
   });
 }
 
@@ -3022,6 +3379,18 @@ function sendFileTruthChangedEvent(
   });
 }
 
+function sendHomeComponentsChangedEvent(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceHomeComponentsChangedEventSchema>
+): void {
+  sendWorkspaceRendererEvent({
+    channel: WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL,
+    event,
+    payload,
+    schema: workspaceHomeComponentsChangedEventSchema,
+  });
+}
+
 export function sendRecordingTranscriptionEventForTest(
   event: TrustedSenderEventAdapter,
   payload: z.infer<typeof workspaceRecordingTranscriptionEventSchema>
@@ -3034,6 +3403,13 @@ export function sendFileTruthChangedEventForTest(
   payload: z.infer<typeof workspaceFileTruthChangedEventSchema>
 ): void {
   sendFileTruthChangedEvent(event, payload);
+}
+
+export function sendHomeComponentsChangedEventForTest(
+  event: TrustedSenderEventAdapter,
+  payload: z.infer<typeof workspaceHomeComponentsChangedEventSchema>
+): void {
+  sendHomeComponentsChangedEvent(event, payload);
 }
 
 async function releaseWorkspaceLockAfterFailure(
@@ -4282,6 +4658,7 @@ type EntityActionMissingPathCode =
   | 'ERR_WORKSPACE_SEGMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND'
   | 'ERR_WORKSPACE_WIDGET_NOT_FOUND'
+  | 'ERR_HOME_COMPONENT_NOT_FOUND'
   | 'ERR_MEMORY_SPACE_AGENT_ENTRY_MISSING'
   | 'ERR_ENTITY_DOCUMENT_MISSING';
 
@@ -4565,6 +4942,340 @@ async function resolveWidgetPaths({
   } catch {
     return { ok: false, code: 'ERR_WORKSPACE_WIDGET_NOT_FOUND' };
   }
+}
+
+function homeComponentDocumentPath(directoryAbsolute: string): string {
+  return path.join(directoryAbsolute, 'component.md');
+}
+
+function resolveHomeComponentAppDataRoot({
+  appDataDir,
+}: {
+  readonly appDataDir?: string | undefined;
+}): { readonly ok: true; readonly appDataRootPath: string } | WorkspaceErrorEnvelope {
+  const resolvedAppDataDir = appDataDir ?? defaultAppDataDir();
+  if (typeof resolvedAppDataDir !== 'string') {
+    return resolvedAppDataDir;
+  }
+  return { ok: true, appDataRootPath: resolvedAppDataDir };
+}
+
+async function resolveHomeComponentPaths({
+  appDataRootPath,
+  componentId,
+}: {
+  readonly appDataRootPath: string;
+  readonly componentId: string;
+}): Promise<ResolverResult<WidgetPaths>> {
+  try {
+    const directoryAbsolute = await resolveHomeComponentDirectoryFromFileTruth({
+      appDataRootPath,
+      componentId,
+    });
+    return {
+      ok: true,
+      value: {
+        directoryAbsolute,
+        documentAbsolute: homeComponentDocumentPath(directoryAbsolute),
+      },
+    };
+  } catch {
+    return { ok: false, code: 'ERR_HOME_COMPONENT_NOT_FOUND' };
+  }
+}
+
+function validateHomeComponentSender<Schema extends z.ZodType>({
+  channel,
+  event,
+  expectedSession,
+  expectedSessionKey,
+  input,
+  invalidMessage,
+  isTrustedUrl,
+  schema,
+}: HandleHomeComponentRequestOptions & {
+  readonly channel: string;
+  readonly invalidMessage: string;
+  readonly schema: Schema;
+}): { readonly ok: true; readonly data: z.infer<Schema> } | WorkspaceErrorEnvelope {
+  const trusted = validateWorkspaceSender({
+    event,
+    channel,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  });
+  if (!trusted.ok) {
+    return trusted;
+  }
+  const request = schema.safeParse(input);
+  if (!request.success) {
+    return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', invalidMessage);
+  }
+  return { ok: true, data: request.data };
+}
+
+async function resolveHomeComponentPathsForRequest({
+  appDataDir,
+  componentId,
+}: {
+  readonly appDataDir?: string | undefined;
+  readonly componentId: string;
+}): Promise<{ readonly ok: true; readonly paths: WidgetPaths } | WorkspaceErrorEnvelope> {
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  const resolved = await resolveHomeComponentPaths({
+    appDataRootPath: appRoot.appDataRootPath,
+    componentId,
+  });
+  if (!resolved.ok) {
+    return workspaceError(resolved.code, 'Home component path could not be resolved');
+  }
+  return { ok: true, paths: resolved.value };
+}
+
+async function handleReadHomeComponentsCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+}: HandleHomeComponentRequestOptions): Promise<
+  z.infer<typeof workspaceReadHomeComponentsResponseSchema>
+> {
+  const request = validateHomeComponentSender({
+    channel: WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
+    event,
+    input,
+    expectedSession,
+    expectedSessionKey,
+    invalidMessage: 'readHomeComponents accepts no payload',
+    isTrustedUrl,
+    schema: workspaceReadHomeComponentsRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const shellState = readHomeComponentShellStateFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+    });
+    const result = await readHomeComponentsFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentTabOrder: shellState.componentTabOrder,
+    });
+    return workspaceReadHomeComponentsResponseSchema.parse({
+      ok: true,
+      value: { components: result.components, shellState },
+    });
+  } catch {
+    return workspaceError(
+      'ERR_WORKSPACE_UNSAFE_PATH',
+      'Home components could not be read',
+      'none-written'
+    );
+  }
+}
+
+async function handleRevealHomeComponentInFinderCore({
+  showItemInFolder = showSystemItemInFolder,
+  ...options
+}: HandleRevealHomeComponentInFinderOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
+    invalidMessage: 'revealHomeComponentInFinder request is invalid',
+    schema: workspaceRevealHomeComponentInFinderRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const resolved = await resolveHomeComponentPathsForRequest({
+    appDataDir: options.appDataDir,
+    componentId: request.data.componentId,
+  });
+  if (!resolved.ok) {
+    return resolved;
+  }
+  return revealEntityDirectory({
+    paths: resolved.paths,
+    fs: nodeFsProbe,
+    missingCode: 'ERR_HOME_COMPONENT_NOT_FOUND',
+    missingMessage: 'Home component path is missing',
+    unsafeMessage: 'Home component path is unsafe',
+    showItemInFolder,
+    failureMessage: 'Home component could not be revealed',
+  });
+}
+
+async function handleOpenHomeComponentDocumentCore({
+  openPath = openSystemPath,
+  ...options
+}: HandleOpenHomeComponentDocumentOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
+    invalidMessage: 'openHomeComponentDocument request is invalid',
+    schema: workspaceOpenHomeComponentDocumentRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const resolved = await resolveHomeComponentPathsForRequest({
+    appDataDir: options.appDataDir,
+    componentId: request.data.componentId,
+  });
+  if (!resolved.ok) {
+    return resolved;
+  }
+  return openEntityDocument({
+    paths: resolved.paths,
+    fs: nodeFsProbe,
+    missingCode: 'ERR_ENTITY_DOCUMENT_MISSING',
+    missingMessage: 'Home component document is missing',
+    unsafeMessage: 'Home component document path is unsafe',
+    openPath,
+    failureMessage: 'Home component document could not be opened',
+  });
+}
+
+async function handleCopyHomeComponentAbsolutePathCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyHomeComponentAbsolutePathOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+    invalidMessage: 'copyHomeComponentAbsolutePath request is invalid',
+    schema: workspaceCopyHomeComponentAbsolutePathRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const resolved = await resolveHomeComponentPathsForRequest({
+    appDataDir: options.appDataDir,
+    componentId: request.data.componentId,
+  });
+  if (!resolved.ok) {
+    return resolved;
+  }
+  return copyEntityAbsoluteDirectoryPath({
+    paths: resolved.paths,
+    fs: nodeFsProbe,
+    missingCode: 'ERR_HOME_COMPONENT_NOT_FOUND',
+    missingMessage: 'Home component path is missing',
+    unsafeMessage: 'Home component path is unsafe',
+    writeText,
+    failureMessage: 'Home component path could not be copied',
+  });
+}
+
+function buildHomeComponentAgentPrompt({
+  appDataRootPath,
+  request,
+  targetDirectory,
+}: {
+  readonly appDataRootPath: string;
+  readonly request: WorkspaceCopyHomeComponentAgentPromptRequest;
+  readonly targetDirectory?: string | undefined;
+}): string {
+  const homeComponentsRoot = path.join(appDataRootPath, 'home-components');
+  const common = [
+    '请创建或更新 Reo 主页组件。主页组件是 app-level 组件，不属于任何记忆空间；不要编辑或移动记忆空间文件。',
+    '',
+    '文件真源：',
+    `- app data root: \`${appDataRootPath}\``,
+    `- home components root: \`${homeComponentsRoot}\``,
+    '- 每个组件目录内必须包含 `component.md`、`entry.html`，可选 `runtime.json`、`state.json` 和 `assets/`。',
+    '- `component.md` frontmatter 必须包含 `id: hcmp_...`、`title`、`kind: home-component`、`format: html`、`mount: home`。',
+    '- 组件持久状态通过 `window.reo.state` 写入同目录 `state.json`。',
+    '- 不要创建空目录或占位组件；一次性写入可运行 bundle。',
+    '',
+    '执行约束：',
+    '- 这是已收敛的 Reo 文件任务；不要先进入 brainstorming、test-driven-development、TDD、product-design、practical-ui 或浏览器 smoke 流程，除非用户明确要求。',
+    '- 如果当前 shell cwd 是记忆空间根目录，写文件时仍要使用上面的 home components root 绝对路径；不要把补丁套到记忆空间内的 `home-components/`。',
+    '- runtime 脚本 target 必须在当前 cwd 内；验证主页组件时先 `cd` 到 app data root，再用 `home-components/<component-dir>` 作为 target。',
+  ];
+  if (request.action === 'create-home-component') {
+    return [
+      '# 创建 Reo 主页组件',
+      '',
+      ...common,
+      '',
+      '创建要求：',
+      '- 在 home components root 下新建一个组件目录，目录名使用新的 `hcmp_...` id 和可读标题。',
+    ].join('\n');
+  }
+  return [
+    '# 更新 Reo 主页组件',
+    '',
+    ...common,
+    '',
+    '目标组件：',
+    `- componentId: ${request.componentId}`,
+    `- component directory: \`${targetDirectory ?? ''}\``,
+    '',
+    '更新要求：',
+    '- 保留现有组件身份和目录；如果需要改名，只更新 `component.md` 的 title。',
+  ].join('\n');
+}
+
+async function handleCopyHomeComponentAgentPromptCore({
+  writeText = writeSystemClipboardText,
+  ...options
+}: HandleCopyHomeComponentAgentPromptOptions): Promise<WorkspaceEntityActionResponse> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
+    invalidMessage: 'copyHomeComponentAgentPrompt request is invalid',
+    schema: workspaceCopyHomeComponentAgentPromptRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  let targetDirectory: string | undefined;
+  if (request.data.action === 'update-home-component') {
+    const resolved = await resolveHomeComponentPaths({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentId: request.data.componentId,
+    });
+    if (!resolved.ok) {
+      return workspaceError(resolved.code, 'Home component prompt target could not be resolved');
+    }
+    targetDirectory = resolved.value.directoryAbsolute;
+  }
+  try {
+    writeText(
+      buildHomeComponentAgentPrompt({
+        appDataRootPath: appRoot.appDataRootPath,
+        request: request.data as WorkspaceCopyHomeComponentAgentPromptRequest,
+        targetDirectory,
+      })
+    );
+    return workspaceEntityActionResponseSchema.parse({ ok: true });
+  } catch {
+    return workspaceError(
+      'ERR_CLIPBOARD_WRITE_FAILED',
+      'Home component prompt could not be copied'
+    );
+  }
+}
+
+export async function handleCopyHomeComponentAgentPromptForTest(
+  options: HandleCopyHomeComponentAgentPromptOptions
+): Promise<WorkspaceEntityActionResponse> {
+  return handleCopyHomeComponentAgentPromptCore(options);
 }
 
 async function resolveArtifactPromptTargetDirectory({
@@ -5810,6 +6521,69 @@ export async function handleUpdateWidgetTabOrderForTest(
   return handleUpdateWidgetTabOrderCore(options);
 }
 
+function homeComponentMutationError(message: string, error: unknown): WorkspaceErrorEnvelope {
+  if (error instanceof Error && /not found/i.test(error.message)) {
+    return workspaceError('ERR_HOME_COMPONENT_NOT_FOUND', 'Home component was not found');
+  }
+  return workspaceError('ERR_WORKSPACE_UNSAFE_PATH', message, 'unknown');
+}
+
+async function handleUpdateHomeComponentTitleCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceUpdateHomeComponentTitleResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
+    invalidMessage: 'updateHomeComponentTitle request is invalid',
+    schema: workspaceUpdateHomeComponentTitleRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await updateHomeComponentTitleFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentId: request.data.componentId,
+      title: request.data.title,
+    });
+    return workspaceUpdateHomeComponentTitleResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component title could not be updated', error);
+  }
+}
+
+async function handleUpdateHomeComponentTabOrderCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceUpdateHomeComponentTabOrderResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+    invalidMessage: 'updateHomeComponentTabOrder request is invalid',
+    schema: workspaceUpdateHomeComponentTabOrderRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await updateHomeComponentTabOrderFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentTabOrder: request.data.componentTabOrder,
+      lastActiveComponentId: request.data.lastActiveComponentId,
+    });
+    return workspaceUpdateHomeComponentTabOrderResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component tab order could not be updated', error);
+  }
+}
+
 function handleUpdateSegmentSupplementTitleCore(
   options: HandleUpdateSegmentSupplementTitleOptions
 ): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
@@ -5852,6 +6626,759 @@ export async function handleUpdateSegmentSupplementTitleForTest(
   options: HandleUpdateSegmentSupplementTitleOptions
 ): Promise<z.infer<typeof workspaceUpdateSegmentSupplementTitleResponseSchema>> {
   return handleUpdateSegmentSupplementTitleCore(options);
+}
+
+type MoveTargetSegment = {
+  readonly segmentId: string;
+  readonly title: string;
+  readonly disabledReason: string | null;
+};
+
+type MoveTargetMemory = {
+  readonly memoryId: string;
+  readonly title: string;
+  readonly disabledReason: string | null;
+  readonly segments: readonly MoveTargetSegment[];
+};
+
+type MoveTargetSpace = {
+  readonly workspaceId: string;
+  readonly title: string;
+  readonly disabledReason: string | null;
+  readonly memories: readonly MoveTargetMemory[];
+};
+type EntityMoveSourceType = z.infer<
+  typeof workspaceListEntityMoveTargetsRequestSchema
+>['sourceType'];
+type EntityMoveTargetLevel = 'workspace' | 'memory' | 'segment';
+
+type MoveSourceProjection =
+  | {
+      readonly type: 'memory';
+      readonly workspaceId: string;
+      readonly memoryId: string;
+      readonly title: string;
+      readonly breadcrumb: readonly string[];
+    }
+  | {
+      readonly type: 'segment';
+      readonly workspaceId: string;
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly title: string;
+      readonly breadcrumb: readonly string[];
+    }
+  | {
+      readonly type: 'supplement';
+      readonly workspaceId: string;
+      readonly memoryId: string;
+      readonly segmentId: string;
+      readonly supplementId: string;
+      readonly title: string;
+      readonly breadcrumb: readonly string[];
+    };
+
+type MoveTargetWorkspaceRoot = {
+  readonly rootPath: string;
+  readonly assertUsable: AssertWorkspaceHandleUsable;
+  readonly release: () => Promise<void>;
+};
+
+function moveInvalidTargetError(message: string): WorkspaceErrorEnvelope {
+  return workspaceError('ERR_WORKSPACE_INVALID_REQUEST', message);
+}
+
+function entityMoveTargetLevelForSource(sourceType: EntityMoveSourceType): EntityMoveTargetLevel {
+  if (sourceType === 'memory') {
+    return 'workspace';
+  }
+  if (sourceType === 'segment') {
+    return 'memory';
+  }
+  return 'segment';
+}
+
+async function resolveMoveTargetWorkspaceRoot({
+  activeHandle,
+  appDataDir,
+  memorySpaceRegistry,
+  now,
+  targetWorkspaceId,
+}: {
+  readonly activeHandle: RequiredWorkspaceHandle;
+  readonly appDataDir?: string | undefined;
+  readonly memorySpaceRegistry: WorkspaceMemorySpaceRegistry;
+  readonly now: () => string;
+  readonly targetWorkspaceId: string;
+}): Promise<
+  { readonly ok: true; readonly value: MoveTargetWorkspaceRoot } | WorkspaceErrorEnvelope
+> {
+  if (targetWorkspaceId === activeHandle.workspaceId) {
+    return {
+      ok: true,
+      value: {
+        rootPath: activeHandle.canonicalRoot,
+        assertUsable: activeHandle.assertUsable,
+        release: async () => {},
+      },
+    };
+  }
+
+  let rootPath: string | null;
+  if (isSystemDraftWorkspaceId(targetWorkspaceId)) {
+    const ensured = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+    if (!ensured.ok) {
+      return ensured;
+    }
+    rootPath = ensured.value.rootPath;
+  } else {
+    try {
+      rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(targetWorkspaceId);
+    } catch (error) {
+      return workspaceMemorySpaceRegistryReadError(error);
+    }
+  }
+
+  if (!rootPath) {
+    return workspaceError(
+      'ERR_WORKSPACE_MEMORY_SPACE_NOT_FOUND',
+      'Move target workspace could not be resolved'
+    );
+  }
+
+  const lock = await acquireWorkspaceLock({ canonicalRoot: rootPath });
+  if (!lock.ok) {
+    return lock;
+  }
+  const assertTemporaryTargetUsable = workspaceLockAssertUsable(lock);
+
+  const opened = await openWorkspaceFiles({
+    rootPath,
+    assertWorkspaceUsable: assertTemporaryTargetUsable,
+  });
+  if (!opened.ok) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return opened;
+  }
+  if (opened.snapshot.workspaceId !== targetWorkspaceId) {
+    await releaseWorkspaceLockAfterFailure(lock);
+    return workspaceError(
+      'ERR_WORKSPACE_METADATA_INVALID',
+      'Move target workspace metadata is invalid',
+      'previous-file-preserved'
+    );
+  }
+
+  return {
+    ok: true,
+    value: {
+      rootPath,
+      assertUsable: assertTemporaryTargetUsable,
+      release: async () => {
+        if (lock.lock.isHeld()) {
+          await lock.lock.release().catch(() => {});
+        }
+      },
+    },
+  };
+}
+
+async function readMoveWorkspaceSnapshot({
+  assertUsable,
+  rootPath,
+  workspaceId,
+}: {
+  readonly assertUsable?: AssertWorkspaceHandleUsable;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+}): Promise<{ readonly ok: true; readonly snapshot: WorkspaceSnapshot } | WorkspaceErrorEnvelope> {
+  const result = await readWorkspaceSnapshotFromFileTruth({
+    rootPath,
+    workspaceId,
+    ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+  });
+  return result.ok ? { ok: true, snapshot: result.snapshot } : result;
+}
+
+async function readMoveMemoryDetailSegments({
+  assertUsable,
+  rootPath,
+  workspaceId,
+  memoryId,
+}: {
+  readonly assertUsable?: AssertWorkspaceHandleUsable;
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly memoryId: string;
+}): Promise<readonly MoveTargetSegment[]> {
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath,
+    workspaceId,
+    memoryId,
+    ...(assertUsable ? { assertWorkspaceUsable: assertUsable } : {}),
+  });
+  if (!detail.ok) {
+    return [];
+  }
+  return detail.value.segments.map((segment) => ({
+    segmentId: segment.segmentId,
+    title: segment.title,
+    disabledReason: null,
+  }));
+}
+
+async function moveTargetSpaceFromSnapshot({
+  assertUsable,
+  rootPath,
+  snapshot,
+  source,
+}: {
+  readonly assertUsable?: AssertWorkspaceHandleUsable;
+  readonly rootPath: string;
+  readonly snapshot: WorkspaceSnapshot;
+  readonly source: z.infer<typeof workspaceListEntityMoveTargetsRequestSchema>;
+}): Promise<MoveTargetSpace> {
+  const targetLevel = entityMoveTargetLevelForSource(source.sourceType);
+  const memories =
+    targetLevel === 'workspace'
+      ? []
+      : await Promise.all(
+          snapshot.memories.map(async (memory) => {
+            const segments =
+              targetLevel === 'segment'
+                ? await readMoveMemoryDetailSegments({
+                    rootPath,
+                    workspaceId: snapshot.workspaceId,
+                    memoryId: memory.memoryId,
+                    ...(assertUsable ? { assertUsable } : {}),
+                  })
+                : [];
+            return {
+              memoryId: memory.memoryId,
+              title: memory.title,
+              disabledReason:
+                source.sourceType === 'segment' &&
+                snapshot.workspaceId === source.workspaceId &&
+                memory.memoryId === source.memoryId
+                  ? '当前位置'
+                  : null,
+              segments: segments.map((segment) => ({
+                ...segment,
+                disabledReason:
+                  source.sourceType === 'supplement' &&
+                  snapshot.workspaceId === source.workspaceId &&
+                  memory.memoryId === source.memoryId &&
+                  segment.segmentId === source.segmentId
+                    ? '当前位置'
+                    : null,
+              })),
+            };
+          })
+        );
+
+  return {
+    workspaceId: snapshot.workspaceId,
+    title: snapshot.title,
+    disabledReason:
+      source.sourceType === 'memory' && snapshot.workspaceId === source.workspaceId
+        ? '当前位置'
+        : null,
+    memories,
+  };
+}
+
+async function withTemporaryMoveTargetWorkspace<T>({
+  rootPath,
+  workspaceId,
+  run,
+}: {
+  readonly rootPath: string;
+  readonly workspaceId: string;
+  readonly run: (input: {
+    readonly assertUsable: AssertWorkspaceHandleUsable;
+    readonly rootPath: string;
+    readonly snapshot: WorkspaceSnapshot;
+  }) => Promise<T>;
+}): Promise<T | null> {
+  const lock = await acquireWorkspaceLock({ canonicalRoot: rootPath });
+  if (!lock.ok) {
+    return null;
+  }
+  const assertUsable = workspaceLockAssertUsable(lock);
+  try {
+    const opened = await openWorkspaceFiles({ rootPath, assertWorkspaceUsable: assertUsable });
+    if (!opened.ok || opened.snapshot.workspaceId !== workspaceId) {
+      return null;
+    }
+    return await run({ assertUsable, rootPath, snapshot: opened.snapshot });
+  } finally {
+    if (lock.lock.isHeld()) {
+      await lock.lock.release().catch(() => {});
+    }
+  }
+}
+
+async function readMoveSourceProjection({
+  handle,
+  request,
+}: {
+  readonly handle: RequiredWorkspaceHandle;
+  readonly request: z.infer<typeof workspaceListEntityMoveTargetsRequestSchema>;
+}): Promise<
+  | {
+      readonly ok: true;
+      readonly source: MoveSourceProjection;
+      readonly snapshot: WorkspaceSnapshot;
+    }
+  | WorkspaceErrorEnvelope
+> {
+  const snapshotResult = await readMoveWorkspaceSnapshot({
+    assertUsable: handle.assertUsable,
+    rootPath: handle.canonicalRoot,
+    workspaceId: handle.workspaceId,
+  });
+  if (!snapshotResult.ok) {
+    return snapshotResult;
+  }
+  const { snapshot } = snapshotResult;
+  const memory = snapshot.memories.find((candidate) => candidate.memoryId === request.memoryId);
+  if (!memory) {
+    return workspaceError('ERR_WORKSPACE_MEMORY_NOT_FOUND', 'Move source Memory was not found');
+  }
+  if (request.sourceType === 'memory') {
+    return {
+      ok: true,
+      snapshot,
+      source: {
+        type: 'memory',
+        workspaceId: snapshot.workspaceId,
+        memoryId: memory.memoryId,
+        title: memory.title,
+        breadcrumb: [snapshot.title],
+      },
+    };
+  }
+
+  const detail = await readMemoryDetailFromFileTruth({
+    rootPath: handle.canonicalRoot,
+    workspaceId: handle.workspaceId,
+    memoryId: request.memoryId,
+    assertWorkspaceUsable: handle.assertUsable,
+  });
+  if (!detail.ok) {
+    return detail;
+  }
+  const segment = detail.value.segments.find(
+    (candidate) => candidate.segmentId === request.segmentId
+  );
+  if (!segment) {
+    return workspaceError('ERR_WORKSPACE_SEGMENT_NOT_FOUND', 'Move source Segment was not found');
+  }
+  if (request.sourceType === 'segment') {
+    return {
+      ok: true,
+      snapshot,
+      source: {
+        type: 'segment',
+        workspaceId: snapshot.workspaceId,
+        memoryId: memory.memoryId,
+        segmentId: segment.segmentId,
+        title: segment.title,
+        breadcrumb: [snapshot.title, memory.title],
+      },
+    };
+  }
+
+  const supplement = segment.supplements.find(
+    (candidate) => candidate.supplementId === request.supplementId
+  );
+  if (!supplement) {
+    return workspaceError(
+      'ERR_WORKSPACE_SEGMENT_SUPPLEMENT_NOT_FOUND',
+      'Move source SegmentSupplement was not found'
+    );
+  }
+  return {
+    ok: true,
+    snapshot,
+    source: {
+      type: 'supplement',
+      workspaceId: snapshot.workspaceId,
+      memoryId: memory.memoryId,
+      segmentId: segment.segmentId,
+      supplementId: supplement.supplementId,
+      title: supplement.title,
+      breadcrumb: [snapshot.title, memory.title, segment.title],
+    },
+  };
+}
+
+function handleListEntityMoveTargetsCore({
+  appDataDir,
+  event,
+  input,
+  expectedSession,
+  expectedSessionKey,
+  isTrustedUrl,
+  handleStore = createWorkspaceHandleStore(),
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceListEntityMoveTargetsResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    event,
+    input,
+    channel: WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+    handleStore,
+    schema: workspaceListEntityMoveTargetsRequestSchema,
+    invalidMessage: 'listEntityMoveTargets request is invalid',
+    run: async (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Move target list workspace does not match the active handle'
+          );
+        }
+
+        const sourceResult = await readMoveSourceProjection({ handle, request });
+        if (!sourceResult.ok) {
+          return sourceResult;
+        }
+
+        const spaces: MoveTargetSpace[] = [];
+        const seenWorkspaceIds = new Set<string>();
+        const pushSnapshot = async ({
+          assertUsable,
+          rootPath,
+          snapshot,
+        }: {
+          readonly assertUsable?: AssertWorkspaceHandleUsable;
+          readonly rootPath: string;
+          readonly snapshot: WorkspaceSnapshot;
+        }) => {
+          if (seenWorkspaceIds.has(snapshot.workspaceId)) {
+            return;
+          }
+          seenWorkspaceIds.add(snapshot.workspaceId);
+          spaces.push(
+            await moveTargetSpaceFromSnapshot({
+              rootPath,
+              snapshot,
+              source: request,
+              ...(assertUsable ? { assertUsable } : {}),
+            })
+          );
+        };
+
+        await pushSnapshot({
+          assertUsable: handle.assertUsable,
+          rootPath: handle.canonicalRoot,
+          snapshot: sourceResult.snapshot,
+        });
+
+        if (!seenWorkspaceIds.has(SYSTEM_DRAFT_WORKSPACE_ID)) {
+          const ensuredDraft = await ensureSystemDraftWorkspaceForIpc({ appDataDir, now });
+          if (!ensuredDraft.ok) {
+            return ensuredDraft;
+          }
+          const draftRead = await withTemporaryMoveTargetWorkspace({
+            rootPath: ensuredDraft.value.rootPath,
+            workspaceId: SYSTEM_DRAFT_WORKSPACE_ID,
+            run: async ({ assertUsable: draftAssertUsable, rootPath, snapshot }) => {
+              await pushSnapshot({
+                assertUsable: draftAssertUsable,
+                rootPath,
+                snapshot: annotateSystemDraftSnapshot(snapshot),
+              });
+            },
+          });
+          if (draftRead === null && !seenWorkspaceIds.has(SYSTEM_DRAFT_WORKSPACE_ID)) {
+            return workspaceError(
+              'ERR_WORKSPACE_OPEN_FAILED',
+              'System Draft workspace could not be read for move targets'
+            );
+          }
+        }
+
+        let memorySpaces: Awaited<ReturnType<WorkspaceMemorySpaceRegistry['listMemorySpaces']>>;
+        try {
+          memorySpaces = await memorySpaceRegistry.listMemorySpaces();
+        } catch (error) {
+          return workspaceMemorySpaceRegistryReadError(error);
+        }
+        for (const memorySpace of memorySpaces) {
+          if (seenWorkspaceIds.has(memorySpace.workspaceId)) {
+            continue;
+          }
+          let rootPath: string | null;
+          try {
+            rootPath = await memorySpaceRegistry.resolveMemorySpaceRoot(memorySpace.workspaceId);
+          } catch (error) {
+            return workspaceMemorySpaceRegistryReadError(error);
+          }
+          if (!rootPath) {
+            continue;
+          }
+          await withTemporaryMoveTargetWorkspace({
+            rootPath,
+            workspaceId: memorySpace.workspaceId,
+            run: async ({
+              assertUsable: targetAssertUsable,
+              rootPath: targetRootPath,
+              snapshot,
+            }) => {
+              await pushSnapshot({
+                assertUsable: targetAssertUsable,
+                rootPath: targetRootPath,
+                snapshot,
+              });
+            },
+          });
+        }
+
+        const targetLevel = entityMoveTargetLevelForSource(request.sourceType);
+        return workspaceListEntityMoveTargetsResponseSchema.parse({
+          ok: true,
+          value: {
+            source: sourceResult.source,
+            targetLevel,
+            spaces,
+          },
+        });
+      }),
+  });
+}
+
+function handleMoveMemoryCore({
+  appDataDir,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+  ...options
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceMoveMemoryResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_MOVE_MEMORY_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMoveMemoryRequestSchema,
+    invalidMessage: 'moveMemory request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Memory move workspace does not match the active handle'
+          );
+        }
+        if (
+          isSystemDraftWorkspaceId(handle.workspaceId) &&
+          isSystemDraftDefaultMemoryId(request.memoryId)
+        ) {
+          return protectedSystemEntityError('System Draft default Memory cannot be moved');
+        }
+        if (request.targetWorkspaceId === request.workspaceId) {
+          return moveInvalidTargetError('Memory is already in this workspace');
+        }
+
+        const target = await resolveMoveTargetWorkspaceRoot({
+          activeHandle: handle,
+          appDataDir,
+          memorySpaceRegistry,
+          now,
+          targetWorkspaceId: request.targetWorkspaceId,
+        });
+        if (!target.ok) {
+          return target;
+        }
+        try {
+          const result = await moveMemoryBetweenFileTruthRoots({
+            sourceRootPath: handle.canonicalRoot,
+            sourceWorkspaceId: request.workspaceId,
+            memoryId: request.memoryId,
+            targetRootPath: target.value.rootPath,
+            targetWorkspaceId: request.targetWorkspaceId,
+            assertSourceWorkspaceUsable: assertUsable,
+            assertTargetWorkspaceUsable: target.value.assertUsable,
+          });
+          return workspaceMoveMemoryResponseSchema.parse(
+            result.ok ? { ok: true, value: result.value } : result
+          );
+        } finally {
+          await target.value.release();
+        }
+      }),
+  });
+}
+
+function handleMoveSegmentCore({
+  appDataDir,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+  ...options
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceMoveSegmentResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_MOVE_SEGMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMoveSegmentRequestSchema,
+    invalidMessage: 'moveSegment request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'Segment move workspace does not match the active handle'
+          );
+        }
+        if (
+          request.targetWorkspaceId === request.workspaceId &&
+          request.targetMemoryId === request.memoryId
+        ) {
+          return moveInvalidTargetError('Segment is already in this Memory');
+        }
+
+        const target = await resolveMoveTargetWorkspaceRoot({
+          activeHandle: handle,
+          appDataDir,
+          memorySpaceRegistry,
+          now,
+          targetWorkspaceId: request.targetWorkspaceId,
+        });
+        if (!target.ok) {
+          return target;
+        }
+        try {
+          const result = await moveSegmentBetweenFileTruthRoots({
+            sourceRootPath: handle.canonicalRoot,
+            sourceWorkspaceId: request.workspaceId,
+            memoryId: request.memoryId,
+            segmentId: request.segmentId,
+            targetRootPath: target.value.rootPath,
+            targetWorkspaceId: request.targetWorkspaceId,
+            targetMemoryId: request.targetMemoryId,
+            assertSourceWorkspaceUsable: assertUsable,
+            assertTargetWorkspaceUsable: target.value.assertUsable,
+          });
+          return workspaceMoveSegmentResponseSchema.parse(
+            result.ok ? { ok: true, value: result.value } : result
+          );
+        } finally {
+          await target.value.release();
+        }
+      }),
+  });
+}
+
+function handleMoveSegmentSupplementCore({
+  appDataDir,
+  memorySpaceRegistry = getDefaultMemorySpaceRegistry(),
+  now = nowIso,
+  ...options
+}: HandleEntityMoveOptions): Promise<z.infer<typeof workspaceMoveSegmentSupplementResponseSchema>> {
+  return withWorkspaceHandleRequest({
+    ...options,
+    channel: WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
+    handleStore: options.handleStore ?? createWorkspaceHandleStore(),
+    schema: workspaceMoveSegmentSupplementRequestSchema,
+    invalidMessage: 'moveSegmentSupplement request is invalid',
+    run: (request, handle, assertUsable) =>
+      withUsableWorkspaceHandle(assertUsable, async () => {
+        if (request.workspaceId !== handle.workspaceId) {
+          return workspaceError(
+            'ERR_WORKSPACE_HANDLE_WORKSPACE_MISMATCH',
+            'SegmentSupplement move workspace does not match the active handle'
+          );
+        }
+        if (
+          request.targetWorkspaceId === request.workspaceId &&
+          request.targetMemoryId === request.memoryId &&
+          request.targetSegmentId === request.segmentId
+        ) {
+          return moveInvalidTargetError('SegmentSupplement is already in this Segment');
+        }
+
+        const target = await resolveMoveTargetWorkspaceRoot({
+          activeHandle: handle,
+          appDataDir,
+          memorySpaceRegistry,
+          now,
+          targetWorkspaceId: request.targetWorkspaceId,
+        });
+        if (!target.ok) {
+          return target;
+        }
+        try {
+          const result = await moveSegmentSupplementBetweenFileTruthRoots({
+            sourceRootPath: handle.canonicalRoot,
+            sourceWorkspaceId: request.workspaceId,
+            memoryId: request.memoryId,
+            segmentId: request.segmentId,
+            supplementId: request.supplementId,
+            targetRootPath: target.value.rootPath,
+            targetWorkspaceId: request.targetWorkspaceId,
+            targetMemoryId: request.targetMemoryId,
+            targetSegmentId: request.targetSegmentId,
+            assertSourceWorkspaceUsable: assertUsable,
+            assertTargetWorkspaceUsable: target.value.assertUsable,
+          });
+          return workspaceMoveSegmentSupplementResponseSchema.parse(
+            result.ok ? { ok: true, value: result.value } : result
+          );
+        } finally {
+          await target.value.release();
+        }
+      }),
+  });
+}
+
+export async function handleListEntityMoveTargets(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceListEntityMoveTargetsResponseSchema>> {
+  return handleListEntityMoveTargetsCore(options);
+}
+
+export async function handleListEntityMoveTargetsForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceListEntityMoveTargetsResponseSchema>> {
+  return handleListEntityMoveTargetsCore(options);
+}
+
+export async function handleMoveMemory(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveMemoryResponseSchema>> {
+  return handleMoveMemoryCore(options);
+}
+
+export async function handleMoveMemoryForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveMemoryResponseSchema>> {
+  return handleMoveMemoryCore(options);
+}
+
+export async function handleMoveSegment(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentResponseSchema>> {
+  return handleMoveSegmentCore(options);
+}
+
+export async function handleMoveSegmentForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentResponseSchema>> {
+  return handleMoveSegmentCore(options);
+}
+
+export async function handleMoveSegmentSupplement(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentSupplementResponseSchema>> {
+  return handleMoveSegmentSupplementCore(options);
+}
+
+export async function handleMoveSegmentSupplementForTest(
+  options: HandleEntityMoveOptions
+): Promise<z.infer<typeof workspaceMoveSegmentSupplementResponseSchema>> {
+  return handleMoveSegmentSupplementCore(options);
 }
 
 function handleCreateMemoryCore({
@@ -6325,6 +7852,60 @@ export async function handleRestoreDeletedWidgetForTest(
   options: HandleWorkspaceRequestOptions
 ): Promise<z.infer<typeof workspaceRestoreDeletedWidgetResponseSchema>> {
   return handleRestoreDeletedWidgetCore(options);
+}
+
+async function handleDeleteHomeComponentCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceDeleteHomeComponentResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
+    invalidMessage: 'deleteHomeComponent request is invalid',
+    schema: workspaceDeleteHomeComponentRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await deleteHomeComponentFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      componentId: request.data.componentId,
+    });
+    return workspaceDeleteHomeComponentResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component could not be deleted', error);
+  }
+}
+
+async function handleRestoreDeletedHomeComponentCore(
+  options: HandleHomeComponentRequestOptions
+): Promise<z.infer<typeof workspaceRestoreDeletedHomeComponentResponseSchema>> {
+  const request = validateHomeComponentSender({
+    ...options,
+    channel: WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
+    invalidMessage: 'restoreDeletedHomeComponent request is invalid',
+    schema: workspaceRestoreDeletedHomeComponentRequestSchema,
+  });
+  if (!request.ok) {
+    return request;
+  }
+  const appRoot = resolveHomeComponentAppDataRoot({ appDataDir: options.appDataDir });
+  if (!appRoot.ok) {
+    return appRoot;
+  }
+  try {
+    const result = await restoreDeletedHomeComponentFromFileTruth({
+      appDataRootPath: appRoot.appDataRootPath,
+      restoreToken: request.data.restoreToken,
+    });
+    return workspaceRestoreDeletedHomeComponentResponseSchema.parse({ ok: true, value: result });
+  } catch (error) {
+    return homeComponentMutationError('Home component could not be restored', error);
+  }
 }
 
 function handleCreateRecordingDraftCore({
@@ -8417,6 +9998,7 @@ export async function handleFinishRecordingTranscriptionForTest(
 }
 
 export function registerWorkspaceIpc({
+  appDataDir,
   expectedSession,
   expectedSessionKey,
   isTrustedUrl,
@@ -8450,6 +10032,12 @@ export function registerWorkspaceIpc({
       )
     );
   };
+  const workspaceIpcBaseOptions = {
+    expectedSession,
+    expectedSessionKey,
+    isTrustedUrl,
+  } satisfies WorkspaceIpcBaseOptions;
+  const workspaceIpcAppDataOptions = appDataDir ? { appDataDir } : {};
   type ReadyBackfillWorkspace = {
     readonly assertWorkspaceUsable: () => { readonly ok: true } | WorkspaceErrorEnvelope;
     readonly isCurrent: () => boolean;
@@ -8523,9 +10111,7 @@ export function registerWorkspaceIpc({
     const trusted = validateWorkspaceSender({
       event,
       channel,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     });
     if (!trusted.ok) {
       return response;
@@ -8581,13 +10167,22 @@ export function registerWorkspaceIpc({
     }
     return response;
   }
+
+  function watchHomeComponents(event: TrustedSenderEventAdapter): void {
+    const appRoot = resolveHomeComponentAppDataRoot({ appDataDir });
+    if (!appRoot.ok) {
+      return;
+    }
+    fileTruthWatcher.watchHomeComponents({
+      appDataRootPath: appRoot.appDataRootPath,
+      sendEvent: (payload) => sendHomeComponentsChangedEvent(event, payload),
+    });
+  }
   registerWorkspaceIpcHandler(WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, (event, input) =>
     handleChooseWorkspaceDirectory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       tokenStore,
       showOpenDirectoryDialog,
     })
@@ -8596,19 +10191,16 @@ export function registerWorkspaceIpc({
     handleListWorkspaceMemorySpaces({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL, (event, input) =>
     handleReadSystemDraftWorkspace({
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL, async (event, input) =>
@@ -8616,22 +10208,62 @@ export function registerWorkspaceIpc({
       event,
       WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
       await handleOpenSystemDraftWorkspace({
+        ...workspaceIpcAppDataOptions,
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
     )
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, (event, input) =>
     handleReadRecentExpressions({
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_HOME_COMPONENTS_CHANNEL, (event, input) =>
+    handleReadHomeComponentsCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+    }).then((response) => {
+      if (response.ok) {
+        watchHomeComponents(event);
+      }
+      return response;
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL, (event, input) =>
+    handleReadHomeComponentMemoryDetailCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, (event, input) =>
+    handleReadExpressionPlaybackAudio({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+      memorySpaceRegistry,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL, (event, input) =>
+    handleListEntityMoveTargets({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+      handleStore,
+      memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_INITIALIZE_CHANNEL, async (event, input) =>
@@ -8641,9 +10273,7 @@ export function registerWorkspaceIpc({
       await handleInitializeWorkspace({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         tokenStore,
         handleStore,
         memorySpaceRegistry,
@@ -8657,9 +10287,7 @@ export function registerWorkspaceIpc({
       await handleOpenWorkspace({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         tokenStore,
         handleStore,
         memorySpaceRegistry,
@@ -8673,9 +10301,7 @@ export function registerWorkspaceIpc({
       await handleOpenWorkspaceMemorySpace({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         memorySpaceRegistry,
       })
@@ -8685,9 +10311,7 @@ export function registerWorkspaceIpc({
     handleRemoveMemorySpace({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -8695,9 +10319,7 @@ export function registerWorkspaceIpc({
     handleRevealMemorySpaceInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -8705,9 +10327,7 @@ export function registerWorkspaceIpc({
     handleOpenMemorySpaceAgentsFile({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -8715,9 +10335,7 @@ export function registerWorkspaceIpc({
     handleCopyMemorySpaceAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       memorySpaceRegistry,
     })
   );
@@ -8725,9 +10343,7 @@ export function registerWorkspaceIpc({
     handleRevealMemoryInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8735,9 +10351,7 @@ export function registerWorkspaceIpc({
     handleOpenMemoryDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8745,9 +10359,7 @@ export function registerWorkspaceIpc({
     handleCopyMemoryAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8755,9 +10367,7 @@ export function registerWorkspaceIpc({
     handleCopyMemoryRelativePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8765,9 +10375,7 @@ export function registerWorkspaceIpc({
     handleRevealSegmentInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8775,9 +10383,7 @@ export function registerWorkspaceIpc({
     handleOpenSegmentDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8785,9 +10391,7 @@ export function registerWorkspaceIpc({
     handleCopySegmentAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8795,9 +10399,7 @@ export function registerWorkspaceIpc({
     handleCopySegmentRelativePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8805,29 +10407,25 @@ export function registerWorkspaceIpc({
     handleCopyArtifactAgentPrompt({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
     handleReadArtifactRuntimeStateCore({
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, (event, input) =>
     handleWriteArtifactRuntimeStateCore({
+      ...workspaceIpcAppDataOptions,
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8835,9 +10433,7 @@ export function registerWorkspaceIpc({
     handleCopyNeedsReviewAgentPrompt({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8847,9 +10443,7 @@ export function registerWorkspaceIpc({
       handleRevealSegmentSupplementInFinder({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -8857,9 +10451,7 @@ export function registerWorkspaceIpc({
     handleOpenSegmentSupplementDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8869,9 +10461,7 @@ export function registerWorkspaceIpc({
       handleCopySegmentSupplementAbsolutePath({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -8881,9 +10471,7 @@ export function registerWorkspaceIpc({
       handleCopySegmentSupplementRelativePath({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -8891,9 +10479,7 @@ export function registerWorkspaceIpc({
     handleRevealWidgetInFinder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8901,9 +10487,7 @@ export function registerWorkspaceIpc({
     handleOpenWidgetDocument({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8911,9 +10495,7 @@ export function registerWorkspaceIpc({
     handleCopyWidgetAbsolutePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8921,9 +10503,7 @@ export function registerWorkspaceIpc({
     handleCopyWidgetRelativePath({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -8931,19 +10511,47 @@ export function registerWorkspaceIpc({
     handleCopyWidgetAgentPrompt({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL, (event, input) =>
+    handleRevealHomeComponentInFinderCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL, (event, input) =>
+    handleOpenHomeComponentDocumentCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL, (event, input) =>
+    handleCopyHomeComponentAbsolutePathCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL, (event, input) =>
+    handleCopyHomeComponentAgentPromptCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, (event, input) =>
     handleUpdateMemorySpaceTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       memorySpaceRegistry,
     })
@@ -8952,9 +10560,7 @@ export function registerWorkspaceIpc({
     handleBeginMicrophoneIntent({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -8963,9 +10569,7 @@ export function registerWorkspaceIpc({
     handleClearMicrophoneIntent({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -8975,9 +10579,7 @@ export function registerWorkspaceIpc({
       event,
       input,
       channel: WORKSPACE_START_RECORDING_TRANSCRIPTION_CHANNEL,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       schema: workspaceRecordingTranscriptionStartRequestSchema,
       invalidMessage: 'startRecordingTranscription request is invalid',
@@ -9002,9 +10604,7 @@ export function registerWorkspaceIpc({
         event,
         input,
         channel: WORKSPACE_SEND_RECORDING_TRANSCRIPTION_AUDIO_CHANNEL,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         schema: workspaceRecordingTranscriptionAudioRequestSchema,
         invalidMessage: 'sendRecordingTranscriptionAudio request is invalid',
@@ -9027,9 +10627,7 @@ export function registerWorkspaceIpc({
     finishRecordingTranscriptionCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -9038,9 +10636,7 @@ export function registerWorkspaceIpc({
     closeRecordingTranscriptionCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       recordingTranscriptionSessions,
     })
@@ -9051,9 +10647,7 @@ export function registerWorkspaceIpc({
       handleRequestSegmentTranscriptionBackfillCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         backfillRuntime,
         voiceSettingsStore,
@@ -9065,9 +10659,7 @@ export function registerWorkspaceIpc({
       handleRequestSegmentSupplementTranscriptionBackfillCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         backfillRuntime,
         voiceSettingsStore,
@@ -9077,9 +10669,7 @@ export function registerWorkspaceIpc({
     handleRequestSegmentSpeechSynthesisCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       speechSynthesisRuntime,
       voiceSettingsStore,
@@ -9091,9 +10681,7 @@ export function registerWorkspaceIpc({
       handleRequestSegmentSupplementSpeechSynthesisCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         speechSynthesisRuntime,
         voiceSettingsStore,
@@ -9103,9 +10691,7 @@ export function registerWorkspaceIpc({
     handleReadVoiceTranscriptionSettingsCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
     })
   );
@@ -9113,27 +10699,21 @@ export function registerWorkspaceIpc({
     handleReadAppPermissionStatusCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL, (event, input) =>
     handleRequestAppPermissionCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL, (event, input) =>
     handleSetVoiceTranscriptionEnabledCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
     }).then(handleVoiceSettingsResult)
   );
@@ -9143,9 +10723,7 @@ export function registerWorkspaceIpc({
       handleSetVoiceSpeechSynthesisSpeakerCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         speechSynthesisProbe: voiceSpeechSynthesisProbe,
         store: voiceSettingsStore,
       }).then(handleVoiceSettingsResult)
@@ -9156,9 +10734,7 @@ export function registerWorkspaceIpc({
       handleRegenerateImportedSpeechSynthesisCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         memorySpaceRegistry,
         speechSynthesisRuntime,
@@ -9169,9 +10745,7 @@ export function registerWorkspaceIpc({
     handleSaveVoiceTranscriptionApiKeyCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
       probe: voiceTranscriptionProbe,
       speechSynthesisProbe: voiceSpeechSynthesisProbe,
@@ -9181,9 +10755,7 @@ export function registerWorkspaceIpc({
     handleClearVoiceTranscriptionApiKeyCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       store: voiceSettingsStore,
     }).then(handleVoiceSettingsResult)
   );
@@ -9193,9 +10765,7 @@ export function registerWorkspaceIpc({
       handleValidateVoiceTranscriptionCredentialsCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         store: voiceSettingsStore,
         probe: voiceTranscriptionProbe,
         speechSynthesisProbe: voiceSpeechSynthesisProbe,
@@ -9207,9 +10777,7 @@ export function registerWorkspaceIpc({
       handleOpenVoiceTranscriptionProviderConsoleCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         openExternal,
       })
   );
@@ -9217,9 +10785,7 @@ export function registerWorkspaceIpc({
     handleOpenMarkdownExternalLinkCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       openExternal,
     })
   );
@@ -9227,9 +10793,7 @@ export function registerWorkspaceIpc({
     handleUpdateMemoryTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9237,9 +10801,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9247,9 +10809,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentContentTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9257,9 +10817,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentSupplementTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9267,9 +10825,7 @@ export function registerWorkspaceIpc({
     handleUpdateSegmentContentTabOrder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9277,9 +10833,7 @@ export function registerWorkspaceIpc({
     handleUpdateWidgetTitle({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9287,19 +10841,31 @@ export function registerWorkspaceIpc({
     handleUpdateWidgetTabOrder({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL, (event, input) =>
+    handleUpdateHomeComponentTitleCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL, (event, input) =>
+    handleUpdateHomeComponentTabOrderCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_CREATE_MEMORY_CHANNEL, (event, input) =>
     handleCreateMemory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9307,19 +10873,25 @@ export function registerWorkspaceIpc({
     handleDeleteMemory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_MOVE_MEMORY_CHANNEL, (event, input) =>
+    handleMoveMemory({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+      handleStore,
+      memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, (event, input) =>
     handleRestoreDeletedMemory({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9327,9 +10899,7 @@ export function registerWorkspaceIpc({
     handleResetMemoryCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9337,9 +10907,7 @@ export function registerWorkspaceIpc({
     handleRestoreMemoryCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9347,9 +10915,7 @@ export function registerWorkspaceIpc({
     handleSwitchMemoryDefaultCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9357,9 +10923,7 @@ export function registerWorkspaceIpc({
     handleResetSegmentCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9367,9 +10931,7 @@ export function registerWorkspaceIpc({
     handleRestoreSegmentCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9377,9 +10939,7 @@ export function registerWorkspaceIpc({
     handleSwitchSegmentDefaultCover({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9387,19 +10947,25 @@ export function registerWorkspaceIpc({
     handleDeleteSegment({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_MOVE_SEGMENT_CHANNEL, (event, input) =>
+    handleMoveSegment({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+      handleStore,
+      memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_SEGMENT_CHANNEL, (event, input) =>
     handleRestoreDeletedSegment({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9407,10 +10973,18 @@ export function registerWorkspaceIpc({
     handleDeleteSegmentSupplement({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL, (event, input) =>
+    handleMoveSegmentSupplement({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+      handleStore,
+      memorySpaceRegistry,
     })
   );
   registerWorkspaceIpcHandler(
@@ -9419,9 +10993,7 @@ export function registerWorkspaceIpc({
       handleRestoreDeletedSegmentSupplement({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9429,9 +11001,7 @@ export function registerWorkspaceIpc({
     handleDeleteWidget({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9439,19 +11009,31 @@ export function registerWorkspaceIpc({
     handleRestoreDeletedWidget({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL, (event, input) =>
+    handleDeleteHomeComponentCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
+    })
+  );
+  registerWorkspaceIpcHandler(WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL, (event, input) =>
+    handleRestoreDeletedHomeComponentCore({
+      ...workspaceIpcAppDataOptions,
+      event,
+      input,
+      ...workspaceIpcBaseOptions,
     })
   );
   registerWorkspaceIpcHandler(WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, (event, input) =>
     handleReadMemoryDetail({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9459,9 +11041,7 @@ export function registerWorkspaceIpc({
     handleReadFinalizedAudioSegment({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9471,9 +11051,7 @@ export function registerWorkspaceIpc({
       handleReadFinalizedAudioSegmentSupplement({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9483,9 +11061,7 @@ export function registerWorkspaceIpc({
       handleReadFinalizedAudioSegmentAudio({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9495,9 +11071,7 @@ export function registerWorkspaceIpc({
       handleReadFinalizedAudioSegmentSupplementAudio({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9505,9 +11079,7 @@ export function registerWorkspaceIpc({
     handleCloseWorkspace({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       backfillRuntime,
       speechSynthesisRuntime,
       handleStore,
@@ -9529,9 +11101,7 @@ export function registerWorkspaceIpc({
     handleReadWorkspaceSnapshot({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9554,9 +11124,7 @@ export function registerWorkspaceIpc({
         event,
         input,
         channel,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         schema,
         invalidMessage,
@@ -9569,9 +11137,7 @@ export function registerWorkspaceIpc({
     handleCreateRecordingDraft({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     }).then((response) =>
       afterOk(response, () => {
@@ -9586,9 +11152,7 @@ export function registerWorkspaceIpc({
       handleCreateSegmentSupplementRecordingDraft({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       }).then((response) =>
         afterOk(response, () => {
@@ -9601,9 +11165,7 @@ export function registerWorkspaceIpc({
     handleCreateNoteSegmentDraft({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9613,9 +11175,7 @@ export function registerWorkspaceIpc({
       handleCreateSegmentSupplementNoteDraft({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9671,9 +11231,7 @@ export function registerWorkspaceIpc({
     handleFinalizeNoteSegmentDraftCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -9686,9 +11244,7 @@ export function registerWorkspaceIpc({
       handleFinalizeSegmentSupplementNoteDraftCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         now: nowIso,
       }).then((response) =>
@@ -9699,9 +11255,7 @@ export function registerWorkspaceIpc({
     handleReadSegmentContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9709,9 +11263,7 @@ export function registerWorkspaceIpc({
     handleReadSegmentSupplementContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9719,9 +11271,7 @@ export function registerWorkspaceIpc({
     handleReadSegmentSpeechAudioCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9731,9 +11281,7 @@ export function registerWorkspaceIpc({
       handleReadSegmentSupplementSpeechAudioCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9741,9 +11289,7 @@ export function registerWorkspaceIpc({
     handleWriteSegmentContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -9754,9 +11300,7 @@ export function registerWorkspaceIpc({
     handleWriteSegmentSupplementContentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -9767,9 +11311,7 @@ export function registerWorkspaceIpc({
     handleSaveSegmentAttachmentCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9777,9 +11319,7 @@ export function registerWorkspaceIpc({
     handleListSegmentAttachmentsCore({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
     })
   );
@@ -9789,9 +11329,7 @@ export function registerWorkspaceIpc({
       handleSaveSegmentSupplementAttachmentCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9801,9 +11339,7 @@ export function registerWorkspaceIpc({
       handleListSegmentSupplementAttachmentsCore({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
       })
   );
@@ -9900,9 +11436,7 @@ export function registerWorkspaceIpc({
     handleFinalizeRecordingDraft({
       event,
       input,
-      expectedSession,
-      expectedSessionKey,
-      isTrustedUrl,
+      ...workspaceIpcBaseOptions,
       handleStore,
       now: nowIso,
     }).then((response) =>
@@ -9918,9 +11452,7 @@ export function registerWorkspaceIpc({
       handleFinalizeSegmentSupplementRecordingDraft({
         event,
         input,
-        expectedSession,
-        expectedSessionKey,
-        isTrustedUrl,
+        ...workspaceIpcBaseOptions,
         handleStore,
         now: nowIso,
       }).then((response) =>

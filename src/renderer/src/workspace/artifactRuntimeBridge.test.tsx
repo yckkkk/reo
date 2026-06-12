@@ -2,9 +2,16 @@ import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   artifactSegmentRuntimeUrl,
+  homeComponentRuntimeUrl,
   workspaceWidgetRuntimeUrl,
 } from '../../../workspace-contract/artifact-runtime-url';
-import type { WorkspaceMemoryDetail, WorkspaceSession } from './workspaceApi';
+import type {
+  WorkspaceHomeComponent,
+  WorkspaceMemoryDetail,
+  WorkspaceMemorySpace,
+  WorkspaceRecentExpressionItem,
+  WorkspaceSession,
+} from './workspaceApi';
 import {
   createArtifactRuntimeMessageHandler,
   useArtifactRuntimeBridge,
@@ -157,6 +164,22 @@ function otherMemoryDetail(): WorkspaceMemoryDetail {
   };
 }
 
+function homeComponent(): WorkspaceHomeComponent {
+  return {
+    componentId: 'hcmp_daily',
+    type: 'home-component',
+    format: 'html',
+    mount: 'home',
+    title: 'Daily home',
+    createdAt: '2026-06-10T09:00:00.000Z',
+    updatedAt: '2026-06-10T09:01:00.000Z',
+    icon: { source: 'default' },
+    entryByteLength: 128,
+    entryHash: 'c'.repeat(64),
+    previewVersion: 'd'.repeat(64),
+  };
+}
+
 function messageEvent({
   data,
   origin,
@@ -171,6 +194,8 @@ function messageEvent({
 
 type BridgeHandlerTestOptions = Omit<ArtifactRuntimeBridgeOptions, 'readMemoryDetail'> & {
   readonly readMemoryDetail?: ReadMemoryDetailForRuntime;
+  readonly onSelectHomeMemory?: ArtifactRuntimeBridgeOptions['onSelectHomeMemory'] | undefined;
+  readonly onSelectHomeObject?: ArtifactRuntimeBridgeOptions['onSelectHomeObject'] | undefined;
   readonly onSelectObject?: ((target: ArtifactRuntimeObjectSelectionTarget) => boolean) | undefined;
 };
 
@@ -187,6 +212,11 @@ function bridgeHandlerOptions({
   onRequestFullscreen,
   src,
   target,
+  homeComponent,
+  homeMemorySpaces,
+  homeRecentExpressions,
+  onSelectHomeMemory,
+  onSelectHomeObject,
   workspaceSession,
 }: BridgeHandlerTestOptions) {
   return {
@@ -194,8 +224,13 @@ function bridgeHandlerOptions({
     src,
     getLatestOptions: () => ({
       api,
+      homeComponent,
+      homeMemorySpaces,
+      homeRecentExpressions,
       memory,
       onProductMutation,
+      onSelectHomeMemory,
+      onSelectHomeObject,
       onSelectObject,
       onSelectMemory,
       readMemoryDetail,
@@ -672,6 +707,159 @@ describe('artifact runtime bridge', () => {
     );
   });
 
+  it('routes runtime media playback reads through the existing expression playback read', async () => {
+    const src = artifactSegmentRuntimeUrl({
+      workspaceId: 'ws_bridge',
+      segmentId: 'seg_bridge',
+      previewVersion: 'v1',
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readExpressionPlaybackAudio = vi.fn<
+      Window['reoWorkspace']['readExpressionPlaybackAudio']
+    >(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        ...(payload.supplementId ? { supplementId: payload.supplementId } : {}),
+        kind: payload.kind,
+        audio: new Uint8Array([1, 2, 3]),
+        mimeType: payload.kind === 'note-speech' ? 'audio/mpeg' : 'audio/webm',
+      },
+    }));
+
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          readExpressionPlaybackAudio,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        memory: memoryDetail(),
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'segment',
+          workspaceId: 'ws_bridge',
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_bridge',
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    for (const request of [
+      {
+        requestId: 'req-media-audio-segment',
+        method: 'media.readPlaybackAudio',
+        payload: { memoryId: 'mem_bridge', segmentId: 'seg_audio', kind: 'audio' },
+      },
+      {
+        requestId: 'req-media-audio-supplement',
+        method: 'media.readPlaybackAudio',
+        payload: {
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_audio',
+          supplementId: 'sup_audio',
+          kind: 'audio',
+        },
+      },
+      {
+        requestId: 'req-media-speech-segment',
+        method: 'media.readPlaybackAudio',
+        payload: { memoryId: 'mem_bridge', segmentId: 'seg_note', kind: 'note-speech' },
+      },
+      {
+        requestId: 'req-media-speech-supplement',
+        method: 'media.readPlaybackAudio',
+        payload: {
+          memoryId: 'mem_bridge',
+          segmentId: 'seg_note',
+          supplementId: 'sup_note',
+          kind: 'note-speech',
+        },
+      },
+      {
+        requestId: 'req-media-invalid-kind',
+        method: 'media.readPlaybackAudio',
+        payload: { memoryId: 'mem_bridge', segmentId: 'seg_note', kind: 'artifact' },
+      },
+    ]) {
+      handler(
+        messageEvent({
+          data: {
+            source: 'reo-render',
+            type: 'request',
+            ...request,
+          },
+          origin,
+          source: runtimeWindow,
+        })
+      );
+    }
+    await flushBridge();
+
+    expect(readExpressionPlaybackAudio).toHaveBeenCalledTimes(4);
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(1, {
+      requestId: 'req-media-audio-segment',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_audio',
+      kind: 'audio',
+    });
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(2, {
+      requestId: 'req-media-audio-supplement',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_audio',
+      supplementId: 'sup_audio',
+      kind: 'audio',
+    });
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(3, {
+      requestId: 'req-media-speech-segment',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_note',
+      kind: 'note-speech',
+    });
+    expect(readExpressionPlaybackAudio).toHaveBeenNthCalledWith(4, {
+      requestId: 'req-media-speech-supplement',
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_bridge',
+      segmentId: 'seg_note',
+      supplementId: 'sup_note',
+      kind: 'note-speech',
+    });
+
+    const responses = (runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([payload]) => payload
+    );
+    expect(responses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: 'req-media-audio-segment',
+          ok: true,
+          value: { audio: new Uint8Array([1, 2, 3]), mimeType: 'audio/webm' },
+        }),
+        expect.objectContaining({
+          requestId: 'req-media-speech-supplement',
+          ok: true,
+          value: { audio: new Uint8Array([1, 2, 3]), mimeType: 'audio/mpeg' },
+        }),
+        expect.objectContaining({
+          requestId: 'req-media-invalid-kind',
+          ok: false,
+          error: expect.objectContaining({ code: 'ERR_REO_RUNTIME_INVALID_REQUEST' }),
+        }),
+      ])
+    );
+  });
+
   it('routes workspace widget bridge calls without changing the active rail tab', async () => {
     const src = workspaceWidgetRuntimeUrl({
       workspaceId: 'ws_bridge',
@@ -798,6 +986,286 @@ describe('artifact runtime bridge', () => {
         }),
         expect.objectContaining({
           requestId: 'req-widget-select-memory',
+          ok: true,
+          value: { selected: true },
+        }),
+      ])
+    );
+  });
+
+  it('routes app-level home component bridge calls with home context', async () => {
+    const component = homeComponent();
+    if (!('previewVersion' in component)) {
+      throw new Error('Expected ready home component.');
+    }
+    const src = homeComponentRuntimeUrl({
+      componentId: component.componentId,
+      previewVersion: component.previewVersion,
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readArtifactRuntimeState = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'req-home-state',
+        source: 'file',
+        state: { schemaVersion: 1, stores: { ui: { collapsed: false } } },
+        version: 'e'.repeat(64),
+      },
+    });
+    const writeArtifactRuntimeState = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'req-home-write',
+        state: { schemaVersion: 1 },
+        version: 'f'.repeat(64),
+      },
+    });
+    const updatedComponent = { ...component, title: 'Daily home updated' };
+    const updateHomeComponentTitle = vi.fn().mockResolvedValue({
+      ok: true,
+      value: { component: updatedComponent, components: [updatedComponent] },
+    });
+    const copyHomeComponentAgentPrompt = vi.fn().mockResolvedValue({ ok: true });
+    const onProductMutation = vi.fn();
+    const homeMemorySpaces: readonly WorkspaceMemorySpace[] = [
+      {
+        workspaceId: 'ws_bridge',
+        title: 'Bridge workspace',
+        description: 'Bridge test',
+        addedAt: '2026-06-04T09:00:00.000Z',
+        lastOpenedAt: '2026-06-04T09:00:00.000Z',
+      },
+    ];
+    const homeRecentExpressions: readonly WorkspaceRecentExpressionItem[] = [
+      {
+        id: 'recent_bridge',
+        objectType: 'segment',
+        workspaceId: 'ws_bridge',
+        workspaceTitle: 'Bridge workspace',
+        memoryId: 'mem_bridge',
+        memoryTitle: 'Bridge memory',
+        segmentId: 'seg_bridge',
+        contentKind: 'note',
+        title: 'Recent bridge',
+        preview: 'Recent preview',
+        createdAt: '2026-06-04T09:00:00.000Z',
+        updatedAt: '2026-06-04T09:01:00.000Z',
+      },
+    ];
+
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {
+          copyHomeComponentAgentPrompt,
+          readArtifactRuntimeState,
+          updateHomeComponentTitle,
+          writeArtifactRuntimeState,
+        },
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        homeComponent: component,
+        homeMemorySpaces,
+        homeRecentExpressions,
+        memory: null,
+        onProductMutation,
+        onRequestFullscreen: vi.fn(),
+        src,
+        target: {
+          targetType: 'home-component',
+          componentId: component.componentId,
+        },
+        workspaceSession: session(),
+      })
+    );
+
+    for (const request of [
+      { requestId: 'req-home-state', method: 'state.read' },
+      {
+        requestId: 'req-home-write',
+        method: 'state.write',
+        payload: { baselineVersion: 'e'.repeat(64), state: { schemaVersion: 1 } },
+      },
+      { requestId: 'req-home-workspace', method: 'workspace.read' },
+      { requestId: 'req-home-current', method: 'content.readCurrentObject' },
+      {
+        requestId: 'req-home-title',
+        method: 'mutations.updateTitle',
+        payload: { title: 'Daily home updated' },
+      },
+      { requestId: 'req-home-agent', method: 'agent.copyPrompt' },
+    ]) {
+      handler(
+        messageEvent({
+          data: {
+            source: 'reo-render',
+            type: 'request',
+            ...request,
+          },
+          origin,
+          source: runtimeWindow,
+        })
+      );
+    }
+    await flushBridge();
+
+    expect(readArtifactRuntimeState).toHaveBeenCalledWith({
+      targetType: 'home-component',
+      componentId: component.componentId,
+      requestId: 'req-home-state',
+    });
+    expect(writeArtifactRuntimeState).toHaveBeenCalledWith({
+      targetType: 'home-component',
+      componentId: component.componentId,
+      requestId: 'req-home-write',
+      baselineVersion: 'e'.repeat(64),
+      state: { schemaVersion: 1 },
+    });
+    expect(updateHomeComponentTitle).toHaveBeenCalledWith({
+      componentId: component.componentId,
+      title: 'Daily home updated',
+    });
+    expect(copyHomeComponentAgentPrompt).toHaveBeenCalledWith({
+      action: 'update-home-component',
+      componentId: component.componentId,
+    });
+    expect(onProductMutation).toHaveBeenCalledWith({
+      component: updatedComponent,
+      components: [updatedComponent],
+    });
+
+    const responses = (runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([payload]) => payload
+    );
+    expect(responses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: 'req-home-workspace',
+          ok: true,
+          value: expect.objectContaining({
+            workspace: expect.objectContaining({ workspaceId: 'ws_bridge' }),
+            memorySpaces: homeMemorySpaces,
+            recentExpressions: homeRecentExpressions,
+            memory: null,
+            currentMemory: null,
+            target: expect.objectContaining({
+              targetType: 'home-component',
+              componentId: component.componentId,
+            }),
+            currentObject: expect.objectContaining({ componentId: component.componentId }),
+          }),
+        }),
+        expect.objectContaining({
+          requestId: 'req-home-current',
+          ok: true,
+          value: expect.objectContaining({ componentId: component.componentId }),
+        }),
+      ])
+    );
+  });
+
+  it('allows home components to read and select workspace memory targets', async () => {
+    const component = homeComponent();
+    if (!('previewVersion' in component)) {
+      throw new Error('Expected ready home component.');
+    }
+    const src = homeComponentRuntimeUrl({
+      componentId: component.componentId,
+      previewVersion: component.previewVersion,
+    });
+    const origin = new URL(src).origin;
+    const runtimeWindow = { postMessage: vi.fn() } as unknown as WindowProxy;
+    const readMemoryDetail = vi.fn().mockResolvedValue(otherMemoryDetail());
+    const onSelectHomeMemory = vi.fn(async () => true);
+    const onSelectHomeObject = vi.fn(async () => true);
+    const handler = createArtifactRuntimeMessageHandler(
+      bridgeHandlerOptions({
+        api: {},
+        iframeRef: {
+          current: { contentWindow: runtimeWindow } as HTMLIFrameElement,
+        },
+        homeComponent: component,
+        memory: null,
+        onProductMutation: vi.fn(),
+        onRequestFullscreen: vi.fn(),
+        onSelectHomeMemory,
+        onSelectHomeObject,
+        readMemoryDetail,
+        src,
+        target: {
+          targetType: 'home-component',
+          componentId: component.componentId,
+        },
+      })
+    );
+
+    for (const request of [
+      {
+        requestId: 'req-home-read-memory',
+        method: 'content.readMemoryDetail',
+        payload: { workspaceId: 'ws_bridge', memoryId: 'mem_other' },
+      },
+      {
+        requestId: 'req-home-select-memory',
+        method: 'ui.selectMemory',
+        payload: { workspaceId: 'ws_bridge', memoryId: 'mem_other' },
+      },
+      {
+        requestId: 'req-home-select-object',
+        method: 'ui.selectObject',
+        payload: { workspaceId: 'ws_bridge', memoryId: 'mem_other', segmentId: 'seg_other' },
+      },
+    ]) {
+      handler(
+        messageEvent({
+          data: {
+            source: 'reo-render',
+            type: 'request',
+            ...request,
+          },
+          origin,
+          source: runtimeWindow,
+        })
+      );
+    }
+    await flushBridge();
+
+    expect(readMemoryDetail).toHaveBeenCalledWith({
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_other',
+    });
+    expect(readMemoryDetail).toHaveBeenLastCalledWith({
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_other',
+    });
+    expect(onSelectHomeMemory).toHaveBeenCalledWith({
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_other',
+    });
+    expect(onSelectHomeObject).toHaveBeenCalledWith({
+      workspaceId: 'ws_bridge',
+      memoryId: 'mem_other',
+      segmentId: 'seg_other',
+    });
+
+    const responses = (runtimeWindow.postMessage as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([payload]) => payload
+    );
+    expect(responses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestId: 'req-home-read-memory',
+          ok: true,
+          value: expect.objectContaining({ memoryId: 'mem_other' }),
+        }),
+        expect.objectContaining({
+          requestId: 'req-home-select-memory',
+          ok: true,
+          value: { selected: true },
+        }),
+        expect.objectContaining({
+          requestId: 'req-home-select-object',
           ok: true,
           value: { selected: true },
         }),

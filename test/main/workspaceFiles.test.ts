@@ -27,7 +27,9 @@ import {
   DEFAULT_REO_DOCTOR_SKILL_MD,
   DEFAULT_REO_EDIT_SKILL_MD,
   DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES,
+  DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES,
   DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
+  DEFAULT_REO_WORKS_DESIGN_EXAMPLE_FILES,
   DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
   DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES,
   DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS,
@@ -705,7 +707,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   );
   assert.deepEqual(
     (await readdir(path.join(root, 'skills', 'reo-generative-runtime', 'scripts'))).sort(),
-    ['inspect-runtime.mjs', 'scaffold-runtime.mjs', 'validate-runtime.mjs']
+    Object.keys(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).sort()
   );
   assert.deepEqual((await readdir(path.join(root, 'skills', 'reo-works-design'))).sort(), [
     'SKILL.md',
@@ -724,8 +726,14 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   for (const filename of worksDesignExampleFiles) {
     const example = await readFile(path.join(worksDesignExamplesDirectory, filename), 'utf8');
     assert.match(example, /^<!doctype html>/, filename);
-    assert.match(example, /--color-background-primary/, filename);
+    assert.match(example, /--background: var\(--surface-1\)/, filename);
+    assert.match(example, /\[data-theme='dark'\]/, filename);
     assert.match(example, /function derive\(/, filename);
+    assert.doesNotMatch(
+      example,
+      /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md/,
+      filename
+    );
     assert.doesNotMatch(example, /[`]|\$\{/, filename);
   }
   const explorablesReference = await readFile(
@@ -776,6 +784,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(worksSkillText, /entry\.html/);
   assert.match(worksSkillText, /runtime\.json/);
   assert.match(worksSkillText, /state\.json/);
+  assert.match(worksSkillText, /不要写缩略 token block/);
   assert.doesNotMatch(worksSkillText, /segment\.html|supplement\.html/);
   assert.match(worksSkillText, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(worksSkillText, /references\/file-contract\.md/);
@@ -792,6 +801,7 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   assert.match(runtimeSkillText, /scaffold-runtime\.mjs/);
   assert.match(runtimeSkillText, /validate-runtime\.mjs/);
   assert.match(runtimeSkillText, /inspect-runtime\.mjs/);
+  assert.match(runtimeSkillText, /do not hand-write an abbreviated token block/);
   assert.doesNotMatch(runtimeSkillText, /migrate-runtime\.mjs/);
   assert.doesNotMatch(runtimeSkillText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksContractText = await readFile(
@@ -812,18 +822,29 @@ test('workspace init creates stable root files and Reo agent skill entry', async
   );
   assert.match(worksDesignSkillText, /^name: reo-works-design/m);
   assert.match(worksDesignSkillText, /references\/core-design-system\.md/);
-  assert.match(worksDesignSkillText, /--color-background-primary/);
-  assert.match(worksDesignSkillText, /--border-radius-md/);
-  assert.match(worksDesignSkillText, /c-purple/);
-  assert.match(worksDesignSkillText, /#EEEDFE/);
+  assert.match(worksDesignSkillText, /--background: var\(--surface-1\)/);
+  assert.match(worksDesignSkillText, /\[data-theme='dark'\]/);
+  assert.match(worksDesignSkillText, /--tracking-heading: 0/);
+  assert.match(worksDesignSkillText, /--font-weight-medium: 500/);
+  assert.match(worksDesignSkillText, /--container-form: 720px/);
+  assert.match(worksDesignSkillText, /--shadow-hero-fill:/);
+  assert.match(worksDesignSkillText, /内容画布可以有自己的创作风格/);
+  assert.doesNotMatch(
+    worksDesignSkillText,
+    /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md|c-purple/
+  );
   assert.doesNotMatch(worksDesignSkillText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksDesignCoreText = await readFile(
     path.join(root, 'skills', 'reo-works-design', 'references', 'core-design-system.md'),
     'utf8'
   );
-  assert.match(worksDesignCoreText, /--color-background-primary/);
-  assert.match(worksDesignCoreText, /c-purple/);
-  assert.match(worksDesignCoreText, /#EEEDFE/);
+  assert.match(worksDesignCoreText, /--background: var\(--surface-1\)/);
+  assert.match(worksDesignCoreText, /--shadow-hero-lift:/);
+  assert.match(worksDesignCoreText, /Seamless frame, expressive content/);
+  assert.doesNotMatch(
+    worksDesignCoreText,
+    /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md|c-purple/
+  );
   assert.match(worksDesignCoreText, /普通 Web 网络/);
   assert.doesNotMatch(worksDesignCoreText, /Michaelliv|pi-generative-ui|github\.com/);
   const worksDesignModulesText = await readFile(
@@ -902,12 +923,18 @@ test('managed Reo entry presents ordinary file editing before Reo internals', ()
   assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works\/references\//);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /skills\/reo-works-design\/references\//);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /短提示创建作品、Widget 或主页组件/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /通过后停止，不继续打磨/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /不要先进入通用 brainstorming/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /app-level `home components root`/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /不要把 app-level 组件补丁套到当前记忆空间根目录/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /验证直接文件效果后停止/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /Reo 明确提示 needs-review/);
   assert.match(DEFAULT_WORKSPACE_REO_MD, /workspace-relative 信息与 recovery hint/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /\.reo\/REO\.md/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /固定的官方同名 Reo skills/);
   assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /`reo-doctor`/);
+  assert.match(DEFAULT_WORKSPACE_AGENTS_MD, /不要先启动通用 brainstorming/);
   assert.doesNotMatch(DEFAULT_WORKSPACE_AGENTS_MD, /## 核心实体/);
 });
 
@@ -1003,10 +1030,13 @@ test('managed reo-works skill defines artifact file creation without external re
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /entry\.html/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /runtime\.json/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /state\.json/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /do not ask where to put it/i);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /new standalone work Segment/i);
   assert.doesNotMatch(DEFAULT_REO_WORKS_SKILL_MD, /segment\.html|supplement\.html/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-generative-runtime\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /skills\/reo-works-design\/SKILL\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /用户未指定风格时默认按 `reo-works-design`/);
+  assert.match(DEFAULT_REO_WORKS_SKILL_MD, /readPlaybackAudio/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/file-contract\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/workflows\.md/);
   assert.match(DEFAULT_REO_WORKS_SKILL_MD, /references\/runtime-contract-check\.md/);
@@ -1028,6 +1058,16 @@ test('managed reo-works skill defines artifact file creation without external re
     /segment\.html|supplement\.html/
   );
   assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'], /Create from Reo prompt/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'], /Short user prompt/);
+  assert.match(DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'], /do not offer choices/i);
+  assert.match(
+    DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'],
+    /Stop as soon as validation passes/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_REFERENCE_FILES['workflows.md'],
+    /Do not run browser screenshots/i
+  );
   assert.match(
     DEFAULT_REO_WORKS_REFERENCE_FILES['runtime-contract-check.md'],
     /validate-runtime\.mjs/
@@ -1057,18 +1097,51 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /widgets\/<widget-directory>/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /widget\.md/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /mount: workspace-rail/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /home-components\/<component-directory>/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /component\.md/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /mount: home/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /window\.reo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /bridge\.js/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /readPlaybackAudio/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /they do not reload the host iframe/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /scaffold-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /validate-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /inspect-runtime\.mjs/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /do not run headless browser screenshots/i);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /Generic global workflow gates/);
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /provided home components root/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
+    /Do not apply patches against the memory-space cwd/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
+    /do not hand-write an abbreviated token block/
+  );
   assert.doesNotMatch(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /migrate-runtime\.mjs/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /dashboard/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /todo/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /spaced review/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'], /state\.json/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['templates.md'],
+    /Do not hand-write an abbreviated copy/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'],
+    /full Reo semantic token block/
+  );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES['validate-runtime.mjs'],
+    /reo-theme-token-block-incomplete/
+  );
+  assert.deepEqual(Object.keys(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).sort(), [
+    'inspect-runtime.mjs',
+    'reo-token-contract.mjs',
+    'scaffold-runtime.mjs',
+    'validate-runtime.mjs',
+  ]);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /text-overflow: ellipsis/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /overflow-wrap: anywhere/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD, /240px rail to a 520px rail/);
@@ -1110,6 +1183,11 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /ui\.selectObject/);
   assert.match(
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
+    /media\.readPlaybackAudio/
+  );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'], /note-speech/);
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bridge-api.md'],
     /readMemoryDetail\(\{ memoryId \}\)/
   );
   assert.match(
@@ -1149,6 +1227,12 @@ test('managed reo-generative-runtime skill defines bundle, state, network, templ
     DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bundle-contract.md'],
     /mount: workspace-rail/
   );
+  assert.match(
+    DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bundle-contract.md'],
+    /kind: home-component/
+  );
+  assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['bundle-contract.md'], /hcmp_/);
+  assert.match(DEFAULT_WORKSPACE_REO_MD, /home-components\/<component-directory>\/component\.md/);
   assert.match(DEFAULT_REO_GENERATIVE_RUNTIME_REFERENCE_FILES['validation.md'], /can run/);
   assert.doesNotMatch(
     DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD,
@@ -1191,13 +1275,25 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.match(scaffoldedEntry, /reo-render:\/\/vendor\/reo-render\/bridge\.js/);
   assert.match(scaffoldedEntry, /data-template="todo"/);
   assert.equal(scaffoldedEntry.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS), true);
-  assert.match(scaffoldedEntry, /--color-background-primary:/);
-  assert.match(scaffoldedEntry, /--color-background-success: #27500a/);
-  assert.match(scaffoldedEntry, /--color-text-success: #c0dd97/);
-  assert.match(scaffoldedEntry, /--color-border-secondary: rgba\(24, 24, 27, 0\.14\)/);
-  assert.match(scaffoldedEntry, /background:var\(--color-background-primary\)/);
-  assert.match(scaffoldedEntry, /color:var\(--color-text-primary\)/);
-  assert.match(scaffoldedEntry, /border-radius:var\(--border-radius-md\)/);
+  assert.match(scaffoldedEntry, /:root,\s*\n\[data-theme='light'\]/);
+  assert.match(scaffoldedEntry, /\[data-theme='dark'\]/);
+  assert.match(scaffoldedEntry, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(scaffoldedEntry, /:root:not\(\[data-theme\]\)/);
+  assert.match(scaffoldedEntry, /--background: var\(--surface-1\)/);
+  assert.match(scaffoldedEntry, /--foreground: #18181b/);
+  assert.match(scaffoldedEntry, /--card: var\(--surface-2\)/);
+  assert.match(scaffoldedEntry, /--popover: var\(--surface-4\)/);
+  assert.match(scaffoldedEntry, /--tracking-heading: 0/);
+  assert.match(scaffoldedEntry, /--font-weight-medium: 500/);
+  assert.match(scaffoldedEntry, /--container-form: 720px/);
+  assert.match(scaffoldedEntry, /--shadow-hero-fill:/);
+  assert.match(scaffoldedEntry, /background:var\(--background\)/);
+  assert.match(scaffoldedEntry, /color:var\(--foreground\)/);
+  assert.match(scaffoldedEntry, /border-radius:var\(--radius-md\)/);
+  assert.doesNotMatch(
+    scaffoldedEntry,
+    /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md/
+  );
   assert.match(scaffoldedEntry, /新增一项/);
   assert.doesNotMatch(scaffoldedEntry, /innerHTML\s*=\s*items\(\)\.map/);
   assert.match(scaffoldedEntry, /label\.textContent\s*=/);
@@ -1205,6 +1301,11 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.doesNotMatch(scaffoldedEntry, /Runtime bundle scaffolded/);
   const runtimeJson = JSON.parse(await readFile(path.join(root, 'work', 'runtime.json'), 'utf8'));
   assert.deepEqual(runtimeJson.bridge.needs, ['state']);
+  assert.deepEqual(runtimeJson.theme, {
+    tokens: 'reo-semantic-v1',
+    modes: ['light', 'dark'],
+    default: 'system',
+  });
   assert.equal(Object.hasOwn(runtimeJson, 'secrets'), false);
 
   const [validateOk, inspectOk] = await Promise.all([
@@ -1227,6 +1328,113 @@ test('managed runtime scripts reject symlink targets outside the memory space', 
   assert.equal(inspectOk.status, 0, inspectOk.stderr || inspectOk.stdout);
   assert.match(inspectOk.stdout, /"template": "todo"/);
   assert.match(inspectOk.stdout, /"usesBridge": true/);
+
+  await mkdir(path.join(root, 'bad-theme', 'assets'), { recursive: true });
+  await writeFile(
+    path.join(root, 'bad-theme', 'entry.html'),
+    '<!doctype html><html><head><style>:root{--background:#fff;--foreground:#111}[data-theme="dark"]{--background:#000}</style></head><body>ok</body></html>'
+  );
+  await writeFile(
+    path.join(root, 'bad-theme', 'runtime.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      entry: 'entry.html',
+      theme: { tokens: 'reo-semantic-v1', modes: ['light', 'dark'], default: 'system' },
+    })
+  );
+  await writeFile(path.join(root, 'bad-theme', 'state.json'), '{"schemaVersion":1}\n');
+  const validateBadTheme = await runNodeScript(
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'bad-theme',
+    ],
+    root
+  );
+  assert.equal(validateBadTheme.status, 1, validateBadTheme.stdout);
+  assert.deepEqual(
+    (JSON.parse(validateBadTheme.stdout) as { issues: Array<{ code: string }> }).issues.map(
+      (issue) => issue.code
+    ),
+    ['reo-theme-token-block-incomplete']
+  );
+
+  await mkdir(path.join(root, 'home-components', 'hcmp_missing_md--Missing', 'assets'), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(root, 'home-components', 'hcmp_missing_md--Missing', 'entry.html'),
+    '<!doctype html><html><head><title>Missing</title></head><body>missing component md</body></html>'
+  );
+  await writeFile(
+    path.join(root, 'home-components', 'hcmp_missing_md--Missing', 'runtime.json'),
+    '{"schemaVersion":1}\n'
+  );
+  await writeFile(
+    path.join(root, 'home-components', 'hcmp_missing_md--Missing', 'state.json'),
+    '{"schemaVersion":1}\n'
+  );
+  const validateMissingHomeComponentMarkdown = await runNodeScript(
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'home-components/hcmp_missing_md--Missing',
+    ],
+    root
+  );
+  assert.equal(
+    validateMissingHomeComponentMarkdown.status,
+    1,
+    validateMissingHomeComponentMarkdown.stdout
+  );
+  assert.deepEqual(
+    (
+      JSON.parse(validateMissingHomeComponentMarkdown.stdout) as {
+        issues: Array<{ code: string }>;
+      }
+    ).issues.map((issue) => issue.code),
+    ['missing-object-markdown']
+  );
+
+  await mkdir(
+    path.join(
+      root,
+      'memories',
+      'mem_runtime_scripts--Runtime scripts',
+      'segments',
+      'seg_missing_md--Missing',
+      'assets'
+    ),
+    { recursive: true }
+  );
+  const missingSegmentMarkdownDirectory =
+    'memories/mem_runtime_scripts--Runtime scripts/segments/seg_missing_md--Missing';
+  await writeFile(
+    path.join(root, missingSegmentMarkdownDirectory, 'entry.html'),
+    '<!doctype html><html><head><title>Missing</title></head><body>missing segment md</body></html>'
+  );
+  await writeFile(
+    path.join(root, missingSegmentMarkdownDirectory, 'runtime.json'),
+    '{"schemaVersion":1}\n'
+  );
+  await writeFile(
+    path.join(root, missingSegmentMarkdownDirectory, 'state.json'),
+    '{"schemaVersion":1}\n'
+  );
+  const validateMissingSegmentMarkdown = await runNodeScript(
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      missingSegmentMarkdownDirectory,
+    ],
+    root
+  );
+  assert.equal(validateMissingSegmentMarkdown.status, 1, validateMissingSegmentMarkdown.stdout);
+  assert.deepEqual(
+    (
+      JSON.parse(validateMissingSegmentMarkdown.stdout) as {
+        issues: Array<{ code: string }>;
+      }
+    ).issues.map((issue) => issue.code),
+    ['missing-object-markdown']
+  );
 
   await mkdir(path.join(root, 'bad-script', 'assets'), { recursive: true });
   await writeFile(
@@ -1364,42 +1572,60 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
     '## 输出顺序',
     '## 核心设计规则',
     '## Reo tokens',
-    '## 色阶',
+    '## 画框与内容色彩',
     '## 轻量性能规则',
   ]);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-background-primary/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-text-primary/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-background-success: #27500a/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--color-text-success: #c0dd97/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--border-radius-md/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--background: var\(--surface-1\)/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--foreground: #18181b/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--card: var\(--surface-2\)/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--popover: var\(--surface-4\)/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /\[data-theme='dark'\]/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /prefers-color-scheme: dark/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--radius-md/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--tracking-heading: 0/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--font-weight-medium: 500/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--container-form: 720px/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /--shadow-hero-fill:/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /内容画布可以有自己的创作风格/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /画、游戏画面、封面、地图、数据图形/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /references\/core-design-system\.md/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /references\/svg-and-diagrams\.md/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /c-purple/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /#EEEDFE/);
-  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /#1D9E75/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /普通 Web 网络/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /CDN/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /window\.reo/);
+  assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /readPlaybackAudio/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /240px 到 520px rail/);
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
+    /长 Memory 名、主题串、说明文本必须换行或 ellipsis/
+  );
   assert.match(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /不要把所有作品锁死到同一个固定高度/);
   assert.equal(
     DEFAULT_REO_WORKS_DESIGN_SKILL_MD.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS),
     true
+  );
+  assert.doesNotMatch(
+    DEFAULT_REO_WORKS_DESIGN_SKILL_MD,
+    /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md|c-purple/
   );
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /sendPrompt|cdnjs|unpkg|esm\.sh/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /M2\.1|Do not invent `window\.reo`/);
   assert.doesNotMatch(DEFAULT_REO_WORKS_DESIGN_SKILL_MD, /Michaelliv|pi-generative-ui|github\.com/);
   assert.match(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
-    /--color-background-primary/
+    /--background: var\(--surface-1\)/
   );
   assert.match(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
-    /--color-background-success: #27500a/
+    /--foreground: #18181b/
   );
   assert.match(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
-    /--color-text-success: #c0dd97/
+    /\[data-theme='dark'\]/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /--shadow-hero-lift:/
   );
   assert.equal(
     DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'].includes(
@@ -1407,9 +1633,34 @@ test('managed reo-works-design skill embeds Reo visual tokens and sandbox limits
     ),
     true
   );
-  assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /#EEEDFE/);
+  assert.doesNotMatch(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md|c-purple/
+  );
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /Inline-first/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'], /240px to 520px/);
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /Long metadata strings in rail widgets must wrap or ellipsize/
+  );
+  assert.match(
+    DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['core-design-system.md'],
+    /Seamless frame, expressive content/
+  );
+  for (const [filename, html] of Object.entries(DEFAULT_REO_WORKS_DESIGN_EXAMPLE_FILES)) {
+    assert.equal(
+      html.includes(DEFAULT_REO_WORKS_DESIGN_TOKEN_CSS),
+      true,
+      `${filename} must embed the shared Reo token block`
+    );
+    assert.match(html, /var\(--background\)/, filename);
+    assert.match(html, /\[data-theme='dark'\]/, filename);
+    assert.doesNotMatch(
+      html,
+      /--color-background-primary|--color-text-primary|--shadow-card|--border-radius-md/,
+      filename
+    );
+  }
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /diagram/);
   assert.match(DEFAULT_REO_WORKS_DESIGN_REFERENCE_FILES['modules.md'], /mockup/);
   assert.match(
@@ -1747,11 +1998,10 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     'templates.md',
     'validation.md',
   ]);
-  assert.deepEqual([...report.repaired.runtimeScripts].sort(), [
-    'inspect-runtime.mjs',
-    'scaffold-runtime.mjs',
-    'validate-runtime.mjs',
-  ]);
+  assert.deepEqual(
+    [...report.repaired.runtimeScripts].sort(),
+    Object.keys(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).sort()
+  );
   assert.equal(report.repaired.worksSkill, true);
   assert.equal(report.repaired.worksDesignSkill, true);
   assert.deepEqual([...report.repaired.worksReferences].sort(), [
@@ -1780,9 +2030,9 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     await readFile(path.join(root, 'skills', 'reo-cover-aesthetic', 'SKILL.md'), 'utf8'),
     /^name: reo-cover-aesthetic/m
   );
-  assert.match(
+  assert.equal(
     await readFile(path.join(root, 'skills', 'reo-generative-runtime', 'SKILL.md'), 'utf8'),
-    /^name: reo-generative-runtime/m
+    DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD
   );
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-works', 'SKILL.md'), 'utf8'),
@@ -1795,6 +2045,37 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
     ),
     /validate-runtime/
   );
+  for (const [filename, expected] of Object.entries(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES)) {
+    assert.equal(
+      await readFile(
+        path.join(root, 'skills', 'reo-generative-runtime', 'scripts', filename),
+        'utf8'
+      ),
+      expected
+    );
+  }
+  const repairedScaffold = spawnSync(
+    process.execPath,
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'scaffold-runtime.mjs'),
+      'doctor-repaired-work',
+      '--title',
+      'Doctor repaired work',
+      '--template',
+      'dashboard',
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+  assert.equal(repairedScaffold.status, 0, repairedScaffold.stderr || repairedScaffold.stdout);
+  const repairedValidate = spawnSync(
+    process.execPath,
+    [
+      path.join(root, 'skills', 'reo-generative-runtime', 'scripts', 'validate-runtime.mjs'),
+      'doctor-repaired-work',
+    ],
+    { cwd: root, encoding: 'utf8' }
+  );
+  assert.equal(repairedValidate.status, 0, repairedValidate.stderr || repairedValidate.stdout);
   assert.match(
     await readFile(path.join(root, 'skills', 'reo-works-design', 'SKILL.md'), 'utf8'),
     /^name: reo-works-design/m
@@ -1812,6 +2093,13 @@ test('reo-doctor skill script repairs managed config without overwriting custom 
       'utf8'
     ),
     /native SVG/
+  );
+  assert.match(
+    await readFile(
+      path.join(root, 'skills', 'reo-works-design', 'references', 'core-design-system.md'),
+      'utf8'
+    ),
+    /--background: var\(--surface-1\)/
   );
   assert.match(
     await readFile(

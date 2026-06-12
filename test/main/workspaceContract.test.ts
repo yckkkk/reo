@@ -4,26 +4,38 @@ import {
   FINALIZE_TRANSCRIPTION_ATTEMPTS,
   WORKSPACE_CHOOSE_DIRECTORY_CHANNEL,
   WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+  WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_NEEDS_REVIEW_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL,
   WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL,
   WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL,
   WORKSPACE_CREATE_MEMORY_CHANNEL,
+  WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL,
   WORKSPACE_DELETE_WIDGET_CHANNEL,
   WORKSPACE_DELETE_MEMORY_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_DELETE_SEGMENT_CHANNEL,
   WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
+  WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL,
   WORKSPACE_IPC_CHANNELS,
+  WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL,
+  WORKSPACE_MOVE_MEMORY_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_CHANNEL,
+  WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL,
   WORKSPACE_APPEND_SEGMENT_SUPPLEMENT_RECORDING_AUDIO_CHUNK_CHANNEL,
   WORKSPACE_CLEAR_VOICE_TRANSCRIPTION_API_KEY_CHANNEL,
   WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL,
   WORKSPACE_FINALIZE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_DISCARD_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
   WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL,
+  WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL,
   WORKSPACE_OPEN_VOICE_TRANSCRIPTION_PROVIDER_CONSOLE_CHANNEL,
+  WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
+  WORKSPACE_READ_HOME_COMPONENTS_CHANNEL,
   WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL,
   WORKSPACE_READ_APP_PERMISSION_STATUS_CHANNEL,
   WORKSPACE_REQUEST_APP_PERMISSION_CHANNEL,
@@ -40,6 +52,7 @@ import {
   WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL,
   WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL,
+  WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL,
   WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL,
   WORKSPACE_RESET_MEMORY_COVER_CHANNEL,
   WORKSPACE_RESET_SEGMENT_COVER_CHANNEL,
@@ -59,9 +72,12 @@ import {
   WORKSPACE_REQUEST_SEGMENT_SPEECH_SYNTHESIS_CHANNEL,
   WORKSPACE_RENDERER_EVENT_CHANNELS,
   WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL,
+  WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL,
   WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL,
   WORKSPACE_SET_VOICE_SPEECH_SYNTHESIS_SPEAKER_CHANNEL,
   WORKSPACE_SET_VOICE_TRANSCRIPTION_ENABLED_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL,
+  WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_CONTENT_TITLE_CHANNEL,
   WORKSPACE_UPDATE_SEGMENT_SUPPLEMENT_TITLE_CHANNEL,
@@ -82,6 +98,7 @@ import {
   workspaceDeleteSegmentResponseSchema,
   workspaceReadMemoryDetailRequestSchema,
   workspaceReadMemoryDetailResponseSchema,
+  workspaceRecentExpressionItemSchema,
   workspaceReadRecentExpressionsResponseSchema,
   workspaceReadSystemDraftWorkspaceResponseSchema,
   workspaceReadWorkspaceSnapshotRequestSchema,
@@ -108,13 +125,24 @@ import {
   workspaceFinalizeSegmentSupplementRecordingDraftRequestSchema,
   workspaceFinalizeSegmentSupplementRecordingDraftResponseSchema,
   workspaceSegmentSupplementIdRequestSchema,
+  workspacePlaybackSourceSchema,
+  workspaceReadExpressionPlaybackAudioRequestSchema,
+  workspaceReadExpressionPlaybackAudioResponseSchema,
   workspaceCloseRequestSchema,
   workspaceCloseResponseSchema,
   workspaceClearMicrophoneIntentResponseSchema,
   workspaceInitializeRequestSchema,
   workspaceInitializeResponseSchema,
+  workspaceListEntityMoveTargetsRequestSchema,
+  workspaceListEntityMoveTargetsResponseSchema,
   workspaceListMemorySpacesResponseSchema,
   workspaceMicrophoneIntentResponseSchema,
+  workspaceMoveMemoryRequestSchema,
+  workspaceMoveMemoryResponseSchema,
+  workspaceMoveSegmentRequestSchema,
+  workspaceMoveSegmentResponseSchema,
+  workspaceMoveSegmentSupplementRequestSchema,
+  workspaceMoveSegmentSupplementResponseSchema,
   workspaceRecordingTranscriptionAudioRequestSchema,
   workspaceRecordingTranscriptionCloseRequestSchema,
   workspaceRecordingTranscriptionControlResponseSchema,
@@ -395,6 +423,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.deepEqual(WORKSPACE_IPC_CHANNELS, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
+    'workspace:listEntityMoveTargets',
     'workspace:initialize',
     'workspace:open',
     'workspace:openMemorySpace',
@@ -404,6 +433,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readWorkspaceSnapshot',
     'workspace:createMemory',
     'workspace:deleteMemory',
+    'workspace:moveMemory',
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
@@ -412,16 +442,21 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:restoreSegmentCover',
     'workspace:switchSegmentDefaultCover',
     'workspace:deleteSegment',
+    'workspace:moveSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
+    'workspace:moveSegmentSupplement',
     'workspace:restoreDeletedSegmentSupplement',
     'workspace:deleteWidget',
     'workspace:restoreDeletedWidget',
+    'workspace:deleteHomeComponent',
+    'workspace:restoreDeletedHomeComponent',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
     'workspace:readFinalizedAudioSegmentSupplement',
     'workspace:readFinalizedAudioSegmentAudio',
     'workspace:readFinalizedAudioSegmentSupplementAudio',
+    'workspace:readExpressionPlaybackAudio',
     'workspace:createRecordingDraft',
     'workspace:createSegmentSupplementRecordingDraft',
     'workspace:createNoteSegmentDraft',
@@ -455,6 +490,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:updateSegmentContentTabOrder',
     'workspace:updateWidgetTitle',
     'workspace:updateWidgetTabOrder',
+    'workspace:updateHomeComponentTitle',
+    'workspace:updateHomeComponentTabOrder',
     'workspace:saveTranscript',
     'workspace:saveSegmentSupplementTranscript',
     'workspace:requestSegmentTranscriptionBackfill',
@@ -481,27 +518,33 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     'workspace:readSystemDraftWorkspace',
     'workspace:openSystemDraftWorkspace',
     'workspace:readRecentExpressions',
+    'workspace:readHomeComponents',
+    'workspace:readHomeComponentMemoryDetail',
     'workspace:revealMemorySpaceInFinder',
     'workspace:revealMemoryInFinder',
     'workspace:revealSegmentInFinder',
     'workspace:revealSegmentSupplementInFinder',
     'workspace:revealWidgetInFinder',
+    'workspace:revealHomeComponentInFinder',
     'workspace:openMemorySpaceAgentsFile',
     'workspace:openMemoryDocument',
     'workspace:openSegmentDocument',
     'workspace:openSegmentSupplementDocument',
     'workspace:openWidgetDocument',
+    'workspace:openHomeComponentDocument',
     'workspace:copyMemorySpaceAbsolutePath',
     'workspace:copyMemoryAbsolutePath',
     'workspace:copySegmentAbsolutePath',
     'workspace:copySegmentSupplementAbsolutePath',
     'workspace:copyWidgetAbsolutePath',
+    'workspace:copyHomeComponentAbsolutePath',
     'workspace:copyMemoryRelativePath',
     'workspace:copySegmentRelativePath',
     'workspace:copySegmentSupplementRelativePath',
     'workspace:copyWidgetRelativePath',
     'workspace:copyArtifactAgentPrompt',
     'workspace:copyWidgetAgentPrompt',
+    'workspace:copyHomeComponentAgentPrompt',
     'workspace:readArtifactRuntimeState',
     'workspace:writeArtifactRuntimeState',
     'workspace:copyNeedsReviewAgentPrompt',
@@ -510,13 +553,19 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
   assert.deepEqual(WORKSPACE_RENDERER_EVENT_CHANNELS, [
     'workspace:recordingTranscriptionEvent',
     'workspace:fileTruthChanged',
+    'workspace:homeComponentsChanged',
   ]);
 
   const namedChannelContracts: readonly (readonly [string, string])[] = [
     [WORKSPACE_CHOOSE_DIRECTORY_CHANNEL, 'workspace:chooseDirectory'],
     [WORKSPACE_RECORDING_TRANSCRIPTION_EVENT_CHANNEL, 'workspace:recordingTranscriptionEvent'],
     [WORKSPACE_FILE_TRUTH_CHANGED_EVENT_CHANNEL, 'workspace:fileTruthChanged'],
+    [WORKSPACE_HOME_COMPONENTS_CHANGED_EVENT_CHANNEL, 'workspace:homeComponentsChanged'],
     [WORKSPACE_CREATE_MEMORY_CHANNEL, 'workspace:createMemory'],
+    [WORKSPACE_LIST_ENTITY_MOVE_TARGETS_CHANNEL, 'workspace:listEntityMoveTargets'],
+    [WORKSPACE_MOVE_MEMORY_CHANNEL, 'workspace:moveMemory'],
+    [WORKSPACE_MOVE_SEGMENT_CHANNEL, 'workspace:moveSegment'],
+    [WORKSPACE_MOVE_SEGMENT_SUPPLEMENT_CHANNEL, 'workspace:moveSegmentSupplement'],
     [WORKSPACE_COPY_ARTIFACT_AGENT_PROMPT_CHANNEL, 'workspace:copyArtifactAgentPrompt'],
     [WORKSPACE_READ_ARTIFACT_RUNTIME_STATE_CHANNEL, 'workspace:readArtifactRuntimeState'],
     [WORKSPACE_WRITE_ARTIFACT_RUNTIME_STATE_CHANNEL, 'workspace:writeArtifactRuntimeState'],
@@ -524,6 +573,11 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_READ_SYSTEM_DRAFT_WORKSPACE_CHANNEL, 'workspace:readSystemDraftWorkspace'],
     [WORKSPACE_OPEN_SYSTEM_DRAFT_WORKSPACE_CHANNEL, 'workspace:openSystemDraftWorkspace'],
     [WORKSPACE_READ_RECENT_EXPRESSIONS_CHANNEL, 'workspace:readRecentExpressions'],
+    [WORKSPACE_READ_HOME_COMPONENTS_CHANNEL, 'workspace:readHomeComponents'],
+    [
+      WORKSPACE_READ_HOME_COMPONENT_MEMORY_DETAIL_CHANNEL,
+      'workspace:readHomeComponentMemoryDetail',
+    ],
     [WORKSPACE_DELETE_MEMORY_CHANNEL, 'workspace:deleteMemory'],
     [WORKSPACE_RESTORE_DELETED_MEMORY_CHANNEL, 'workspace:restoreDeletedMemory'],
     [WORKSPACE_RESET_MEMORY_COVER_CHANNEL, 'workspace:resetMemoryCover'],
@@ -541,6 +595,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     ],
     [WORKSPACE_DELETE_WIDGET_CHANNEL, 'workspace:deleteWidget'],
     [WORKSPACE_RESTORE_DELETED_WIDGET_CHANNEL, 'workspace:restoreDeletedWidget'],
+    [WORKSPACE_DELETE_HOME_COMPONENT_CHANNEL, 'workspace:deleteHomeComponent'],
+    [WORKSPACE_RESTORE_DELETED_HOME_COMPONENT_CHANNEL, 'workspace:restoreDeletedHomeComponent'],
     [WORKSPACE_READ_WORKSPACE_SNAPSHOT_CHANNEL, 'workspace:readWorkspaceSnapshot'],
     [WORKSPACE_READ_MEMORY_DETAIL_CHANNEL, 'workspace:readMemoryDetail'],
     [WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_CHANNEL, 'workspace:readFinalizedAudioSegment'],
@@ -556,6 +612,7 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
       WORKSPACE_READ_FINALIZED_AUDIO_SEGMENT_SUPPLEMENT_AUDIO_CHANNEL,
       'workspace:readFinalizedAudioSegmentSupplementAudio',
     ],
+    [WORKSPACE_READ_EXPRESSION_PLAYBACK_AUDIO_CHANNEL, 'workspace:readExpressionPlaybackAudio'],
     [WORKSPACE_READ_RECORDING_DRAFT_AUDIO_CHANNEL, 'workspace:readRecordingDraftAudio'],
     [WORKSPACE_CLONE_RECORDING_DRAFT_PREFIX_CHANNEL, 'workspace:cloneRecordingDraftPrefix'],
     [WORKSPACE_UPDATE_MEMORY_TITLE_CHANNEL, 'workspace:updateMemoryTitle'],
@@ -565,6 +622,8 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     [WORKSPACE_UPDATE_SEGMENT_CONTENT_TAB_ORDER_CHANNEL, 'workspace:updateSegmentContentTabOrder'],
     [WORKSPACE_UPDATE_WIDGET_TITLE_CHANNEL, 'workspace:updateWidgetTitle'],
     [WORKSPACE_UPDATE_WIDGET_TAB_ORDER_CHANNEL, 'workspace:updateWidgetTabOrder'],
+    [WORKSPACE_UPDATE_HOME_COMPONENT_TITLE_CHANNEL, 'workspace:updateHomeComponentTitle'],
+    [WORKSPACE_UPDATE_HOME_COMPONENT_TAB_ORDER_CHANNEL, 'workspace:updateHomeComponentTabOrder'],
     [WORKSPACE_UPDATE_MEMORY_SPACE_TITLE_CHANNEL, 'workspace:updateMemorySpaceTitle'],
     [
       WORKSPACE_CREATE_SEGMENT_SUPPLEMENT_RECORDING_DRAFT_CHANNEL,
@@ -634,14 +693,190 @@ test('workspace contract exposes only the explicit chooseDirectory channel', () 
     ],
     [WORKSPACE_OPEN_MARKDOWN_EXTERNAL_LINK_CHANNEL, 'workspace:openMarkdownExternalLink'],
     [WORKSPACE_REVEAL_WIDGET_IN_FINDER_CHANNEL, 'workspace:revealWidgetInFinder'],
+    [WORKSPACE_REVEAL_HOME_COMPONENT_IN_FINDER_CHANNEL, 'workspace:revealHomeComponentInFinder'],
     [WORKSPACE_OPEN_WIDGET_DOCUMENT_CHANNEL, 'workspace:openWidgetDocument'],
+    [WORKSPACE_OPEN_HOME_COMPONENT_DOCUMENT_CHANNEL, 'workspace:openHomeComponentDocument'],
     [WORKSPACE_COPY_WIDGET_ABSOLUTE_PATH_CHANNEL, 'workspace:copyWidgetAbsolutePath'],
+    [
+      WORKSPACE_COPY_HOME_COMPONENT_ABSOLUTE_PATH_CHANNEL,
+      'workspace:copyHomeComponentAbsolutePath',
+    ],
     [WORKSPACE_COPY_WIDGET_RELATIVE_PATH_CHANNEL, 'workspace:copyWidgetRelativePath'],
     [WORKSPACE_COPY_WIDGET_AGENT_PROMPT_CHANNEL, 'workspace:copyWidgetAgentPrompt'],
+    [WORKSPACE_COPY_HOME_COMPONENT_AGENT_PROMPT_CHANNEL, 'workspace:copyHomeComponentAgentPrompt'],
   ];
 
   for (const [actual, expected] of namedChannelContracts) {
     assert.equal(actual, expected);
+  }
+});
+
+test('workspace entity move contract validates source and target identities without paths', () => {
+  assert.deepEqual(
+    workspaceListEntityMoveTargetsRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    }
+  );
+  assert.throws(() =>
+    workspaceListEntityMoveTargetsRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'body',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    })
+  );
+
+  assert.deepEqual(
+    workspaceListEntityMoveTargetsResponseSchema.parse({
+      ok: true,
+      value: {
+        source: {
+          type: 'segment',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          title: '访谈片段',
+          breadcrumb: ['草稿空间', '草稿', '访谈片段'],
+        },
+        targetLevel: 'memory',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: '草稿空间',
+            disabledReason: null,
+            memories: [
+              {
+                memoryId: 'mem_1',
+                title: '草稿',
+                disabledReason: '当前位置',
+                segments: [],
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    {
+      ok: true,
+      value: {
+        source: {
+          type: 'segment',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          title: '访谈片段',
+          breadcrumb: ['草稿空间', '草稿', '访谈片段'],
+        },
+        targetLevel: 'memory',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: '草稿空间',
+            disabledReason: null,
+            memories: [
+              {
+                memoryId: 'mem_1',
+                title: '草稿',
+                disabledReason: '当前位置',
+                segments: [],
+              },
+            ],
+          },
+        ],
+      },
+    }
+  );
+
+  assert.deepEqual(
+    workspaceMoveMemoryRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    }
+  );
+  assert.deepEqual(
+    workspaceMoveSegmentRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+    }
+  );
+  assert.deepEqual(
+    workspaceMoveSegmentSupplementRequestSchema.parse({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
+    }),
+    {
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
+    }
+  );
+
+  for (const schema of [
+    workspaceMoveMemoryResponseSchema,
+    workspaceMoveSegmentResponseSchema,
+    workspaceMoveSegmentSupplementResponseSchema,
+  ]) {
+    assert.deepEqual(
+      schema.parse({
+        ok: true,
+        value: {
+          sourceWorkspaceId: 'ws_1',
+          targetWorkspaceId: 'ws_2',
+          moved: true,
+        },
+      }),
+      {
+        ok: true,
+        value: {
+          sourceWorkspaceId: 'ws_1',
+          targetWorkspaceId: 'ws_2',
+          moved: true,
+        },
+      }
+    );
   }
 });
 
@@ -3004,6 +3239,122 @@ test('recent expression feed contract carries cross-space object identity and re
       },
     })
   );
+});
+
+test('recent expression playback source contract accepts audio and ready note speech only', () => {
+  assert.deepEqual(workspacePlaybackSourceSchema.parse({ kind: 'audio', durationMs: 1200 }), {
+    kind: 'audio',
+    durationMs: 1200,
+  });
+  assert.deepEqual(workspacePlaybackSourceSchema.parse({ kind: 'note-speech' }), {
+    kind: 'note-speech',
+  });
+  assert.equal(workspacePlaybackSourceSchema.safeParse({ kind: 'artifact' }).success, false);
+
+  const itemWithoutPlayback = workspaceRecentExpressionItemSchema.parse({
+    id: 'recent_ws_1_seg_1',
+    workspaceId: 'ws_1',
+    workspaceTitle: '灵感库',
+    memoryId: 'mem_1',
+    memoryTitle: '产品想法',
+    segmentId: 'seg_1',
+    objectType: 'segment',
+    contentKind: 'note',
+    title: '一个新想法',
+    createdAt: '2026-06-06T20:00:00.000-07:00',
+    updatedAt: '2026-06-06T20:10:00.000-07:00',
+  });
+  assert.equal('playback' in itemWithoutPlayback, false);
+
+  const itemWithPlayback = workspaceRecentExpressionItemSchema.parse({
+    id: 'recent_ws_1_seg_2',
+    workspaceId: 'ws_1',
+    workspaceTitle: '灵感库',
+    memoryId: 'mem_1',
+    memoryTitle: '产品想法',
+    segmentId: 'seg_2',
+    objectType: 'segment',
+    contentKind: 'audio',
+    title: '录音',
+    playback: { kind: 'audio', durationMs: 10 },
+    createdAt: '2026-06-06T20:00:00.000-07:00',
+    updatedAt: '2026-06-06T20:10:00.000-07:00',
+  });
+  assert.equal(itemWithPlayback.playback?.kind, 'audio');
+});
+
+test('expression playback audio contract reads handle-less audio by durable identity', () => {
+  assert.deepEqual(
+    workspaceReadExpressionPlaybackAudioRequestSchema.parse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'req_1',
+    }),
+    {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'req_1',
+    }
+  );
+  assert.deepEqual(
+    workspaceReadExpressionPlaybackAudioRequestSchema.parse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      kind: 'note-speech',
+      requestId: 'req_2',
+    }),
+    {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      kind: 'note-speech',
+      requestId: 'req_2',
+    }
+  );
+  assert.equal(
+    workspaceReadExpressionPlaybackAudioRequestSchema.safeParse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'artifact',
+      requestId: 'req_3',
+    }).success,
+    false
+  );
+  assert.equal(
+    workspaceReadExpressionPlaybackAudioRequestSchema.safeParse({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+    }).success,
+    false
+  );
+
+  const response = workspaceReadExpressionPlaybackAudioResponseSchema.parse({
+    ok: true,
+    value: {
+      requestId: 'req_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      audio: new Uint8Array([1, 2, 3]),
+      mimeType: 'audio/webm',
+    },
+  });
+  assert.equal(response.ok, true);
+  if (response.ok) {
+    assert.equal(response.value.audio.byteLength, 3);
+    assert.equal(response.value.mimeType, 'audio/webm');
+  }
 });
 
 test('initializeWorkspace contract returns opaque handle, workspaceId, snapshot, and no rootPath', () => {

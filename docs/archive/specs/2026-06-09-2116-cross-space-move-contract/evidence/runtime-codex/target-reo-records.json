@@ -1,0 +1,64 @@
+{
+  "runId": "20260609221232",
+  "root": "$TEST_ROOT",
+  "records": {
+    "memory": {
+      "exists": true,
+      "relativePath": ".reo/objects/memories/mem_cross_space_codex_20260609221232.json",
+      "schemaVersion": 1,
+      "memoryId": "mem_cross_space_codex_20260609221232"
+    },
+    "movedSegment": {
+      "exists": true,
+      "relativePath": ".reo/objects/segments/seg_cross_space_codex_segment_20260609221232.json",
+      "schemaVersion": 1,
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentId": "seg_cross_space_codex_segment_20260609221232",
+      "kind": "note",
+      "bodyByteLength": 175
+    },
+    "suppSourceSegment": {
+      "exists": true,
+      "relativePath": ".reo/objects/segments/seg_cross_space_codex_supp_source_20260609221232.json",
+      "schemaVersion": 1,
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentId": "seg_cross_space_codex_supp_source_20260609221232",
+      "kind": "note",
+      "bodyByteLength": 158
+    },
+    "movedSupplement": {
+      "exists": true,
+      "relativePath": ".reo/objects/supplements/sup_cross_space_codex_supp_20260609221232.json",
+      "schemaVersion": 1,
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentId": "seg_codex_dogfood_17800103",
+      "supplementId": "sup_cross_space_codex_supp_20260609221232",
+      "kind": "note",
+      "bodyByteLength": 175
+    },
+    "memoryChildSegment": {
+      "exists": true,
+      "relativePath": ".reo/objects/segments/seg_cross_space_codex_memory_child_20260609221232.json",
+      "schemaVersion": 1,
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_cross_space_codex_20260609221232",
+      "segmentId": "seg_cross_space_codex_memory_child_20260609221232",
+      "kind": "note",
+      "bodyByteLength": 165
+    },
+    "memoryChildSupplement": {
+      "exists": true,
+      "relativePath": ".reo/objects/supplements/sup_cross_space_codex_memory_child_20260609221232.json",
+      "schemaVersion": 1,
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_cross_space_codex_20260609221232",
+      "segmentId": "seg_cross_space_codex_memory_child_20260609221232",
+      "supplementId": "sup_cross_space_codex_memory_child_20260609221232",
+      "kind": "note",
+      "bodyByteLength": 133
+    }
+  }
+}

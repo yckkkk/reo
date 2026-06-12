@@ -6,6 +6,7 @@ import {
   ARTIFACT_RUNTIME_STATE_FILE,
   artifactSegmentRuntimeHost,
   artifactSupplementRuntimeHost,
+  homeComponentRuntimeHost,
   workspaceWidgetRuntimeHost,
 } from '../workspace-contract/artifact-runtime-url.js';
 import { ARTIFACT_SCHEME } from './appShellConstants.js';
@@ -18,6 +19,7 @@ export {
   ARTIFACT_RUNTIME_STATE_FILE,
   artifactSegmentRuntimeHost,
   artifactSupplementRuntimeHost,
+  homeComponentRuntimeHost,
   workspaceWidgetRuntimeHost,
 } from '../workspace-contract/artifact-runtime-url.js';
 
@@ -62,6 +64,13 @@ export type ArtifactRequestTarget =
       readonly fileName: string;
       readonly widgetId: string;
       readonly workspaceId: string;
+    }
+  | {
+      readonly kind: 'home-component';
+      readonly componentId: string;
+      readonly entry: boolean;
+      readonly fileScope: 'root' | 'asset';
+      readonly fileName: string;
     }
   | {
       readonly kind: 'vendor';
@@ -164,6 +173,22 @@ export function parseArtifactRequestTarget(parsed: URL): ArtifactRequestTarget |
     return { kind: 'vendor', packageName, fileName };
   }
 
+  if (segments[0] === 'home-components') {
+    const componentId = segments[1] ?? '';
+    if (!isSafeSinglePathSegment(componentId)) {
+      return null;
+    }
+    const file = parseArtifactRuntimeFile(segments, 2);
+    if (!file || parsed.hostname !== homeComponentRuntimeHost(componentId)) {
+      return null;
+    }
+    return {
+      kind: 'home-component',
+      componentId,
+      ...file,
+    };
+  }
+
   if (segments[0] !== 'workspaces') {
     return null;
   }
@@ -227,6 +252,9 @@ export function parseArtifactRequestTarget(parsed: URL): ArtifactRequestTarget |
 
 export function isArtifactWorkspaceEntryUrl(url: URL): boolean {
   const target = parseArtifactRequestTarget(url);
+  if (target?.kind === 'home-component') {
+    return target.entry;
+  }
   return (
     (target?.kind === 'segment' || target?.kind === 'supplement' || target?.kind === 'widget') &&
     target.entry &&

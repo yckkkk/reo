@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { lstat, readFile, readdir, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import {
+  REO_SEMANTIC_THEME,
+  missingReoSemanticTokenLabels,
+} from './reo-token-contract.mjs';
 
 const toolName = "validate-runtime";
 const targetArg = process.argv[2] ?? ".";
@@ -33,6 +37,46 @@ function validateInlineScripts(html) {
       add("entry-script-syntax", "entry.html", `Inline script must parse: ${error && error.message ? error.message : String(error)}.`);
       return;
     }
+  }
+}
+
+function validateReoThemeTokenBlock(html) {
+  const missing = missingReoSemanticTokenLabels(html);
+  if (missing.length === 0) return;
+  add(
+    "reo-theme-token-block-incomplete",
+    "entry.html",
+    `runtime.json declares reo-semantic-v1, so entry.html must include the full Reo semantic token block. Missing: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ", ..." : ""}.`
+  );
+}
+
+function expectedObjectMarkdownFile() {
+  const parts = relative.split(path.sep).filter(Boolean);
+  if (parts.length >= 2 && parts[0] === "widgets") return "widget.md";
+  if (parts.length >= 2 && parts[0] === "home-components") return "component.md";
+  if (parts.length === 4 && parts[0] === "memories" && parts[2] === "segments") return "segment.md";
+  if (
+    parts.length === 6 &&
+    parts[0] === "memories" &&
+    parts[2] === "segments" &&
+    parts[4] === "supplements"
+  ) {
+    return "supplement.md";
+  }
+  return null;
+}
+
+async function validateObjectMarkdownFile() {
+  const fileName = expectedObjectMarkdownFile();
+  if (!fileName) return;
+  const filePath = path.join(target, fileName);
+  try {
+    const stats = await lstat(filePath);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      add("invalid-object-markdown", fileName, `${fileName} must be an ordinary file.`);
+    }
+  } catch {
+    add("missing-object-markdown", fileName, `${fileName} is required beside this runtime bundle.`);
   }
 }
 
@@ -70,6 +114,9 @@ if (!lexicalInsideRoot() || relative.split(path.sep).includes(".reo")) {
 const entry = targetUsable ? await readRequired("entry.html") : null;
 const runtime = targetUsable ? await readRequired("runtime.json") : null;
 const state = targetUsable ? await readRequired("state.json") : null;
+let runtimeManifest = null;
+
+if (targetUsable) await validateObjectMarkdownFile();
 
 if (entry && !/<!doctype html>/i.test(entry)) add("entry-not-html-document", "entry.html", "entry.html should be a complete HTML document.");
 if (entry && /file:\/\//i.test(entry)) add("file-url", "entry.html", "Copy local resources into assets/ instead of using file://.");
@@ -77,7 +124,15 @@ if (entry && /window\.reo\b/.test(entry) && !/reo-render:\/\/vendor\/reo-render\
 if (entry) validateInlineScripts(entry);
 for (const [fileName, text] of [["runtime.json", runtime], ["state.json", state]]) {
   if (!text) continue;
-  try { JSON.parse(text); } catch { add("invalid-json", fileName, "File must parse as JSON."); }
+  try {
+    const parsed = JSON.parse(text);
+    if (fileName === "runtime.json") runtimeManifest = parsed;
+  } catch {
+    add("invalid-json", fileName, "File must parse as JSON.");
+  }
+}
+if (entry && runtimeManifest?.theme?.tokens === REO_SEMANTIC_THEME.tokens) {
+  validateReoThemeTokenBlock(entry);
 }
 
 if (targetUsable) {

@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import {
   MAX_RECORDING_DRAFT_AUDIO_READ_BYTES,
   pcmByteLengthToDurationMs,
-  trimPcmChunkEnd,
   trimPcmChunkStart,
 } from '../../../workspace-contract/recording-audio';
 import {
@@ -69,6 +68,16 @@ import {
   type TranscriptSegment,
 } from './recording/recordingTimeline';
 import {
+  appendBoundedWaveformSampleInPlace,
+  RECORDING_CAPTURE_SEEK_EPSILON_MS,
+  recordingSessionNumberFrom,
+  resolveDraftPlaybackStartMs,
+  resolveReplacementStartMs,
+  retainPcmChunksThrough,
+  type CapturedPcmChunk,
+  type CapturedRecordingChunk,
+} from './recording/recordingCaptureModel';
+import {
   createInitialRecordingState,
   isRecordingCloseBlocked,
   transitionRecordingState,
@@ -125,8 +134,6 @@ const SILENCE_NOTICE_THRESHOLD_MS = 15_000;
 const AUDIBLE_LEVEL_THRESHOLD = 0.08;
 const WAVEFORM_SAMPLE_INTERVAL_MS = 80;
 const WAVEFORM_RENDER_INTERVAL_MS = 240;
-const WAVEFORM_SEEK_EPSILON_MS = 50;
-const MAX_WAVEFORM_SAMPLES = 2400;
 const MAX_COMPLETION_BACKFILL_PCM_DURATION_MS = 10 * 60 * 1000;
 const TRANSCRIPTION_START_BUFFER_MS = 10_000;
 const MAX_TRANSCRIPTION_AUDIO_QUEUE_BYTES = 1024 * 1024;
@@ -144,18 +151,6 @@ const VOICE_SETTINGS_LOADING_FINALIZE_NOTICE = '语音设置仍在加载，暂�
 function isRecordingTranscriptionUnavailable(error: WorkspaceError) {
   return error.code === 'ERR_RECORDING_TRANSCRIPTION_UNAVAILABLE';
 }
-
-type CapturedRecordingChunk = {
-  readonly chunk: Uint8Array;
-  readonly endTimeMs: number;
-  readonly startTimeMs: number;
-};
-
-type CapturedPcmChunk = {
-  readonly chunk: Uint8Array;
-  readonly endTimeMs: number;
-  readonly startTimeMs: number;
-};
 
 type DraftPlaybackStatus = 'idle' | 'preparing' | 'ready' | 'unavailable';
 
@@ -315,93 +310,6 @@ function RecordingElapsedStatus({
       {statusText} 已录制：{elapsedSeconds} 秒。
     </p>
   );
-}
-
-function recordingSessionNumberFrom(recordingSessionId: string) {
-  const match = /^recording-(\d+)$/.exec(recordingSessionId);
-  return match ? Number.parseInt(match[1] ?? '0', 10) : null;
-}
-
-function appendBoundedWaveformSampleInPlace(samples: number[], sample: number): void {
-  samples.push(sample);
-  if (samples.length <= MAX_WAVEFORM_SAMPLES) {
-    return;
-  }
-  let writeIndex = 0;
-  for (let readIndex = 0; readIndex < samples.length; readIndex += 2) {
-    samples[writeIndex] = Math.max(samples[readIndex] ?? 0, samples[readIndex + 1] ?? 0);
-    writeIndex += 1;
-  }
-  samples.length = Math.min(writeIndex, MAX_WAVEFORM_SAMPLES);
-}
-
-function resolveReplacementStartMs({
-  chunks,
-  cursorTimeMs,
-  totalDurationMs,
-}: {
-  readonly chunks: readonly CapturedRecordingChunk[];
-  readonly cursorTimeMs: number;
-  readonly totalDurationMs: number;
-}) {
-  const safeCursorTimeMs = Math.min(
-    Math.max(0, Math.round(cursorTimeMs)),
-    Math.max(0, Math.round(totalDurationMs))
-  );
-  if (safeCursorTimeMs <= WAVEFORM_SEEK_EPSILON_MS) {
-    return 0;
-  }
-  const containingOrNextChunk = chunks.find(
-    (chunk) => chunk.endTimeMs >= safeCursorTimeMs - WAVEFORM_SEEK_EPSILON_MS
-  );
-  if (!containingOrNextChunk) {
-    return safeCursorTimeMs;
-  }
-  return Math.min(totalDurationMs, containingOrNextChunk.endTimeMs);
-}
-
-function resolveDraftPlaybackStartMs({
-  cursorTimeMs,
-  totalDurationMs,
-}: {
-  readonly cursorTimeMs: number;
-  readonly totalDurationMs: number;
-}) {
-  const safeTotalDurationMs = Math.max(0, Math.round(totalDurationMs));
-  if (safeTotalDurationMs <= WAVEFORM_SEEK_EPSILON_MS) {
-    return 0;
-  }
-
-  const safeCursorTimeMs = Math.min(Math.max(0, Math.round(cursorTimeMs)), safeTotalDurationMs);
-  if (safeCursorTimeMs >= safeTotalDurationMs - WAVEFORM_SEEK_EPSILON_MS) {
-    return 0;
-  }
-  return safeCursorTimeMs;
-}
-
-function retainPcmChunksThrough(
-  chunks: readonly CapturedPcmChunk[],
-  cursorTimeMs: number
-): CapturedPcmChunk[] {
-  const retainedChunks: CapturedPcmChunk[] = [];
-  for (const chunk of chunks) {
-    if (chunk.endTimeMs <= cursorTimeMs) {
-      retainedChunks.push(chunk);
-      continue;
-    }
-    if (chunk.startTimeMs >= cursorTimeMs) {
-      continue;
-    }
-    const retainedAudio = trimPcmChunkEnd(chunk.chunk, cursorTimeMs - chunk.startTimeMs);
-    if (retainedAudio) {
-      retainedChunks.push({
-        chunk: new Uint8Array(retainedAudio),
-        endTimeMs: cursorTimeMs,
-        startTimeMs: chunk.startTimeMs,
-      });
-    }
-  }
-  return retainedChunks;
 }
 
 export function RecordingOverlay({
@@ -2352,7 +2260,7 @@ export function RecordingOverlay({
       cursorTimeMs,
       totalDurationMs,
     });
-    const replacesFromStart = replacementStartMs <= WAVEFORM_SEEK_EPSILON_MS;
+    const replacesFromStart = replacementStartMs <= RECORDING_CAPTURE_SEEK_EPSILON_MS;
     const nextRecordingSession = replacesFromStart ? recordingSession + 1 : recordingSession;
     const nextRecordingFlowSessionId = replacesFromStart
       ? `recording-${nextRecordingSession}`
@@ -2360,7 +2268,7 @@ export function RecordingOverlay({
     const nextRevisionIndex = replacesFromStart ? 0 : revisionIndexRef.current + 1;
     const nextRevisionId = `${nextRecordingFlowSessionId}-revision-${nextRevisionIndex}`;
     const retainedChunks = capturedChunksRef.current.filter(
-      (chunk) => chunk.endTimeMs <= replacementStartMs + WAVEFORM_SEEK_EPSILON_MS
+      (chunk) => chunk.endTimeMs <= replacementStartMs + RECORDING_CAPTURE_SEEK_EPSILON_MS
     );
     const retainedPcmChunks = retainPcmChunksThrough(readCapturedPcmChunks(), replacementStartMs);
     const retainedByteLength = byteLengthForChunks(retainedChunks);
@@ -2659,7 +2567,7 @@ export function RecordingOverlay({
       syncDraftAudio &&
       state.status === 'paused' &&
       draftAudio &&
-      Math.abs(draftAudio.currentTime * 1000 - safeCursorTimeMs) > WAVEFORM_SEEK_EPSILON_MS
+      Math.abs(draftAudio.currentTime * 1000 - safeCursorTimeMs) > RECORDING_CAPTURE_SEEK_EPSILON_MS
     ) {
       draftAudio.currentTime = safeCursorTimeMs / 1000;
     }
@@ -2673,7 +2581,8 @@ export function RecordingOverlay({
       );
       if (
         nextTimeline.totalDurationMs === current.totalDurationMs &&
-        Math.abs(nextTimeline.cursorTimeMs - current.cursorTimeMs) <= WAVEFORM_SEEK_EPSILON_MS
+        Math.abs(nextTimeline.cursorTimeMs - current.cursorTimeMs) <=
+          RECORDING_CAPTURE_SEEK_EPSILON_MS
       ) {
         return current;
       }
@@ -2718,7 +2627,7 @@ export function RecordingOverlay({
     try {
       await Promise.resolve(audio.play());
       setIsDraftPlaybackPlaying(true);
-      if (Math.abs(playbackStartMs - cursorTimeMs) > WAVEFORM_SEEK_EPSILON_MS) {
+      if (Math.abs(playbackStartMs - cursorTimeMs) > RECORDING_CAPTURE_SEEK_EPSILON_MS) {
         setCursor(playbackStartMs, { syncDraftAudio: false });
       }
     } catch (playbackError) {

@@ -23,12 +23,14 @@ import { createReoQueryClient, ReoQueryProvider } from './queryClient';
 import type {
   WorkspaceMemoryDetail,
   WorkspaceMemorySummary,
+  WorkspaceHomeComponent,
   WorkspaceNoteSegmentContent,
   WorkspaceNoteSegmentSupplementContent,
   WorkspaceWidgetProjection,
 } from './workspace/workspaceApi';
 import {
   memoryDetailQueryKey,
+  homeComponentsQueryRootKey,
   segmentSupplementContentQueryKey,
   segmentContentQueryKey,
   workspaceSnapshotQueryKey,
@@ -47,6 +49,7 @@ describe('App', () => {
     readSystemDraftWorkspace: vi.fn(),
     openSystemDraftWorkspace: vi.fn(),
     readRecentExpressions: vi.fn(),
+    readExpressionPlaybackAudio: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
@@ -65,6 +68,10 @@ describe('App', () => {
     copyNeedsReviewAgentPrompt: vi.fn(),
     removeMemorySpace: vi.fn(),
     closeWorkspace: vi.fn(),
+    listEntityMoveTargets: vi.fn(),
+    moveMemory: vi.fn(),
+    moveSegment: vi.fn(),
+    moveSegmentSupplement: vi.fn(),
     createMemory: vi.fn(),
     deleteMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
@@ -122,6 +129,16 @@ describe('App', () => {
     copyWidgetAbsolutePath: vi.fn(),
     copyWidgetRelativePath: vi.fn(),
     copyWidgetAgentPrompt: vi.fn(),
+    readHomeComponents: vi.fn(),
+    updateHomeComponentTitle: vi.fn(),
+    updateHomeComponentTabOrder: vi.fn(),
+    deleteHomeComponent: vi.fn(),
+    restoreDeletedHomeComponent: vi.fn(),
+    revealHomeComponentInFinder: vi.fn(),
+    openHomeComponentDocument: vi.fn(),
+    copyHomeComponentAbsolutePath: vi.fn(),
+    copyHomeComponentAgentPrompt: vi.fn(),
+    readHomeComponentMemoryDetail: vi.fn(),
     saveTranscript: vi.fn(),
     saveSegmentSupplementTranscript: vi.fn(),
     requestSegmentTranscriptionBackfill: vi.fn(),
@@ -146,6 +163,7 @@ describe('App', () => {
     openMarkdownExternalLink: vi.fn(),
     onRecordingTranscriptionEvent: vi.fn(),
     onFileTruthChanged: vi.fn(),
+    onHomeComponentsChanged: vi.fn(),
   };
 
   function createDeferred<T>() {
@@ -488,6 +506,19 @@ describe('App', () => {
       ok: true,
       value: { items: [], skipped: [] },
     });
+    reoWorkspace.readExpressionPlaybackAudio.mockImplementation(async (payload) => ({
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        segmentId: payload.segmentId,
+        ...(payload.supplementId ? { supplementId: payload.supplementId } : {}),
+        kind: payload.kind,
+        audio: new Uint8Array([1, 2, 3]),
+        mimeType: payload.kind === 'note-speech' ? 'audio/mpeg' : 'audio/webm',
+      },
+    }));
     reoWorkspace.openMemorySpaceAgentsFile.mockResolvedValue({ ok: true });
     reoWorkspace.openMemoryDocument.mockResolvedValue({ ok: true });
     reoWorkspace.openSegmentDocument.mockResolvedValue({ ok: true });
@@ -503,6 +534,25 @@ describe('App', () => {
     reoWorkspace.copyNeedsReviewAgentPrompt.mockResolvedValue({ ok: true });
     reoWorkspace.removeMemorySpace.mockResolvedValue({ ok: true, value: { removed: true } });
     reoWorkspace.closeWorkspace.mockResolvedValue({ ok: true, value: { closed: true } });
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_OPEN_FAILED', message: 'Move targets could not be read' },
+    });
+    reoWorkspace.moveMemory.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_UPDATE_FAILED', message: 'Memory could not be moved' },
+    });
+    reoWorkspace.moveSegment.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_SEGMENT_MOVE_FAILED', message: 'Segment could not be moved' },
+    });
+    reoWorkspace.moveSegmentSupplement.mockResolvedValue({
+      ok: false,
+      error: {
+        code: 'ERR_SEGMENT_SUPPLEMENT_MOVE_FAILED',
+        message: 'Segment supplement could not be moved',
+      },
+    });
     reoWorkspace.createMemory.mockResolvedValue({
       ok: false,
       error: { code: 'ERR_MEMORY_CREATE_FAILED', message: 'Memory could not be created' },
@@ -599,6 +649,40 @@ describe('App', () => {
     reoWorkspace.copyWidgetAbsolutePath.mockResolvedValue({ ok: true });
     reoWorkspace.copyWidgetRelativePath.mockResolvedValue({ ok: true });
     reoWorkspace.copyWidgetAgentPrompt.mockResolvedValue({ ok: true });
+    reoWorkspace.readHomeComponents.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [],
+        shellState: {
+          componentTabOrder: [],
+          lastActiveComponentId: 'recent-expressions',
+        },
+      },
+    });
+    reoWorkspace.updateHomeComponentTitle.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.updateHomeComponentTabOrder.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.deleteHomeComponent.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.restoreDeletedHomeComponent.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_WORKSPACE_HOME_COMPONENT_NOT_FOUND', message: 'Component not found' },
+    });
+    reoWorkspace.revealHomeComponentInFinder.mockResolvedValue({ ok: true });
+    reoWorkspace.openHomeComponentDocument.mockResolvedValue({ ok: true });
+    reoWorkspace.copyHomeComponentAbsolutePath.mockResolvedValue({ ok: true });
+    reoWorkspace.copyHomeComponentAgentPrompt.mockResolvedValue({ ok: true });
+    reoWorkspace.readHomeComponentMemoryDetail.mockResolvedValue({
+      ok: false,
+      error: { code: 'ERR_MEMORY_NOT_FOUND', message: 'Memory not found' },
+    });
     reoWorkspace.updateMemorySpaceTitle.mockResolvedValue({
       ok: false,
       error: {
@@ -776,6 +860,7 @@ describe('App', () => {
     });
     reoWorkspace.onRecordingTranscriptionEvent.mockReturnValue(() => {});
     reoWorkspace.onFileTruthChanged.mockReturnValue(() => {});
+    reoWorkspace.onHomeComponentsChanged.mockReturnValue(() => {});
     Object.defineProperty(window, 'reoWorkspace', {
       configurable: true,
       value: reoWorkspace,
@@ -1503,6 +1588,25 @@ describe('App', () => {
     };
   }
 
+  function readyHomeComponent(
+    overrides: Partial<WorkspaceHomeComponent> = {}
+  ): WorkspaceHomeComponent {
+    return {
+      componentId: 'hcmp_codex_review_test',
+      type: 'home-component',
+      format: 'html',
+      mount: 'home',
+      title: 'Codex Review Test',
+      createdAt: '2026-06-10T22:00:00.000Z',
+      updatedAt: '2026-06-10T22:00:00.000Z',
+      icon: { source: 'default' },
+      entryByteLength: 512,
+      entryHash: BASELINE_HASH_A,
+      previewVersion: BASELINE_HASH_B,
+      ...overrides,
+    };
+  }
+
   it('renders starter home without a page plus and opens creation from the sidebar entry', async () => {
     const user = userEvent.setup();
     render(
@@ -1532,6 +1636,155 @@ describe('App', () => {
     expect(screen.queryByText(/video/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/file/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/film/i)).not.toBeInTheDocument();
+  });
+
+  it('syncs the active home component when file-truth shell state becomes valid after component discovery', async () => {
+    let notifyHomeComponentsChanged: (() => void) | null = null;
+    const component = readyHomeComponent();
+    const shellState = {
+      componentTabOrder: [component.componentId],
+      lastActiveComponentId: component.componentId,
+    };
+    reoWorkspace.readHomeComponents
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          components: [],
+          shellState,
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          components: [component],
+          shellState,
+        },
+      });
+    reoWorkspace.onHomeComponentsChanged.mockImplementation((callback) => {
+      notifyHomeComponentsChanged = callback;
+      return () => {};
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await waitFor(() => expect(reoWorkspace.readHomeComponents).toHaveBeenCalledOnce());
+    expect(screen.getByRole('heading', { name: '近期表达' })).toBeInTheDocument();
+
+    await act(async () => {
+      notifyHomeComponentsChanged?.();
+    });
+
+    await waitFor(() => expect(reoWorkspace.readHomeComponents).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('tab', { name: 'Codex Review Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByRole('heading', { name: 'Codex Review Test' })).toBeInTheDocument();
+    expect(screen.getByTitle('组件：Codex Review Test')).toBeInTheDocument();
+  });
+
+  it('opens the stored active home component on the first home component read', async () => {
+    const component = readyHomeComponent();
+    reoWorkspace.readHomeComponents.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [component],
+        shellState: {
+          componentTabOrder: [component.componentId],
+          lastActiveComponentId: component.componentId,
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(await screen.findByRole('tab', { name: 'Codex Review Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByRole('heading', { name: 'Codex Review Test' })).toBeInTheDocument();
+    expect(screen.getByTitle('组件：Codex Review Test')).toBeInTheDocument();
+  });
+
+  it('does not persist the home component tab state when selecting the already active tab', async () => {
+    const user = userEvent.setup();
+    const component = readyHomeComponent();
+    reoWorkspace.readHomeComponents.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [component],
+        shellState: {
+          componentTabOrder: [component.componentId],
+          lastActiveComponentId: component.componentId,
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    const activeTab = await screen.findByRole('tab', { name: 'Codex Review Test' });
+    expect(activeTab).toHaveAttribute('aria-selected', 'true');
+    expect(reoWorkspace.updateHomeComponentTabOrder).not.toHaveBeenCalled();
+
+    await user.click(activeTab);
+
+    expect(reoWorkspace.updateHomeComponentTabOrder).not.toHaveBeenCalled();
+  });
+
+  it('syncs active home component when persisted shell active changes for the same component list', async () => {
+    const component = readyHomeComponent();
+    const queryClient = createReoQueryClient();
+    reoWorkspace.readHomeComponents
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          components: [component],
+          shellState: {
+            componentTabOrder: [component.componentId],
+            lastActiveComponentId: 'recent-expressions',
+          },
+        },
+      })
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          components: [component],
+          shellState: {
+            componentTabOrder: [component.componentId],
+            lastActiveComponentId: component.componentId,
+          },
+        },
+      });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByRole('heading', { name: '近期表达' })).toBeInTheDocument();
+
+    await act(async () => {
+      await queryClient.invalidateQueries({ queryKey: homeComponentsQueryRootKey() });
+    });
+
+    expect(await screen.findByRole('tab', { name: 'Codex Review Test' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    );
+    expect(screen.getByRole('heading', { name: 'Codex Review Test' })).toBeInTheDocument();
   });
 
   it('opens the workspace library page from the sidebar', async () => {
@@ -1814,6 +2067,82 @@ describe('App', () => {
       await screen.findByRole('button', { name: '选择片段 产品判断笔记' })
     ).toBeInTheDocument();
     expect(reoWorkspace.openMemorySpace).not.toHaveBeenCalled();
+  });
+
+  it('projects Home recent expression covers and handle-less playback refs', async () => {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn(() => 'blob:home-recent-expression-note-speech'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    reoWorkspace.readRecentExpressions.mockResolvedValue({
+      ok: true,
+      value: {
+        items: [
+          {
+            id: 'recent-cover-note',
+            workspaceId: 'ws_system_draft',
+            workspaceTitle: '草稿',
+            memoryId: 'mem_system_draft',
+            memoryTitle: '草稿',
+            segmentId: 'seg_recent_note',
+            contentKind: 'note',
+            objectType: 'segment',
+            title: '产品判断笔记',
+            preview: '整理今日产品判断。',
+            createdAt: '2026-06-06T20:55:00.000Z',
+            updatedAt: '2026-06-06T21:00:00.000Z',
+            cover: {
+              source: 'custom',
+              filename: 'ready speech.webp',
+              version: '177-42',
+            },
+            playback: { kind: 'note-speech' },
+          },
+        ],
+        skipped: [],
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    expect(await screen.findByText('产品判断笔记')).toBeInTheDocument();
+    const icon = document.querySelector<HTMLElement>(
+      '[data-slot="home-recent-expression-icon"][data-expression-id="recent-cover-note"]'
+    );
+    if (!(icon instanceof HTMLElement)) {
+      throw new Error('Expected recent expression icon.');
+    }
+    const cover = icon.querySelector<HTMLImageElement>(
+      '[data-slot="home-recent-expression-cover"]'
+    );
+    expect(cover?.getAttribute('src')).toBe(
+      'reo-attachment://ws_system_draft/segments/seg_recent_note/cover/ready%20speech.webp?v=177-42'
+    );
+
+    fireEvent.pointerEnter(icon);
+    fireEvent.click(screen.getByRole('button', { name: '播放 产品判断笔记' }));
+
+    await waitFor(() => expect(reoWorkspace.readExpressionPlaybackAudio).toHaveBeenCalledOnce());
+    const playbackRequest = reoWorkspace.readExpressionPlaybackAudio.mock.calls[0]?.[0];
+    expect(playbackRequest).toEqual(
+      expect.objectContaining({
+        workspaceId: 'ws_system_draft',
+        memoryId: 'mem_system_draft',
+        segmentId: 'seg_recent_note',
+        kind: 'note-speech',
+      })
+    );
+    expect(playbackRequest).not.toHaveProperty('workspaceHandle');
   });
 
   it('refreshes Home recent expressions after finalizing a Home Draft Note', async () => {
@@ -4033,6 +4362,7 @@ describe('App', () => {
       '生成转录',
       '恢复随机默认图片',
       '切换随机默认图片',
+      '移动...',
       '重命名',
       '删除',
     ]);
@@ -5278,6 +5608,7 @@ describe('App', () => {
       '复制绝对路径',
       '恢复随机默认图片',
       '切换随机默认图片',
+      '移动记忆...',
       '重命名',
       '删除',
     ]);
@@ -5332,6 +5663,240 @@ describe('App', () => {
       })
     );
     expect(within(titlebar).getByRole('button', { name: '灵感 记忆操作' })).toBeInTheDocument();
+  });
+
+  it('moves a Memory from the More menu and exposes a target space toast action', async () => {
+    const user = userEvent.setup();
+    toast.dismiss();
+    const { birthdayMemory } = mockWorkspaceWithEmptyBirthdayMemory();
+    reoWorkspace.listMemorySpaces.mockResolvedValue({
+      ok: true,
+      value: {
+        memorySpaces: [
+          {
+            workspaceId: 'ws_target',
+            title: 'Target space',
+            description: '',
+            addedAt: '2026-06-09T20:15:00.000Z',
+            lastOpenedAt: '2026-06-09T20:15:00.000Z',
+          },
+        ],
+      },
+    });
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: true,
+      value: {
+        source: {
+          type: 'memory',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_birthday',
+          title: 'My seventh birthday',
+          breadcrumb: ['Daily memory'],
+        },
+        targetLevel: 'workspace',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            disabledReason: '当前位置',
+            memories: [],
+          },
+          {
+            workspaceId: 'ws_target',
+            title: 'Target space',
+            disabledReason: null,
+            memories: [],
+          },
+        ],
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [birthdayMemory],
+      },
+    });
+    reoWorkspace.moveMemory.mockImplementation(async () => {
+      reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      });
+      return {
+        ok: true,
+        value: {
+          sourceWorkspaceId: 'ws_1',
+          targetWorkspaceId: 'ws_target',
+          moved: true,
+        },
+      };
+    });
+    reoWorkspace.openMemorySpace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-target',
+        workspaceId: 'ws_target',
+        snapshot: {
+          workspaceId: 'ws_target',
+          title: 'Target space',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await expandMemoryRail(user);
+    await user.click(await screen.findByRole('button', { name: '选择记忆 My seventh birthday' }));
+    await user.click(await findTitlebarMemoryControl('My seventh birthday'));
+    const memoryMenu = await screen.findByRole('menu', { name: 'My seventh birthday 记忆操作' });
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '移动记忆...' }));
+    const moveDialog = await screen.findByRole('dialog', { name: '移动记忆' });
+    expect(within(moveDialog).getByRole('button', { name: /Daily memory/ })).toBeDisabled();
+
+    await user.click(within(moveDialog).getByRole('button', { name: 'Target space' }));
+    await user.click(within(moveDialog).getByRole('button', { name: '移动' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.moveMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_birthday',
+        targetWorkspaceId: 'ws_target',
+      })
+    );
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+
+    const moveToast = [...toast.getToasts()]
+      .reverse()
+      .find((entry) => 'title' in entry && entry.title === '已移动');
+    expect(moveToast).toBeDefined();
+    if (!moveToast || !('action' in moveToast) || !moveToast.action) {
+      throw new Error('Move toast did not expose a target-space action');
+    }
+    const moveToastAction = moveToast.action as {
+      readonly label: unknown;
+      readonly onClick: () => void;
+    };
+    expect(moveToastAction.label).toBe('打开目标空间');
+    moveToastAction.onClick();
+
+    await waitFor(() =>
+      expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_target' })
+    );
+  });
+
+  it('refreshes the source projection when a Memory move reports stale index after commit', async () => {
+    const user = userEvent.setup();
+    toast.dismiss();
+    const { birthdayMemory } = mockWorkspaceWithEmptyBirthdayMemory();
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: true,
+      value: {
+        source: {
+          type: 'memory',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_birthday',
+          title: 'My seventh birthday',
+          breadcrumb: ['Daily memory'],
+        },
+        targetLevel: 'workspace',
+        spaces: [
+          {
+            workspaceId: 'ws_1',
+            title: 'Daily memory',
+            disabledReason: '当前位置',
+            memories: [],
+          },
+          {
+            workspaceId: 'ws_target',
+            title: 'Target space',
+            disabledReason: null,
+            memories: [],
+          },
+        ],
+      },
+    });
+    reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceId: 'ws_1',
+        title: 'Daily memory',
+        description: '',
+        memories: [birthdayMemory],
+      },
+    });
+    reoWorkspace.moveMemory.mockImplementation(async () => {
+      reoWorkspace.readWorkspaceSnapshot.mockResolvedValue({
+        ok: true,
+        value: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      });
+      return {
+        ok: false,
+        error: {
+          code: 'ERR_WORKSPACE_LOCK_LOST',
+          message: 'Workspace lock was lost',
+          dataRetention: 'file-written-index-stale',
+        },
+      };
+    });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await expandMemoryRail(user);
+    await user.click(await screen.findByRole('button', { name: '选择记忆 My seventh birthday' }));
+    await user.click(await findTitlebarMemoryControl('My seventh birthday'));
+    const memoryMenu = await screen.findByRole('menu', { name: 'My seventh birthday 记忆操作' });
+    await user.click(within(memoryMenu).getByRole('menuitem', { name: '移动记忆...' }));
+    const moveDialog = await screen.findByRole('dialog', { name: '移动记忆' });
+
+    await user.click(within(moveDialog).getByRole('button', { name: 'Target space' }));
+    await user.click(within(moveDialog).getByRole('button', { name: '移动' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.readWorkspaceSnapshot).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+      })
+    );
+    expect(screen.queryByRole('dialog', { name: '移动记忆' })).not.toBeInTheDocument();
+    expect(
+      [...toast.getToasts()].some((entry) => 'title' in entry && entry.title === '移动后需要刷新')
+    ).toBe(true);
   });
 
   it('keeps the optimistic memory space title when rename reports stale projections', async () => {
@@ -10498,6 +11063,88 @@ describe('App', () => {
         bodyMarkdown: '空空间笔记',
       })
     );
+    expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
+  });
+
+  it('creates a named Memory before copying a FAB artifact prompt when the workspace has no memories', async () => {
+    const user = userEvent.setup();
+    const createdMemory = {
+      memoryId: 'mem_artifact_target',
+      title: '第一条记忆',
+      createdAt: '2026-05-08T14:42:00.000Z',
+      updatedAt: '2026-05-08T14:42:00.000Z',
+      segmentCount: 0,
+      noteSegmentCount: 0,
+      artifactSegmentCount: 0,
+      audioSegmentCount: 0,
+      audioDurationMs: 0,
+      audioByteLength: 0,
+      hasAudioTranscript: false,
+      hasAnyNote: false,
+      supplementCount: 0,
+    };
+    reoWorkspace.chooseDirectory.mockResolvedValue({
+      ok: true,
+      value: {
+        status: 'selected',
+        selectionToken: 'selection-token-1',
+        displayPath: 'Memory',
+      },
+    });
+    reoWorkspace.initializeWorkspace.mockResolvedValue({
+      ok: true,
+      value: {
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        snapshot: {
+          workspaceId: 'ws_1',
+          title: 'Daily memory',
+          description: '',
+          memories: [],
+        },
+      },
+    });
+    reoWorkspace.createMemory.mockResolvedValue({
+      ok: true,
+      value: createdMemory,
+    });
+    reoWorkspace.copyArtifactAgentPrompt.mockResolvedValue({ ok: true });
+
+    render(
+      <ReoQueryProvider>
+        <App />
+      </ReoQueryProvider>
+    );
+
+    await openCreateWorkspaceDialog(user);
+    await user.type(screen.getByLabelText('记忆空间名称'), 'Daily memory');
+    await user.click(screen.getByRole('button', { name: '浏览' }));
+    await screen.findByText('Memory');
+    await user.click(screen.getByRole('button', { name: '创建' }));
+    await user.click(await screen.findByRole('button', { name: '打开表达入口' }));
+    await user.click(screen.getByRole('menuitem', { name: '作品' }));
+
+    const createDialog = screen.getByRole('dialog', { name: '新建记忆' });
+    expect(createDialog).toHaveTextContent('创建记忆并创建作品');
+    await user.type(within(createDialog).getByLabelText('记忆名称'), '第一条记忆');
+    await user.click(within(createDialog).getByRole('button', { name: '创建作品' }));
+
+    await waitFor(() =>
+      expect(reoWorkspace.createMemory).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        title: '第一条记忆',
+      })
+    );
+    await waitFor(() =>
+      expect(reoWorkspace.copyArtifactAgentPrompt).toHaveBeenCalledWith({
+        workspaceHandle: 'workspace-handle-1',
+        workspaceId: 'ws_1',
+        action: 'create-segment',
+        memoryId: 'mem_artifact_target',
+      })
+    );
+    expect(screen.queryByRole('dialog', { name: '新建记忆' })).not.toBeInTheDocument();
+    expect(reoWorkspace.createNoteSegmentDraft).not.toHaveBeenCalled();
     expect(reoWorkspace.createRecordingDraft).not.toHaveBeenCalled();
   });
 

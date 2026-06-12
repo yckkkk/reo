@@ -3,6 +3,7 @@ import matter from 'gray-matter';
 import { z } from 'zod';
 import {
   WIDGET_ID_PATTERN,
+  HOME_COMPONENT_ID_PATTERN,
   MEMORY_ID_PATTERN,
   SEGMENT_ID_PATTERN,
   SUPPLEMENT_ID_PATTERN,
@@ -57,6 +58,14 @@ export const workspaceWidgetMarkdownDataSchema = workspaceMarkdownSharedSemantic
   mount: z.literal('workspace-rail'),
 });
 
+export const workspaceHomeComponentMarkdownDataSchema =
+  workspaceMarkdownSharedSemanticDataSchema.extend({
+    id: z.string().regex(HOME_COMPONENT_ID_PATTERN),
+    kind: z.literal('home-component'),
+    format: z.literal('html'),
+    mount: z.literal('home'),
+  });
+
 const workspaceMemoryMarkdownCandidateDataSchema = workspaceMemoryMarkdownDataSchema
   .partial()
   .strip();
@@ -69,26 +78,49 @@ const workspaceSupplementMarkdownCandidateDataSchema = workspaceSupplementMarkdo
 const workspaceWidgetMarkdownCandidateDataSchema = workspaceWidgetMarkdownDataSchema
   .partial()
   .strip();
+const workspaceHomeComponentMarkdownCandidateDataSchema = workspaceHomeComponentMarkdownDataSchema
+  .partial()
+  .strip();
 
-export type WorkspaceMarkdownObjectType = 'memory' | 'segment' | 'supplement' | 'widget';
+export type WorkspaceMarkdownObjectType =
+  | 'memory'
+  | 'segment'
+  | 'supplement'
+  | 'widget'
+  | 'home-component';
+
+type WorkspaceMarkdownObjectDataByType = {
+  readonly memory: z.infer<typeof workspaceMemoryMarkdownDataSchema>;
+  readonly segment: z.infer<typeof workspaceSegmentMarkdownDataSchema>;
+  readonly supplement: z.infer<typeof workspaceSupplementMarkdownDataSchema>;
+  readonly widget: z.infer<typeof workspaceWidgetMarkdownDataSchema>;
+  readonly 'home-component': z.infer<typeof workspaceHomeComponentMarkdownDataSchema>;
+};
+
+type WorkspaceMarkdownObjectCandidateDataByType = {
+  readonly memory: z.infer<typeof workspaceMemoryMarkdownCandidateDataSchema>;
+  readonly segment: z.infer<typeof workspaceSegmentMarkdownCandidateDataSchema>;
+  readonly supplement: z.infer<typeof workspaceSupplementMarkdownCandidateDataSchema>;
+  readonly widget: z.infer<typeof workspaceWidgetMarkdownCandidateDataSchema>;
+  readonly 'home-component': z.infer<typeof workspaceHomeComponentMarkdownCandidateDataSchema>;
+};
+
 export type WorkspaceMarkdownObjectData =
-  | z.infer<typeof workspaceMemoryMarkdownDataSchema>
-  | z.infer<typeof workspaceSegmentMarkdownDataSchema>
-  | z.infer<typeof workspaceSupplementMarkdownDataSchema>
-  | z.infer<typeof workspaceWidgetMarkdownDataSchema>;
+  WorkspaceMarkdownObjectDataByType[WorkspaceMarkdownObjectType];
 export type WorkspaceMarkdownObjectCandidateData =
-  | z.infer<typeof workspaceMemoryMarkdownCandidateDataSchema>
-  | z.infer<typeof workspaceSegmentMarkdownCandidateDataSchema>
-  | z.infer<typeof workspaceSupplementMarkdownCandidateDataSchema>
-  | z.infer<typeof workspaceWidgetMarkdownCandidateDataSchema>;
+  WorkspaceMarkdownObjectCandidateDataByType[WorkspaceMarkdownObjectType];
 
-export interface ParsedWorkspaceMarkdownObject {
-  readonly data: WorkspaceMarkdownObjectData;
+export interface ParsedWorkspaceMarkdownObject<
+  ObjectType extends WorkspaceMarkdownObjectType = WorkspaceMarkdownObjectType,
+> {
+  readonly data: WorkspaceMarkdownObjectDataByType[ObjectType];
   readonly content: string;
 }
 
-export interface ParsedWorkspaceMarkdownObjectCandidate {
-  readonly data: WorkspaceMarkdownObjectCandidateData;
+export interface ParsedWorkspaceMarkdownObjectCandidate<
+  ObjectType extends WorkspaceMarkdownObjectType = WorkspaceMarkdownObjectType,
+> {
+  readonly data: WorkspaceMarkdownObjectCandidateDataByType[ObjectType];
   readonly content: string;
 }
 
@@ -126,6 +158,8 @@ function semanticSchemaForObject(objectType: WorkspaceMarkdownObjectType) {
       return workspaceSupplementMarkdownDataSchema;
     case 'widget':
       return workspaceWidgetMarkdownDataSchema;
+    case 'home-component':
+      return workspaceHomeComponentMarkdownDataSchema;
   }
 }
 
@@ -139,16 +173,18 @@ function candidateSchemaForObject(objectType: WorkspaceMarkdownObjectType) {
       return workspaceSupplementMarkdownCandidateDataSchema;
     case 'widget':
       return workspaceWidgetMarkdownCandidateDataSchema;
+    case 'home-component':
+      return workspaceHomeComponentMarkdownCandidateDataSchema;
   }
 }
 
-export function parseWorkspaceMarkdownObject({
+export function parseWorkspaceMarkdownObject<ObjectType extends WorkspaceMarkdownObjectType>({
   markdown,
   objectType,
 }: {
   readonly markdown: string;
-  readonly objectType: WorkspaceMarkdownObjectType;
-}): ParsedWorkspaceMarkdownObject {
+  readonly objectType: ObjectType;
+}): ParsedWorkspaceMarkdownObject<ObjectType> {
   let parsed: matter.GrayMatterFile<string>;
   try {
     parsed = matter(markdown);
@@ -162,18 +198,20 @@ export function parseWorkspaceMarkdownObject({
   }
 
   return {
-    data: dataResult.data,
+    data: dataResult.data as WorkspaceMarkdownObjectDataByType[ObjectType],
     content: parsed.content,
   };
 }
 
-export function parseWorkspaceMarkdownObjectCandidate({
+export function parseWorkspaceMarkdownObjectCandidate<
+  ObjectType extends WorkspaceMarkdownObjectType,
+>({
   markdown,
   objectType,
 }: {
   readonly markdown: string;
-  readonly objectType: WorkspaceMarkdownObjectType;
-}): ParsedWorkspaceMarkdownObjectCandidate {
+  readonly objectType: ObjectType;
+}): ParsedWorkspaceMarkdownObjectCandidate<ObjectType> {
   let parsed: matter.GrayMatterFile<string>;
   try {
     parsed = matter(markdown);
@@ -187,19 +225,19 @@ export function parseWorkspaceMarkdownObjectCandidate({
   }
 
   return {
-    data: dataResult.data,
+    data: dataResult.data as WorkspaceMarkdownObjectCandidateDataByType[ObjectType],
     content: parsed.content,
   };
 }
 
-export function renderWorkspaceMarkdownObject({
+export function renderWorkspaceMarkdownObject<ObjectType extends WorkspaceMarkdownObjectType>({
   data,
   content,
   objectType,
 }: {
-  readonly data: WorkspaceMarkdownObjectData;
+  readonly data: WorkspaceMarkdownObjectDataByType[ObjectType];
   readonly content: string;
-  readonly objectType: WorkspaceMarkdownObjectType;
+  readonly objectType: ObjectType;
 }): string {
   const dataResult = semanticSchemaForObject(objectType).safeParse(data);
   if (!dataResult.success) {

@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { lstat, mkdir, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  REO_SEMANTIC_THEME,
+  readReoSemanticTokenCss,
+} from './reo-token-contract.mjs';
 
 function argValue(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -17,6 +22,7 @@ const root = process.cwd();
 const rootReal = await realpath(root);
 const target = path.resolve(root, targetArg);
 const relative = path.relative(root, target);
+const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 function isInsideRoot(realPath) {
   const realRelative = path.relative(rootReal, realPath);
@@ -129,10 +135,10 @@ function bodyForTemplate(config) {
   return `<div class="grid">${config.sections.map(function (section) { return `<section class="panel"><h2>${escapeHtml(section)}</h2><p>把和「${escapeHtml(section)}」有关的内容放在这里，后续可以继续改写。</p></section>`; }).join("")}</div>`;
 }
 
-const BASE_CSS = ":root {\n  --color-background-primary: #ffffff;\n  --color-background-secondary: #f4f4f5;\n  --color-background-tertiary: #ebebed;\n  --color-background-info: #e6f1fb;\n  --color-background-danger: #fcebeb;\n  --color-background-success: #eaf3de;\n  --color-background-warning: #faeeda;\n  --color-text-primary: #18181b;\n  --color-text-secondary: #3f3f46;\n  --color-text-tertiary: #71717a;\n  --color-text-info: #0c447c;\n  --color-text-danger: #791f1f;\n  --color-text-success: #27500a;\n  --color-text-warning: #633806;\n  --color-border-tertiary: rgba(24, 24, 27, 0.08);\n  --color-border-secondary: rgba(24, 24, 27, 0.14);\n  --color-border-primary: rgba(24, 24, 27, 0.22);\n  --font-sans: \"Waldenburg\", \"Inter\", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;\n  --font-serif: \"Songti SC\", \"Noto Serif CJK SC\", ui-serif, Georgia, Cambria, \"Times New Roman\", serif;\n  --font-mono: \"Geist Mono\", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", monospace;\n  --border-radius-sm: 8px;\n  --border-radius-md: 12px;\n  --border-radius-lg: 16px;\n  --border-radius-xl: 20px;\n  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04), 0 2px 8px rgba(17, 24, 39, 0.05);\n}\n@media (prefers-color-scheme: dark) {\n  :root {\n    --color-background-primary: #09090b;\n    --color-background-secondary: #18181b;\n    --color-background-tertiary: #1f1f23;\n    --color-background-info: #0c447c;\n    --color-background-danger: #791f1f;\n    --color-background-success: #27500a;\n    --color-background-warning: #633806;\n    --color-text-primary: #fafafa;\n    --color-text-secondary: #d4d4d8;\n    --color-text-tertiary: #a1a1aa;\n    --color-text-info: #b5d4f4;\n    --color-text-danger: #f7c1c1;\n    --color-text-success: #c0dd97;\n    --color-text-warning: #fac775;\n    --color-border-tertiary: rgba(255, 255, 255, 0.10);\n    --color-border-secondary: rgba(255, 255, 255, 0.16);\n    --color-border-primary: rgba(255, 255, 255, 0.24);\n    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 10px rgba(0, 0, 0, 0.34);\n  }\n}\n";
+const BASE_CSS = await readReoSemanticTokenCss(scriptDirectory);
 
 function styleCss() {
-  return BASE_CSS + `body{margin:0;font-family:var(--font-sans);background:var(--color-background-primary);color:var(--color-text-primary);padding:24px;line-height:1.6}main{max-width:820px;margin:0 auto}h1{font-size:22px;font-weight:500;margin:0 0 8px}h2{font-size:16px;font-weight:500;margin:0 0 6px}.lead{color:var(--color-text-secondary);margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.panel,.metrics>div{background:var(--color-background-secondary);border-radius:var(--border-radius-lg);padding:16px}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.metrics span{display:block;color:var(--color-text-secondary);font-size:13px}.metrics strong{font-size:24px;font-weight:500}.toolbar{display:flex;gap:8px;margin:16px 0}.toolbar input{flex:1;min-width:0;border:0;background:var(--color-background-secondary);color:var(--color-text-primary);border-radius:var(--border-radius-md);padding:10px 12px}.toolbar input::placeholder{color:var(--color-text-tertiary)}.toolbar button,.list button{border:0;border-radius:var(--border-radius-md);background:var(--color-text-primary);color:var(--color-background-primary);padding:10px 12px}.list{list-style:none;padding:0;margin:0;display:grid;gap:8px}.list li{display:flex;align-items:center;justify-content:space-between;background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px}`;
+  return BASE_CSS + `body{margin:0;font-family:var(--font-sans);background:var(--background);color:var(--foreground);padding:24px;line-height:var(--leading-body);font-size:var(--text-body)}main{max-width:820px;margin:0 auto}h1{font-size:22px;font-weight:500;margin:0 0 8px}h2{font-size:16px;font-weight:500;margin:0 0 6px}.lead{color:var(--muted-foreground);margin:0 0 16px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}.panel,.metrics>div{background:var(--card);color:var(--card-foreground);border-radius:var(--radius-lg);box-shadow:var(--shadow-surface-inset);padding:16px}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}.metrics span{display:block;color:var(--muted-foreground);font-size:13px}.metrics strong{font-size:24px;font-weight:500}.toolbar{display:flex;gap:8px;margin:16px 0}.toolbar input{flex:1;min-width:0;border:0;background:var(--input);color:var(--foreground);border-radius:var(--radius-md);padding:10px 12px}.toolbar input::placeholder{color:var(--muted-foreground)}.toolbar button,.list button{border:0;border-radius:var(--radius-md);background:var(--primary);color:var(--primary-foreground);padding:10px 12px}.toolbar button:focus-visible,.list button:focus-visible,.toolbar input:focus-visible{outline:2px solid var(--ring);outline-offset:2px}.list{list-style:none;padding:0;margin:0;display:grid;gap:8px}.list li{display:flex;align-items:center;justify-content:space-between;background:var(--card);border-radius:var(--radius-md);box-shadow:var(--shadow-surface-inset);padding:10px 12px}`;
 }
 
 function entryHtml(title, config) {
@@ -145,6 +151,7 @@ const runtimeManifest = {
   title,
   entry: "entry.html",
   template: config.id,
+  theme: REO_SEMANTIC_THEME,
   state: { schemaVersion: 1, stores: ["ui", "data", "progress", "draft"] },
   bridge: { needs: ["state"] },
 };

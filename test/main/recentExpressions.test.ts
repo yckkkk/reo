@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -14,6 +14,10 @@ import {
   writeSegmentSupplementNoteDraftBody,
 } from '../../src/main/noteDrafts.js';
 import { readRecentExpressionsFromWorkspaceSources } from '../../src/main/recentExpressions.js';
+import {
+  parseWorkspaceMarkdownObject,
+  renderWorkspaceMarkdownObject,
+} from '../../src/main/workspaceMarkdownObjects.js';
 import { initializeWorkspaceFiles } from '../../src/main/workspaceFiles.js';
 
 async function createWorkspaceWithMemory({
@@ -199,6 +203,176 @@ async function createFinalizedArtifactSegment({
   );
 }
 
+async function createFinalizedAudioSegment({
+  durationMs,
+  memoryId,
+  rootPath,
+  segmentId,
+  title,
+  updatedAt,
+  workspaceId,
+}: {
+  readonly durationMs: number;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly title: string;
+  readonly updatedAt: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  const audio = new Uint8Array([1, 2, 3]);
+  const segmentDirectory = path.join(
+    await resolveMemoryDirectory(rootPath, memoryId),
+    'segments',
+    segmentId
+  );
+  await mkdir(segmentDirectory, { recursive: true });
+  await writeFile(path.join(segmentDirectory, 'audio.webm'), audio);
+  await writeFile(
+    path.join(segmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title, kind: 'audio' },
+      content: `# ${title}\n\n## Transcript\n\n`,
+    })
+  );
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'segments'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'segment',
+        workspaceId,
+        memoryId,
+        segmentId,
+        kind: 'audio',
+        createdAt: updatedAt,
+        finalizedAt: updatedAt,
+        updatedAt,
+        durationMs,
+        nextSequence: 1,
+        audioByteLength: audio.byteLength,
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+async function createFinalizedAudioSupplement({
+  durationMs,
+  memoryId,
+  rootPath,
+  segmentId,
+  supplementId,
+  title,
+  updatedAt,
+  workspaceId,
+}: {
+  readonly durationMs: number;
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+  readonly supplementId: string;
+  readonly title: string;
+  readonly updatedAt: string;
+  readonly workspaceId: string;
+}): Promise<void> {
+  const audio = new Uint8Array([4, 5, 6]);
+  const supplementDirectory = path.join(
+    await resolveMemoryDirectory(rootPath, memoryId),
+    'segments',
+    segmentId,
+    'supplements',
+    supplementId
+  );
+  await mkdir(supplementDirectory, { recursive: true });
+  await writeFile(path.join(supplementDirectory, 'audio.webm'), audio);
+  await writeFile(
+    path.join(supplementDirectory, 'supplement.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'supplement',
+      data: { title, kind: 'audio' },
+      content: `# ${title}\n\n## Transcript\n\n`,
+    })
+  );
+  await mkdir(path.join(rootPath, '.reo', 'objects', 'supplements'), { recursive: true });
+  await writeFile(
+    path.join(rootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        objectType: 'supplement',
+        workspaceId,
+        memoryId,
+        segmentId,
+        supplementId,
+        kind: 'audio',
+        createdAt: updatedAt,
+        finalizedAt: updatedAt,
+        updatedAt,
+        durationMs,
+        nextSequence: 1,
+        audioByteLength: audio.byteLength,
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
+async function writeReadySpeechForNoteSegment({
+  memoryId,
+  rootPath,
+  segmentId,
+}: {
+  readonly memoryId: string;
+  readonly rootPath: string;
+  readonly segmentId: string;
+}): Promise<void> {
+  const audio = new Uint8Array([7, 8, 9]);
+  const segmentsDirectory = path.join(await resolveMemoryDirectory(rootPath, memoryId), 'segments');
+  const segmentEntry = (await readdir(segmentsDirectory, { withFileTypes: true })).find(
+    (entry) =>
+      entry.isDirectory() && (entry.name === segmentId || entry.name.startsWith(`${segmentId}--`))
+  );
+  if (!segmentEntry) {
+    throw new Error(`Missing finalized segment directory for ${segmentId}`);
+  }
+  const segmentDirectory = path.join(segmentsDirectory, segmentEntry.name);
+  const parsedMarkdown = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  const manifestPath = path.join(rootPath, '.reo', 'objects', 'segments', `${segmentId}.json`);
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+  await writeFile(path.join(segmentDirectory, 'speech.mp3'), audio);
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        ...manifest,
+        speechSynthesis: {
+          audioByteLength: audio.byteLength,
+          contentHash: createHash('sha256').update(parsedMarkdown.content).digest('hex'),
+          format: 'mp3',
+          lastSynthesisAttempt: 'success',
+          mimeType: 'audio/mpeg',
+          model: 'seed-tts-2.0-expressive',
+          reason: null,
+          resourceId: 'seed-tts-2.0',
+          sampleRate: 24000,
+          speaker: 'zh_female_vv_uranus_bigtts',
+          updatedAt: '2026-06-06T20:20:00.000-07:00',
+        },
+      },
+      null,
+      2
+    )}\n`
+  );
+}
+
 test('readRecentExpressionsFromWorkspaceSources returns cross-space finalized segments and supplements newest first', async () => {
   const firstRoot = await createWorkspaceWithMemory({
     workspaceId: 'ws_recent_1',
@@ -318,6 +492,103 @@ test('readRecentExpressionsFromWorkspaceSources returns cross-space finalized se
   } finally {
     await rm(firstRoot, { force: true, recursive: true });
     await rm(secondRoot, { force: true, recursive: true });
+  }
+});
+
+test('readRecentExpressionsFromWorkspaceSources attaches playback only for audio and ready note speech', async () => {
+  const rootPath = await createWorkspaceWithMemory({
+    workspaceId: 'ws_recent_playback',
+    title: '播放测试库',
+    memoryId: 'mem_recent_playback',
+    memoryTitle: '播放材料',
+  });
+  const readyBody = 'Ready note body for speech.';
+  try {
+    await createFinalizedAudioSegment({
+      rootPath,
+      workspaceId: 'ws_recent_playback',
+      memoryId: 'mem_recent_playback',
+      segmentId: 'seg_playback_audio',
+      title: '录音',
+      durationMs: 1200,
+      updatedAt: '2026-06-06T20:01:00.000-07:00',
+    });
+    await createFinalizedAudioSupplement({
+      rootPath,
+      workspaceId: 'ws_recent_playback',
+      memoryId: 'mem_recent_playback',
+      segmentId: 'seg_playback_audio',
+      supplementId: 'sup_playback_audio',
+      title: '补充录音',
+      durationMs: 800,
+      updatedAt: '2026-06-06T20:02:00.000-07:00',
+    });
+    await createFinalizedNoteSegment({
+      rootPath,
+      workspaceId: 'ws_recent_playback',
+      memoryId: 'mem_recent_playback',
+      segmentId: 'seg_playback_note_ready',
+      title: '可播放笔记',
+      body: readyBody,
+      updatedAt: '2026-06-06T20:03:00.000-07:00',
+    });
+    await writeReadySpeechForNoteSegment({
+      rootPath,
+      memoryId: 'mem_recent_playback',
+      segmentId: 'seg_playback_note_ready',
+    });
+    await createFinalizedNoteSegment({
+      rootPath,
+      workspaceId: 'ws_recent_playback',
+      memoryId: 'mem_recent_playback',
+      segmentId: 'seg_playback_note_missing',
+      title: '无语音笔记',
+      body: 'Missing speech note body.',
+      updatedAt: '2026-06-06T20:04:00.000-07:00',
+    });
+    await createFinalizedArtifactSegment({
+      rootPath,
+      workspaceId: 'ws_recent_playback',
+      memoryId: 'mem_recent_playback',
+      segmentId: 'seg_playback_artifact',
+      title: '作品',
+      updatedAt: '2026-06-06T20:05:00.000-07:00',
+    });
+
+    const feed = await readRecentExpressionsFromWorkspaceSources({
+      limit: 10,
+      sources: [
+        {
+          rootPath,
+          workspaceId: 'ws_recent_playback',
+          workspaceTitle: '播放测试库',
+        },
+      ],
+    });
+    const playbackByTarget = new Map(
+      feed.items.map((item) => [
+        `${item.objectType}:${item.segmentId}:${
+          item.objectType === 'supplement' ? item.supplementId : ''
+        }`,
+        item.playback ?? null,
+      ])
+    );
+
+    assert.deepEqual(playbackByTarget.get('segment:seg_playback_audio:'), {
+      kind: 'audio',
+      durationMs: 1200,
+    });
+    assert.deepEqual(playbackByTarget.get('supplement:seg_playback_audio:sup_playback_audio'), {
+      kind: 'audio',
+      durationMs: 800,
+    });
+    assert.deepEqual(playbackByTarget.get('segment:seg_playback_note_ready:'), {
+      kind: 'note-speech',
+    });
+    assert.equal(playbackByTarget.get('segment:seg_playback_note_missing:'), null);
+    assert.equal(playbackByTarget.get('segment:seg_playback_artifact:'), null);
+  } finally {
+    await rm(rootPath, { force: true, recursive: true });
   }
 });
 

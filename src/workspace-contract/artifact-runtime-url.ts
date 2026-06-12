@@ -30,6 +30,10 @@ export function workspaceWidgetRuntimeHost(workspaceId: string, widgetId: string
   return `widget-${runtimeHostPart(workspaceId)}-${runtimeHostPart(widgetId)}`;
 }
 
+export function homeComponentRuntimeHost(componentId: string): string {
+  return `home-component-${runtimeHostPart(componentId)}`;
+}
+
 export function artifactSegmentRuntimeUrl({
   previewVersion,
   segmentId,
@@ -84,4 +88,18 @@ export function workspaceWidgetRuntimeUrl({
   )}/workspaces/${encodeURIComponent(workspaceId)}/widgets/${encodeURIComponent(
     widgetId
   )}/${ARTIFACT_RUNTIME_ENTRY_FILE}?v=${encodeURIComponent(previewVersion)}`;
+}
+
+export function homeComponentRuntimeUrl({
+  componentId,
+  previewVersion,
+}: {
+  readonly componentId: string;
+  readonly previewVersion: string;
+}): string {
+  return `${RENDER_SCHEME}://${homeComponentRuntimeHost(
+    componentId
+  )}/home-components/${encodeURIComponent(componentId)}/${ARTIFACT_RUNTIME_ENTRY_FILE}?v=${encodeURIComponent(
+    previewVersion
+  )}`;
 }

@@ -7,11 +7,14 @@ import {
   readSync,
   renameSync,
 } from 'node:fs';
-import { readdir } from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
-import path from 'node:path';
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import { writeWorkspaceFileAtomic, writeWorkspaceJsonAtomic } from './atomicWorkspaceFile.js';
+import {
+  createArtifactRuntimePreviewVersion,
+  type ArtifactRuntimePreviewOptionalFileDescriptor,
+} from './artifactRuntimePreview.js';
 import {
   assertSameDirectoryIdentitySync,
   readSafeDirectoryIdentity,
@@ -22,7 +25,6 @@ import { MAX_ARTIFACT_ASSET_BYTES, MAX_ARTIFACT_ENTRY_BYTES } from './artifactLi
 import {
   ARTIFACT_RUNTIME_ASSETS_DIRECTORY,
   ARTIFACT_RUNTIME_ENTRY_FILE,
-  ARTIFACT_RUNTIME_MANIFEST_FILE,
   workspaceWidgetRuntimeHost,
 } from './artifactUrl.js';
 import { getWorkspaceMetadataPath } from './workspacePaths.js';
@@ -317,9 +319,7 @@ function readOptionalWorkspaceFileDescriptor(
   directoryIdentity: DirectoryIdentity,
   fileName: string,
   maxBytes: number
-):
-  | { readonly status: 'file'; readonly byteLength: number; readonly hash: string }
-  | { readonly status: 'missing' } {
+): ArtifactRuntimePreviewOptionalFileDescriptor {
   try {
     return {
       status: 'file',
@@ -331,69 +331,6 @@ function readOptionalWorkspaceFileDescriptor(
     }
     return { status: 'missing' };
   }
-}
-
-function appendPreviewDescriptor(
-  hash: ReturnType<typeof createHash>,
-  fileName: string,
-  value:
-    | { readonly status: 'file'; readonly byteLength: number; readonly hash: string }
-    | { readonly status: 'missing' }
-): void {
-  hash.update(fileName);
-  hash.update('\0');
-  hash.update(value.status);
-  hash.update('\0');
-  if (value.status === 'file') {
-    hash.update(String(value.byteLength));
-    hash.update('\0');
-    hash.update(value.hash);
-  }
-  hash.update('\n');
-}
-
-async function widgetPreviewVersion(
-  directory: string,
-  directoryIdentity: DirectoryIdentity,
-  entry: { readonly byteLength: number; readonly hash: string }
-): Promise<string> {
-  const hash = createHash('sha256');
-  hash.update('reo-render-widget-preview-v1\n');
-  appendPreviewDescriptor(hash, ARTIFACT_RUNTIME_ENTRY_FILE, { status: 'file', ...entry });
-  appendPreviewDescriptor(
-    hash,
-    ARTIFACT_RUNTIME_MANIFEST_FILE,
-    readOptionalWorkspaceFileDescriptor(
-      directory,
-      directoryIdentity,
-      ARTIFACT_RUNTIME_MANIFEST_FILE,
-      MAX_ARTIFACT_ASSET_BYTES
-    )
-  );
-
-  const assetsDirectory = path.join(directory, ARTIFACT_RUNTIME_ASSETS_DIRECTORY);
-  try {
-    const assetsIdentity = await readSafeDirectoryIdentity(assetsDirectory);
-    const entries = (await readdir(assetsDirectory, { withFileTypes: true }))
-      .filter((entry) => entry.isFile())
-      .map((entry) => entry.name)
-      .sort();
-    for (const assetName of entries) {
-      appendPreviewDescriptor(
-        hash,
-        `${ARTIFACT_RUNTIME_ASSETS_DIRECTORY}/${assetName}`,
-        readOptionalWorkspaceFileDescriptor(
-          assetsDirectory,
-          assetsIdentity,
-          assetName,
-          MAX_ARTIFACT_ASSET_BYTES
-        )
-      );
-    }
-  } catch {
-    appendPreviewDescriptor(hash, ARTIFACT_RUNTIME_ASSETS_DIRECTORY, { status: 'missing' });
-  }
-  return hash.digest('hex');
 }
 
 function widgetFaultProjection({
@@ -546,7 +483,19 @@ async function readWidgetCandidate({
       ARTIFACT_RUNTIME_ENTRY_FILE,
       MAX_ARTIFACT_ENTRY_BYTES
     );
-    const previewVersion = await widgetPreviewVersion(directory, directoryIdentity, entry);
+    const previewVersion = await createArtifactRuntimePreviewVersion({
+      directory,
+      directoryIdentity,
+      entry,
+      readDirectoryEntries: (assetsDirectory, assetsDirectoryIdentity) =>
+        readWorkspaceDirectoryEntriesInDirectory({
+          directory: assetsDirectory,
+          directoryIdentity: assetsDirectoryIdentity,
+        }),
+      readDirectoryIdentity: readSafeDirectoryIdentity,
+      readOptionalFileDescriptor: readOptionalWorkspaceFileDescriptor,
+      signature: 'reo-render-widget-preview-v1',
+    });
     const widget: WorkspaceWidgetProjection = {
       ...base,
       icon: widgetIconProjection({

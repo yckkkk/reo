@@ -1,6 +1,6 @@
 import { Toaster, toast, type ExternalToast } from 'sonner';
 import { Check, Copy, Undo2 } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { ToastT } from 'sonner';
 import type { ThemeMode } from '@/app-shell/themePreference';
 import { buttonVariants } from './button';
@@ -23,6 +23,10 @@ type ReoStatusToastInput = {
   readonly title: string;
   readonly description?: string;
   readonly durationMs?: number;
+  readonly action?: {
+    readonly label: ReactNode;
+    readonly onClick: () => void;
+  };
   readonly undo?: ReoToastUndo;
 };
 
@@ -126,8 +130,11 @@ export function showReoToast(input: ReoToastInput): string | number {
     return showUndoToast({ ...input, undo: input.undo });
   }
 
-  const { type = 'neutral', title, description, durationMs } = input;
+  const { type = 'neutral', title, action, description, durationMs } = input;
   const data: ExternalToast = {};
+  if (action !== undefined) {
+    data.action = action;
+  }
   if (description !== undefined) {
     data.description = description;
   }

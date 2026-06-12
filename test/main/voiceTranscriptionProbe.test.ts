@@ -225,7 +225,7 @@ test('voiceTranscriptionProbe: timeout returns network and terminates the socket
   assert.equal(socket.terminateCalls, 1);
 });
 
-test('voiceTranscriptionProbe: default timeout is 1s', async () => {
+test('voiceTranscriptionProbe: default timeout matches the real streaming ASR handshake scale', async () => {
   const socket = new FakeProbeSocket();
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
@@ -244,7 +244,7 @@ test('voiceTranscriptionProbe: default timeout is 1s', async () => {
       createSocket: () => socket,
     });
 
-    assert.equal(observedDelay, 1000);
+    assert.equal(observedDelay, 10_000);
     assert.equal(result.code, 'network');
     assert.equal(socket.terminateCalls, 1);
   } finally {

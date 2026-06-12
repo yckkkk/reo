@@ -40,12 +40,21 @@ export const DEFAULT_REO_GENERATIVE_RUNTIME_SKILL_MD = readManagedTemplate(
 export const DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS = readManagedTemplate(
   'skills/reo-generative-runtime/scripts/inspect-runtime.mjs'
 );
+export const DEFAULT_REO_GENERATIVE_RUNTIME_TOKEN_CONTRACT_SCRIPT_MJS = readManagedTemplate(
+  'skills/reo-generative-runtime/scripts/reo-token-contract.mjs'
+);
 export const DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS = readManagedTemplate(
   'skills/reo-generative-runtime/scripts/scaffold-runtime.mjs'
 );
 export const DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS = readManagedTemplate(
   'skills/reo-generative-runtime/scripts/validate-runtime.mjs'
 );
+export const DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES = {
+  'inspect-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS,
+  'reo-token-contract.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_TOKEN_CONTRACT_SCRIPT_MJS,
+  'scaffold-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS,
+  'validate-runtime.mjs': DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS,
+} as const;
 export const DEFAULT_REO_WORKS_SKILL_MD = readManagedTemplate('skills/reo-works/SKILL.md');
 export const DEFAULT_REO_WORKS_DESIGN_SKILL_MD = readManagedTemplate(
   'skills/reo-works-design/SKILL.md'
@@ -121,12 +130,12 @@ export const WORKSPACE_MANAGED_AGENT_TEMPLATE_FILES: Readonly<Record<string, str
       text,
     ])
   ),
-  'skills/reo-generative-runtime/scripts/inspect-runtime.mjs':
-    DEFAULT_REO_GENERATIVE_RUNTIME_INSPECT_SCRIPT_MJS,
-  'skills/reo-generative-runtime/scripts/scaffold-runtime.mjs':
-    DEFAULT_REO_GENERATIVE_RUNTIME_SCAFFOLD_SCRIPT_MJS,
-  'skills/reo-generative-runtime/scripts/validate-runtime.mjs':
-    DEFAULT_REO_GENERATIVE_RUNTIME_VALIDATE_SCRIPT_MJS,
+  ...Object.fromEntries(
+    Object.entries(DEFAULT_REO_GENERATIVE_RUNTIME_SCRIPT_FILES).map(([filename, text]) => [
+      `skills/reo-generative-runtime/scripts/${filename}`,
+      text,
+    ])
+  ),
   'skills/reo-works/SKILL.md': DEFAULT_REO_WORKS_SKILL_MD,
   ...Object.fromEntries(
     Object.entries(DEFAULT_REO_WORKS_REFERENCE_FILES).map(([filename, text]) => [

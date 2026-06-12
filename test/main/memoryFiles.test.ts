@@ -52,6 +52,9 @@ import {
   extractSegmentTranscript,
   findSegmentDirectoryById,
   fsyncWorkspaceDirectoryForTest,
+  moveMemoryBetweenFileTruthRoots,
+  moveSegmentBetweenFileTruthRoots,
+  moveSegmentSupplementBetweenFileTruthRoots,
   readMemoryDetailFromFileTruth,
   readFinalizedSegmentProjection,
   rebuildWorkspaceReadModel,
@@ -94,12 +97,16 @@ import {
 import type { LastTranscriptionAttempt } from '../../src/workspace-contract/workspace-contract.js';
 
 async function workspaceRoot(): Promise<string> {
+  return workspaceRootWithId('ws_memory');
+}
+
+async function workspaceRootWithId(workspaceId: string): Promise<string> {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), 'reo-memory-'));
   await initializeWorkspaceFiles({
     rootPath,
     title: '录音',
     description: '',
-    createWorkspaceId: () => 'ws_memory',
+    createWorkspaceId: () => workspaceId,
     now: () => '2026-05-06T13:08:00.000Z',
   });
   return rootPath;
@@ -307,6 +314,7 @@ async function writeFinalizedAudioSegmentForTest(
     readonly audioBytes?: readonly number[];
     readonly lastTranscriptionAttempt?: unknown;
     readonly contentTabOrder?: readonly string[];
+    readonly workspaceId?: string;
   }
 ): Promise<string> {
   const audioBytes = recording.audioBytes ?? [1, 2, 3];
@@ -334,7 +342,7 @@ async function writeFinalizedAudioSegmentForTest(
       {
         schemaVersion: 1,
         objectType: 'segment',
-        workspaceId: 'ws_memory',
+        workspaceId: recording.workspaceId ?? 'ws_memory',
         memoryId: recording.memoryId,
         segmentId: recording.segmentId,
         kind: 'audio',
@@ -428,6 +436,7 @@ async function writeFinalizedNoteSegmentForTest(
     readonly title: string;
     readonly body: string;
     readonly finalizedAt?: string;
+    readonly workspaceId?: string;
   }
 ): Promise<string> {
   const segmentDirectory = path.join(
@@ -453,7 +462,7 @@ async function writeFinalizedNoteSegmentForTest(
       {
         schemaVersion: 1,
         objectType: 'segment',
-        workspaceId: 'ws_memory',
+        workspaceId: note.workspaceId ?? 'ws_memory',
         memoryId: note.memoryId,
         segmentId: note.segmentId,
         kind: 'note',
@@ -478,6 +487,7 @@ async function writeFinalizedNoteSupplementForTest(
     readonly title: string;
     readonly body: string;
     readonly finalizedAt: string;
+    readonly workspaceId?: string;
   }
 ): Promise<void> {
   const supplementDirectory = path.join(
@@ -505,7 +515,7 @@ async function writeFinalizedNoteSupplementForTest(
       {
         schemaVersion: 1,
         objectType: 'supplement',
-        workspaceId: 'ws_memory',
+        workspaceId: note.workspaceId ?? 'ws_memory',
         memoryId: note.memoryId,
         segmentId: note.segmentId,
         supplementId: note.supplementId,
@@ -4647,6 +4657,506 @@ test('CLI-moved audio segment is repaired under the destination memory', async (
   );
 });
 
+test('cross-space moved audio segment is adopted into the target memory space', async () => {
+  const sourceRootPath = await workspaceRoot();
+  const targetWorkspaceId = 'ws_cross_space_audio_segment_target';
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_cross_space_audio_segment_source';
+  const targetMemoryId = 'mem_cross_space_audio_segment_target';
+  const segmentId = 'seg_cross_space_audio_segment';
+  const supplementId = 'sup_cross_space_audio_segment_child';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Cross-space audio source',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Cross-space audio target',
+  });
+  const sourceSegmentDirectory = await writeFinalizedAudioSegmentForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: 'Cross-space Audio Segment',
+    audioBytes: [10, 11, 12, 13],
+    lastTranscriptionAttempt: 'success',
+  });
+  await writeFile(
+    path.join(sourceSegmentDirectory, 'segment.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'segment',
+      data: { title: 'Cross-space Audio Segment', kind: 'audio' },
+      content: '# Cross-space Audio Segment\n\n## Transcript\n\nSegment transcript after move.',
+    })
+  );
+  await writeFinalizedAudioSupplementForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    supplementId,
+    title: 'Cross-space child supplement',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    audioBytes: [14, 15],
+    transcript: 'Child supplement transcript after move.',
+    lastTranscriptionAttempt: 'success',
+  });
+
+  const targetSegmentDirectory = path.join(
+    targetRootPath,
+    'memories',
+    targetMemoryId,
+    'segments',
+    segmentId
+  );
+  await mkdir(path.dirname(targetSegmentDirectory), { recursive: true });
+  await rename(sourceSegmentDirectory, targetSegmentDirectory);
+
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+  });
+
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(targetDetail.ok, true);
+  if (!sourceDetail.ok || !targetDetail.ok) {
+    return;
+  }
+  assert.deepEqual(sourceDetail.value.segments, []);
+  assert.equal(targetDetail.value.audioSegmentCount, 1);
+  const movedSegment = targetDetail.value.segments[0];
+  assert.ok(movedSegment);
+  assert.equal(movedSegment.type, 'audio');
+  if (movedSegment.type !== 'audio') {
+    return;
+  }
+  assert.equal(movedSegment.workspaceId, targetWorkspaceId);
+  assert.equal(movedSegment.memoryId, targetMemoryId);
+  assert.equal(movedSegment.segmentId, segmentId);
+  assert.equal(movedSegment.audioByteLength, 4);
+  assert.equal(movedSegment.transcript.exists, true);
+  assert.equal(movedSegment.supplements[0]?.type, 'audio');
+  assert.equal(movedSegment.supplements[0]?.supplementId, supplementId);
+
+  const segmentManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as {
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+  };
+  assert.equal(segmentManifest.workspaceId, targetWorkspaceId);
+  assert.equal(segmentManifest.memoryId, targetMemoryId);
+  assert.equal(segmentManifest.kind, 'audio');
+  assert.equal(segmentManifest.audioByteLength, 4);
+  const supplementManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as {
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly segmentId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+  };
+  assert.equal(supplementManifest.workspaceId, targetWorkspaceId);
+  assert.equal(supplementManifest.memoryId, targetMemoryId);
+  assert.equal(supplementManifest.segmentId, segmentId);
+  assert.equal(supplementManifest.kind, 'audio');
+  assert.equal(supplementManifest.audioByteLength, 2);
+});
+
+test('UI move helper moves a whole Memory directory across memory spaces', async () => {
+  const sourceWorkspaceId = 'ws_ui_move_memory_source';
+  const targetWorkspaceId = 'ws_ui_move_memory_target';
+  const sourceRootPath = await workspaceRootWithId(sourceWorkspaceId);
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const memoryId = 'mem_ui_move_whole_memory';
+  const segmentId = 'seg_ui_move_whole_memory_child';
+  const supplementId = 'sup_ui_move_whole_memory_child';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId,
+    title: 'Whole memory',
+  });
+  await writeFinalizedNoteSegmentForTest(sourceRootPath, {
+    memoryId,
+    segmentId,
+    title: 'Child segment',
+    body: 'Child body',
+    workspaceId: sourceWorkspaceId,
+  });
+  await writeFinalizedNoteSupplementForTest(sourceRootPath, {
+    memoryId,
+    segmentId,
+    supplementId,
+    title: 'Child supplement',
+    body: 'Child supplement body',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    workspaceId: sourceWorkspaceId,
+  });
+
+  const moved = await moveMemoryBetweenFileTruthRoots({
+    sourceRootPath,
+    sourceWorkspaceId,
+    memoryId,
+    targetRootPath,
+    targetWorkspaceId,
+  });
+
+  assert.equal(moved.ok, true);
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId,
+  });
+  assert.equal(targetDetail.ok, true);
+  if (!targetDetail.ok) {
+    return;
+  }
+  assert.equal(targetDetail.value.memoryId, memoryId);
+  assert.equal(targetDetail.value.segments[0]?.segmentId, segmentId);
+  assert.equal(targetDetail.value.segments[0]?.supplements[0]?.supplementId, supplementId);
+  assert.equal(
+    existsSync(path.join(sourceRootPath, 'memories', memoryId)),
+    false,
+    'source Memory directory should be moved away'
+  );
+});
+
+test('UI move helper stops before moving Memory when target workspace lock is lost', async () => {
+  const sourceWorkspaceId = 'ws_ui_move_memory_lock_source';
+  const targetWorkspaceId = 'ws_ui_move_memory_lock_target';
+  const sourceRootPath = await workspaceRootWithId(sourceWorkspaceId);
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const memoryId = 'mem_ui_move_memory_lock_lost';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId,
+    title: 'Lock guarded move',
+  });
+  let targetUsable = true;
+  setBeforeFileSpaceNodeMoveForTest(async () => {
+    setBeforeFileSpaceNodeMoveForTest(null);
+    targetUsable = false;
+  });
+
+  try {
+    const moved = await moveMemoryBetweenFileTruthRoots({
+      sourceRootPath,
+      sourceWorkspaceId,
+      memoryId,
+      targetRootPath,
+      targetWorkspaceId,
+      assertTargetWorkspaceUsable: () => (targetUsable ? { ok: true } : workspaceLockLost()),
+    });
+
+    assert.equal(moved.ok, false);
+    if (!moved.ok) {
+      assert.equal(moved.error.code, 'ERR_WORKSPACE_LOCK_LOST');
+    }
+  } finally {
+    setBeforeFileSpaceNodeMoveForTest(null);
+  }
+
+  await stat(path.join(sourceRootPath, 'memories', memoryId, 'memory.md'));
+  await assert.rejects(stat(path.join(targetRootPath, 'memories', memoryId)));
+});
+
+test('UI move helper moves a Segment with all content slots and supplements to another memory', async () => {
+  const sourceWorkspaceId = 'ws_ui_move_segment_source';
+  const targetWorkspaceId = 'ws_ui_move_segment_target';
+  const sourceRootPath = await workspaceRootWithId(sourceWorkspaceId);
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_ui_move_segment_source';
+  const targetMemoryId = 'mem_ui_move_segment_target';
+  const segmentId = 'seg_ui_move_segment';
+  const supplementId = 'sup_ui_move_segment_child';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Source memory',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Target memory',
+  });
+  await writeFinalizedNoteSegmentForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: '正文片段',
+    body: 'Body moves with the Segment.',
+    workspaceId: sourceWorkspaceId,
+  });
+  await writeFinalizedNoteSupplementForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    supplementId,
+    title: 'Supplement follows',
+    body: 'Supplement body follows.',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    workspaceId: sourceWorkspaceId,
+  });
+
+  const moved = await moveSegmentBetweenFileTruthRoots({
+    sourceRootPath,
+    sourceWorkspaceId,
+    memoryId: sourceMemoryId,
+    segmentId,
+    targetRootPath,
+    targetWorkspaceId,
+    targetMemoryId,
+  });
+
+  assert.equal(moved.ok, true);
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: sourceWorkspaceId,
+    memoryId: sourceMemoryId,
+  });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+  });
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(targetDetail.ok, true);
+  if (!sourceDetail.ok || !targetDetail.ok) {
+    return;
+  }
+  assert.deepEqual(sourceDetail.value.segments, []);
+  assert.equal(targetDetail.value.segments[0]?.segmentId, segmentId);
+  assert.equal(targetDetail.value.segments[0]?.supplements[0]?.supplementId, supplementId);
+  assert.equal(
+    await readFile(
+      path.join(targetRootPath, 'memories', targetMemoryId, 'segments', segmentId, 'segment.md'),
+      'utf8'
+    ).then((content) => content.includes('Body moves with the Segment.')),
+    true
+  );
+});
+
+test('UI move helper rejects concurrent Segment moves for the same source Memory', async () => {
+  const sourceWorkspaceId = 'ws_ui_move_segment_lock_source';
+  const targetWorkspaceId = 'ws_ui_move_segment_lock_target';
+  const sourceRootPath = await workspaceRootWithId(sourceWorkspaceId);
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_ui_move_segment_lock_source';
+  const targetMemoryId = 'mem_ui_move_segment_lock_target';
+  const segmentId = 'seg_ui_move_segment_lock';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Source memory',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Target memory',
+  });
+  await writeFinalizedNoteSegmentForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: 'Locked Segment',
+    body: 'Only one move can own this source.',
+    workspaceId: sourceWorkspaceId,
+  });
+  let concurrentResult: Awaited<ReturnType<typeof moveSegmentBetweenFileTruthRoots>> | null = null;
+  setBeforeFileSpaceNodeMoveForTest(async () => {
+    setBeforeFileSpaceNodeMoveForTest(null);
+    concurrentResult = await moveSegmentBetweenFileTruthRoots({
+      sourceRootPath,
+      sourceWorkspaceId,
+      memoryId: sourceMemoryId,
+      segmentId,
+      targetRootPath,
+      targetWorkspaceId,
+      targetMemoryId,
+    });
+  });
+
+  try {
+    const moved = await moveSegmentBetweenFileTruthRoots({
+      sourceRootPath,
+      sourceWorkspaceId,
+      memoryId: sourceMemoryId,
+      segmentId,
+      targetRootPath,
+      targetWorkspaceId,
+      targetMemoryId,
+    });
+
+    assert.equal(moved.ok, true);
+  } finally {
+    setBeforeFileSpaceNodeMoveForTest(null);
+  }
+
+  const observedConcurrentResult = concurrentResult as Awaited<
+    ReturnType<typeof moveSegmentBetweenFileTruthRoots>
+  > | null;
+  assert.equal(observedConcurrentResult?.ok, false);
+  if (observedConcurrentResult && !observedConcurrentResult.ok) {
+    assert.equal(observedConcurrentResult.error.code, 'ERR_SEGMENT_MOVE_FAILED');
+    assert.equal(observedConcurrentResult.error.dataRetention, 'previous-file-preserved');
+  }
+});
+
+test('UI move helper moves one SegmentSupplement to another Segment', async () => {
+  const sourceWorkspaceId = 'ws_ui_move_supplement_source';
+  const targetWorkspaceId = 'ws_ui_move_supplement_target';
+  const sourceRootPath = await workspaceRootWithId(sourceWorkspaceId);
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_ui_move_supplement_source';
+  const targetMemoryId = 'mem_ui_move_supplement_target';
+  const sourceSegmentId = 'seg_ui_move_supplement_source';
+  const targetSegmentId = 'seg_ui_move_supplement_target';
+  const supplementId = 'sup_ui_move_supplement';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Source memory',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Target memory',
+  });
+  await writeFinalizedNoteSegmentForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    title: 'Source Segment',
+    body: 'Source body',
+    workspaceId: sourceWorkspaceId,
+  });
+  await writeFinalizedNoteSegmentForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    segmentId: targetSegmentId,
+    title: 'Target Segment',
+    body: 'Target body',
+    workspaceId: targetWorkspaceId,
+  });
+  await writeFinalizedNoteSupplementForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    title: 'Moving supplement',
+    body: 'Supplement moved alone.',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    workspaceId: sourceWorkspaceId,
+  });
+
+  const moved = await moveSegmentSupplementBetweenFileTruthRoots({
+    sourceRootPath,
+    sourceWorkspaceId,
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    targetRootPath,
+    targetWorkspaceId,
+    targetMemoryId,
+    targetSegmentId,
+  });
+
+  assert.equal(moved.ok, true);
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: sourceWorkspaceId,
+    memoryId: sourceMemoryId,
+  });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+  });
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(targetDetail.ok, true);
+  if (!sourceDetail.ok || !targetDetail.ok) {
+    return;
+  }
+  assert.equal(sourceDetail.value.segments[0]?.supplements.length, 0);
+  assert.equal(targetDetail.value.segments[0]?.segmentId, targetSegmentId);
+  assert.equal(targetDetail.value.segments[0]?.supplements[0]?.supplementId, supplementId);
+});
+
+test('cross-space moved artifact segment is adopted into the target memory space', async () => {
+  const sourceRootPath = await workspaceRoot();
+  const targetWorkspaceId = 'ws_cross_space_artifact_segment_target';
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_cross_space_artifact_segment_source';
+  const targetMemoryId = 'mem_cross_space_artifact_segment_target';
+  const segmentId = 'seg_cross_space_artifact_segment';
+  const html =
+    '<!doctype html><html><body><h1>Moved artifact segment</h1><button>Run</button></body></html>\n';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Cross-space artifact source',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Cross-space artifact target',
+  });
+  const sourceSegmentDirectory = await writeArtifactSegmentCandidateForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId,
+    title: 'Cross-space Artifact Segment',
+    html,
+  });
+  const initialSourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  assert.equal(initialSourceDetail.ok, true);
+  if (initialSourceDetail.ok) {
+    assert.equal(initialSourceDetail.value.artifactSegmentCount, 1);
+  }
+
+  const targetSegmentDirectory = path.join(
+    targetRootPath,
+    'memories',
+    targetMemoryId,
+    'segments',
+    segmentId
+  );
+  await mkdir(path.dirname(targetSegmentDirectory), { recursive: true });
+  await rename(sourceSegmentDirectory, targetSegmentDirectory);
+
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+  });
+
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(targetDetail.ok, true);
+  if (!sourceDetail.ok || !targetDetail.ok) {
+    return;
+  }
+  assert.deepEqual(sourceDetail.value.segments, []);
+  assert.equal(targetDetail.value.artifactSegmentCount, 1);
+  const movedSegment = targetDetail.value.segments[0] as Record<string, unknown> | undefined;
+  assert.ok(movedSegment);
+  assert.equal(movedSegment['type'], 'artifact');
+  assert.equal(movedSegment['workspaceId'], targetWorkspaceId);
+  assert.equal(movedSegment['memoryId'], targetMemoryId);
+  assert.equal(movedSegment['segmentId'], segmentId);
+  assert.equal(movedSegment['format'], 'html');
+  assert.equal(movedSegment['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(movedSegment['entryHash'], sha256Text(html));
+  assertWorkspaceHash(movedSegment['previewVersion']);
+
+  const segmentManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'segments', `${segmentId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(segmentManifest['workspaceId'], targetWorkspaceId);
+  assert.equal(segmentManifest['memoryId'], targetMemoryId);
+  assert.equal(segmentManifest['kind'], 'artifact');
+  assert.equal(segmentManifest['format'], 'html');
+  assert.equal(segmentManifest['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(segmentManifest['entryHash'], sha256Text(html));
+});
+
 test('copied note segment is held for review instead of changing manifest ownership', async () => {
   const rootPath = await workspaceRoot();
   const sourceMemoryId = 'mem_copy_segment_source';
@@ -4906,6 +5416,330 @@ test('CLI-moved audio supplement is repaired under the destination segment', asy
   assert.equal(supplementManifest.kind, 'audio');
   assert.equal(supplementManifest.audioByteLength, 5);
   assert.equal(typeof supplementManifest.updatedAt, 'string');
+});
+
+test('cross-space moved audio supplement is adopted into the target segment', async () => {
+  const sourceRootPath = await workspaceRoot();
+  const targetWorkspaceId = 'ws_cross_space_audio_supplement_target';
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_cross_space_audio_supplement_source';
+  const targetMemoryId = 'mem_cross_space_audio_supplement_target';
+  const sourceSegmentId = 'seg_cross_space_audio_supplement_source';
+  const targetSegmentId = 'seg_cross_space_audio_supplement_target';
+  const supplementId = 'sup_cross_space_audio_supplement';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Cross-space supplement source',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Cross-space supplement target',
+  });
+  await writeFinalizedAudioSegmentForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    title: 'Source Audio Segment',
+    audioBytes: [1],
+  });
+  const targetSegmentDirectory = await writeFinalizedAudioSegmentForTest(targetRootPath, {
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+    segmentId: targetSegmentId,
+    title: 'Target Audio Segment',
+    audioBytes: [2, 3],
+  });
+  await writeFinalizedAudioSupplementForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    title: 'Cross-space Audio Supplement',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    audioBytes: [20, 21, 22],
+    transcript: 'Moved supplement transcript.',
+    lastTranscriptionAttempt: 'success',
+  });
+  const sourceSupplementDirectory = path.join(
+    sourceRootPath,
+    'memories',
+    sourceMemoryId,
+    'segments',
+    sourceSegmentId,
+    'supplements',
+    supplementId
+  );
+  const targetSupplementDirectory = path.join(targetSegmentDirectory, 'supplements', supplementId);
+  await mkdir(path.dirname(targetSupplementDirectory), { recursive: true });
+  await rename(sourceSupplementDirectory, targetSupplementDirectory);
+
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+  });
+
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(targetDetail.ok, true);
+  if (!sourceDetail.ok || !targetDetail.ok) {
+    return;
+  }
+  const sourceSegment = sourceDetail.value.segments.find(
+    (candidate) => candidate.segmentId === sourceSegmentId
+  );
+  const targetSegment = targetDetail.value.segments.find(
+    (candidate) => candidate.segmentId === targetSegmentId
+  );
+  assert.ok(sourceSegment);
+  assert.ok(targetSegment);
+  assert.deepEqual(sourceSegment.supplements, []);
+  assert.equal(targetSegment.supplements.length, 1);
+  const movedSupplement = targetSegment.supplements[0];
+  assert.ok(movedSupplement);
+  assert.equal(movedSupplement.type, 'audio');
+  assert.equal(movedSupplement.workspaceId, targetWorkspaceId);
+  assert.equal(movedSupplement.memoryId, targetMemoryId);
+  assert.equal(movedSupplement.segmentId, targetSegmentId);
+  assert.equal(movedSupplement.supplementId, supplementId);
+  assert.equal(movedSupplement.audioByteLength, 3);
+
+  const supplementManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as {
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly segmentId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+  };
+  assert.equal(supplementManifest.workspaceId, targetWorkspaceId);
+  assert.equal(supplementManifest.memoryId, targetMemoryId);
+  assert.equal(supplementManifest.segmentId, targetSegmentId);
+  assert.equal(supplementManifest.kind, 'audio');
+  assert.equal(supplementManifest.audioByteLength, 3);
+});
+
+test('cross-space moved artifact supplement is adopted into the target segment', async () => {
+  const sourceRootPath = await workspaceRoot();
+  const targetWorkspaceId = 'ws_cross_space_artifact_supplement_target';
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const sourceMemoryId = 'mem_cross_space_artifact_supplement_source';
+  const targetMemoryId = 'mem_cross_space_artifact_supplement_target';
+  const sourceSegmentId = 'seg_cross_space_artifact_supplement_source';
+  const targetSegmentId = 'seg_cross_space_artifact_supplement_target';
+  const supplementId = 'sup_cross_space_artifact_supplement';
+  const html =
+    '<!doctype html><html><body><h1>Moved artifact supplement</h1><input></body></html>\n';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    title: 'Cross-space artifact supplement source',
+  });
+  await writeMemoryForTest(targetRootPath, {
+    memoryId: targetMemoryId,
+    title: 'Cross-space artifact supplement target',
+  });
+  await writeFinalizedNoteSegmentForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    title: 'Source Note Segment',
+    body: '# Source Note Segment\n',
+  });
+  const targetSegmentDirectory = await writeFinalizedNoteSegmentForTest(targetRootPath, {
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+    segmentId: targetSegmentId,
+    title: 'Target Note Segment',
+    body: '# Target Note Segment\n',
+  });
+  const sourceSupplementDirectory = await writeArtifactSupplementCandidateForTest(sourceRootPath, {
+    memoryId: sourceMemoryId,
+    segmentId: sourceSegmentId,
+    supplementId,
+    title: 'Cross-space Artifact Supplement',
+    html,
+  });
+  const initialSourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  assert.equal(initialSourceDetail.ok, true);
+  if (initialSourceDetail.ok) {
+    assert.equal(initialSourceDetail.value.supplementCount, 1);
+  }
+
+  const targetSupplementDirectory = path.join(targetSegmentDirectory, 'supplements', supplementId);
+  await mkdir(path.dirname(targetSupplementDirectory), { recursive: true });
+  await rename(sourceSupplementDirectory, targetSupplementDirectory);
+
+  const sourceDetail = await readMemoryDetailFromFileTruth({
+    rootPath: sourceRootPath,
+    workspaceId: 'ws_memory',
+    memoryId: sourceMemoryId,
+  });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId: targetMemoryId,
+  });
+
+  assert.equal(sourceDetail.ok, true);
+  assert.equal(targetDetail.ok, true);
+  if (!sourceDetail.ok || !targetDetail.ok) {
+    return;
+  }
+  const sourceSegment = sourceDetail.value.segments.find(
+    (candidate) => candidate.segmentId === sourceSegmentId
+  );
+  const targetSegment = targetDetail.value.segments.find(
+    (candidate) => candidate.segmentId === targetSegmentId
+  );
+  assert.ok(sourceSegment);
+  assert.ok(targetSegment);
+  assert.deepEqual(sourceSegment.supplements, []);
+  assert.equal(targetSegment.supplements.length, 1);
+  const movedSupplement = targetSegment.supplements[0] as Record<string, unknown> | undefined;
+  assert.ok(movedSupplement);
+  assert.equal(movedSupplement['type'], 'artifact');
+  assert.equal(movedSupplement['workspaceId'], targetWorkspaceId);
+  assert.equal(movedSupplement['memoryId'], targetMemoryId);
+  assert.equal(movedSupplement['segmentId'], targetSegmentId);
+  assert.equal(movedSupplement['supplementId'], supplementId);
+  assert.equal(movedSupplement['format'], 'html');
+  assert.equal(movedSupplement['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(movedSupplement['entryHash'], sha256Text(html));
+  assertWorkspaceHash(movedSupplement['previewVersion']);
+
+  const supplementManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as Record<string, unknown>;
+  assert.equal(supplementManifest['workspaceId'], targetWorkspaceId);
+  assert.equal(supplementManifest['memoryId'], targetMemoryId);
+  assert.equal(supplementManifest['segmentId'], targetSegmentId);
+  assert.equal(supplementManifest['kind'], 'artifact');
+  assert.equal(supplementManifest['format'], 'html');
+  assert.equal(supplementManifest['entryByteLength'], Buffer.byteLength(html, 'utf8'));
+  assert.equal(supplementManifest['entryHash'], sha256Text(html));
+});
+
+test('cross-space moved memory adopts child segments and supplements in the target memory space', async () => {
+  const sourceRootPath = await workspaceRoot();
+  const targetWorkspaceId = 'ws_cross_space_memory_target';
+  const targetRootPath = await workspaceRootWithId(targetWorkspaceId);
+  const memoryId = 'mem_cross_space_whole_memory';
+  const noteSegmentId = 'seg_cross_space_memory_note';
+  const audioSegmentId = 'seg_cross_space_memory_audio';
+  const supplementId = 'sup_cross_space_memory_audio_child';
+  await writeMemoryForTest(sourceRootPath, {
+    memoryId,
+    title: 'Cross-space whole memory',
+  });
+  await writeFinalizedNoteSegmentForTest(sourceRootPath, {
+    memoryId,
+    segmentId: noteSegmentId,
+    title: 'Moved Note Segment',
+    body: '# Moved note body\n',
+  });
+  await writeFinalizedAudioSegmentForTest(sourceRootPath, {
+    memoryId,
+    segmentId: audioSegmentId,
+    title: 'Moved Audio Segment',
+    audioBytes: [30, 31, 32],
+  });
+  await writeFinalizedAudioSupplementForTest(sourceRootPath, {
+    memoryId,
+    segmentId: audioSegmentId,
+    supplementId,
+    title: 'Moved Audio Supplement',
+    finalizedAt: '2026-05-06T13:10:00.000Z',
+    audioBytes: [33, 34],
+    transcript: 'Moved child transcript.',
+  });
+
+  const sourceMemoryDirectory = path.join(sourceRootPath, 'memories', memoryId);
+  const targetMemoryDirectory = path.join(targetRootPath, 'memories', memoryId);
+  await rename(sourceMemoryDirectory, targetMemoryDirectory);
+
+  const sourceReadModel = await rebuildWorkspaceReadModel(sourceRootPath, { persist: false });
+  const targetDetail = await readMemoryDetailFromFileTruth({
+    rootPath: targetRootPath,
+    workspaceId: targetWorkspaceId,
+    memoryId,
+  });
+
+  assert.equal(
+    sourceReadModel.memories.some((candidate) => candidate.memoryId === memoryId),
+    false
+  );
+  assert.equal(targetDetail.ok, true);
+  if (!targetDetail.ok) {
+    return;
+  }
+  assert.equal(targetDetail.value.workspaceId, targetWorkspaceId);
+  assert.equal(targetDetail.value.memoryId, memoryId);
+  assert.equal(targetDetail.value.segmentCount, 2);
+  assert.equal(targetDetail.value.audioSegmentCount, 1);
+  assert.equal(targetDetail.value.noteSegmentCount, 1);
+  assert.equal(targetDetail.value.supplementCount, 1);
+  const noteSegment = targetDetail.value.segments.find(
+    (candidate) => candidate.segmentId === noteSegmentId
+  );
+  const audioSegment = targetDetail.value.segments.find(
+    (candidate) => candidate.segmentId === audioSegmentId
+  );
+  assert.ok(noteSegment);
+  assert.ok(audioSegment);
+  assert.equal(noteSegment.workspaceId, targetWorkspaceId);
+  assert.equal(noteSegment.memoryId, memoryId);
+  assert.equal(audioSegment.workspaceId, targetWorkspaceId);
+  assert.equal(audioSegment.memoryId, memoryId);
+  assert.equal(audioSegment.type, 'audio');
+  if (audioSegment.type !== 'audio') {
+    return;
+  }
+  assert.equal(audioSegment.audioByteLength, 3);
+  assert.equal(audioSegment.supplements[0]?.supplementId, supplementId);
+  assert.equal(audioSegment.supplements[0]?.workspaceId, targetWorkspaceId);
+
+  const memoryManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'memories', `${memoryId}.json`)
+  )) as { readonly memoryId?: unknown };
+  assert.equal(memoryManifest.memoryId, memoryId);
+  const noteManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'segments', `${noteSegmentId}.json`)
+  )) as { readonly workspaceId?: unknown; readonly memoryId?: unknown; readonly kind?: unknown };
+  assert.equal(noteManifest.workspaceId, targetWorkspaceId);
+  assert.equal(noteManifest.memoryId, memoryId);
+  assert.equal(noteManifest.kind, 'note');
+  const audioManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'segments', `${audioSegmentId}.json`)
+  )) as {
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+  };
+  assert.equal(audioManifest.workspaceId, targetWorkspaceId);
+  assert.equal(audioManifest.memoryId, memoryId);
+  assert.equal(audioManifest.kind, 'audio');
+  assert.equal(audioManifest.audioByteLength, 3);
+  const supplementManifest = (await readJson(
+    path.join(targetRootPath, '.reo', 'objects', 'supplements', `${supplementId}.json`)
+  )) as {
+    readonly workspaceId?: unknown;
+    readonly memoryId?: unknown;
+    readonly segmentId?: unknown;
+    readonly kind?: unknown;
+    readonly audioByteLength?: unknown;
+  };
+  assert.equal(supplementManifest.workspaceId, targetWorkspaceId);
+  assert.equal(supplementManifest.memoryId, memoryId);
+  assert.equal(supplementManifest.segmentId, audioSegmentId);
+  assert.equal(supplementManifest.kind, 'audio');
+  assert.equal(supplementManifest.audioByteLength, 2);
 });
 
 test('copied note supplement is held for review instead of changing manifest ownership', async () => {

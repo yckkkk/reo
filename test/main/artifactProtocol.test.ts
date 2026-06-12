@@ -16,6 +16,8 @@ import {
   artifactSegmentRuntimeHost,
   artifactSegmentRuntimeUrl,
   artifactSupplementRuntimeUrl,
+  homeComponentRuntimeUrl,
+  workspaceWidgetRuntimeUrl,
 } from '../../src/workspace-contract/artifact-runtime-url.js';
 
 function sha256Text(text: string): string {
@@ -234,6 +236,91 @@ test('artifact vendor bridge exposes workspace object selection as a narrow ui m
   assert.equal(result.selected, true);
 });
 
+test('artifact vendor bridge exposes runtime media playback audio as a narrow method', async () => {
+  const source = await readFile(
+    path.join(process.cwd(), 'resources', 'artifact-vendor', 'reo-render', 'bridge.js'),
+    'utf8'
+  );
+  const listeners: ((event: { data: unknown; source: unknown }) => void)[] = [];
+  let outbound: Record<string, unknown> | null = null;
+  const parentWindow = {
+    postMessage(payload: unknown) {
+      outbound = payload as Record<string, unknown>;
+    },
+  };
+  let timeoutId = 0;
+  const fakeWindow = {
+    parent: parentWindow,
+    addEventListener(type: string, callback: (event: { data: unknown; source: unknown }) => void) {
+      if (type === 'message') {
+        listeners.push(callback);
+      }
+    },
+    setTimeout() {
+      timeoutId += 1;
+      return timeoutId;
+    },
+    clearTimeout() {},
+  } as {
+    readonly parent: typeof parentWindow;
+    readonly addEventListener: (
+      type: string,
+      callback: (event: { data: unknown; source: unknown }) => void
+    ) => void;
+    readonly setTimeout: () => number;
+    readonly clearTimeout: () => void;
+    reo?: {
+      media: {
+        readPlaybackAudio: (input: {
+          readonly memoryId: string;
+          readonly segmentId: string;
+          readonly supplementId?: string;
+          readonly kind: 'audio' | 'note-speech';
+        }) => Promise<unknown>;
+      };
+    };
+  };
+
+  runInNewContext(source, { window: fakeWindow });
+  assert.ok(fakeWindow.reo);
+  const read = fakeWindow.reo.media.readPlaybackAudio({
+    memoryId: 'mem_media',
+    segmentId: 'seg_media',
+    supplementId: 'sup_media',
+    kind: 'audio',
+  });
+  assert.equal(outbound?.['method'], 'media.readPlaybackAudio');
+  const payload = outbound?.['payload'] as
+    | {
+        readonly memoryId?: unknown;
+        readonly segmentId?: unknown;
+        readonly supplementId?: unknown;
+        readonly kind?: unknown;
+      }
+    | undefined;
+  assert.equal(payload?.memoryId, 'mem_media');
+  assert.equal(payload?.segmentId, 'seg_media');
+  assert.equal(payload?.supplementId, 'sup_media');
+  assert.equal(payload?.kind, 'audio');
+  const requestId = outbound?.['requestId'];
+  const listener = listeners[0];
+  assert.ok(listener);
+  listener({
+    data: {
+      source: 'reo-host',
+      type: 'response',
+      requestId,
+      ok: true,
+      value: { mimeType: 'audio/webm', audio: new Uint8Array([1, 2, 3]) },
+    },
+    source: parentWindow,
+  });
+
+  const result = (await read) as { readonly mimeType?: unknown; readonly audio?: unknown };
+  assert.equal(result.mimeType, 'audio/webm');
+  assert.deepEqual(result.audio, new Uint8Array([1, 2, 3]));
+});
+
 test('artifact runtime URLs keep per-object hosts ASCII-safe without losing object identity', () => {
   const segmentUrl = artifactSegmentRuntimeUrl({
     workspaceId: 'ws_Mixed_空间',
@@ -266,6 +353,108 @@ test('artifact runtime URLs keep per-object hosts ASCII-safe without losing obje
     segmentId: 'seg_Mixed_作品',
     supplementId: 'sup_Mixed_补充',
   });
+});
+
+test('home component runtime URLs resolve app-level runtime bundle files without a workspace id', async () => {
+  const appDataRootPath = await workspaceRoot();
+  const componentDirectory = path.join(
+    appDataRootPath,
+    'home-components',
+    'hcmp_protocol--Protocol Panel'
+  );
+  const html = '<!doctype html><html><body>Home panel</body></html>\n';
+  await mkdir(path.join(componentDirectory, 'assets'), { recursive: true });
+  await writeFile(
+    path.join(componentDirectory, 'component.md'),
+    '---\nid: hcmp_protocol\ntitle: Protocol Panel\nkind: home-component\nformat: html\nmount: home\n---\n# Protocol Panel\n'
+  );
+  await writeFile(path.join(componentDirectory, 'entry.html'), html);
+  await writeFile(path.join(componentDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(componentDirectory, 'assets', 'panel.css'), 'body { color: blue; }\n');
+
+  const entryUrl = homeComponentRuntimeUrl({
+    componentId: 'hcmp_protocol',
+    previewVersion: sha256Text(html),
+  });
+  assert.match(new URL(entryUrl).hostname, /^[a-z0-9-]+$/);
+  assert.deepEqual(parseArtifactRequestTarget(new URL(entryUrl)), {
+    kind: 'home-component',
+    componentId: 'hcmp_protocol',
+    entry: true,
+    fileScope: 'root',
+    fileName: 'entry.html',
+  });
+
+  const entry = await resolveArtifactProtocolRequest(entryUrl, rootResolver('/missing'), {
+    homeComponentAppDataRootPath: appDataRootPath,
+  });
+  assert.equal(entry.ok, true);
+  if (!entry.ok) {
+    return;
+  }
+  assert.equal(Buffer.from(entry.bytes).toString('utf8'), html);
+  assert.equal(entry.cacheControl, ARTIFACT_PROTOCOL_CACHE_CONTROL);
+  assert.equal(entry.mimeType, 'text/html');
+
+  const asset = await resolveArtifactProtocolRequest(
+    entryUrl.replace('/entry.html?', '/assets/panel.css?'),
+    rootResolver('/missing'),
+    { homeComponentAppDataRootPath: appDataRootPath }
+  );
+  assert.equal(asset.ok, true);
+  if (asset.ok) {
+    assert.equal(asset.mimeType, 'text/css');
+    assert.equal(Buffer.from(asset.bytes).toString('utf8'), 'body { color: blue; }\n');
+  }
+});
+
+test('workspace widget runtime URLs resolve workspace widget bundle files', async () => {
+  const rootPath = await workspaceRoot();
+  const widgetId = 'wdg_protocol';
+  const widgetDirectory = path.join(rootPath, 'widgets', `${widgetId}--Protocol Widget`);
+  const html = '<!doctype html><html><body>Widget panel</body></html>\n';
+  await mkdir(path.join(widgetDirectory, 'assets'), { recursive: true });
+  await writeFile(
+    path.join(widgetDirectory, 'widget.md'),
+    renderWorkspaceMarkdownObject({
+      objectType: 'widget',
+      data: {
+        title: 'Protocol Widget',
+        kind: 'widget',
+        format: 'html',
+        mount: 'workspace-rail',
+      },
+      content: '# Protocol Widget\n',
+    })
+  );
+  await writeFile(path.join(widgetDirectory, 'entry.html'), html);
+  await writeFile(path.join(widgetDirectory, 'runtime.json'), '{"schemaVersion":1}\n');
+  await writeFile(path.join(widgetDirectory, 'assets', 'panel.css'), 'body { color: green; }\n');
+
+  const entryUrl = workspaceWidgetRuntimeUrl({
+    workspaceId: 'ws_artifact',
+    widgetId,
+    previewVersion: sha256Text(html),
+  });
+  const entry = await resolveArtifactProtocolRequest(entryUrl, rootResolver(rootPath));
+  assert.equal(entry.ok, true);
+  if (!entry.ok) {
+    return;
+  }
+  assert.equal(Buffer.from(entry.bytes).toString('utf8'), html);
+  assert.equal(entry.cacheControl, ARTIFACT_PROTOCOL_CACHE_CONTROL);
+  assert.equal(entry.contentSecurityPolicy, ARTIFACT_PROTOCOL_CONTENT_SECURITY_POLICY);
+  assert.equal(entry.mimeType, 'text/html');
+
+  const asset = await resolveArtifactProtocolRequest(
+    entryUrl.replace('/entry.html?', '/assets/panel.css?'),
+    rootResolver(rootPath)
+  );
+  assert.equal(asset.ok, true);
+  if (asset.ok) {
+    assert.equal(asset.mimeType, 'text/css');
+    assert.equal(Buffer.from(asset.bytes).toString('utf8'), 'body { color: green; }\n');
+  }
 });
 
 async function writeArtifactSegmentForProtocolTest(

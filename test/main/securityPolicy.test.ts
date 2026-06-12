@@ -15,6 +15,8 @@ import { createContentSecurityPolicy } from '../../src/main/securityPolicy.js';
 import {
   artifactSegmentRuntimeHost,
   artifactSegmentRuntimeUrl,
+  homeComponentRuntimeHost,
+  homeComponentRuntimeUrl,
 } from '../../src/workspace-contract/artifact-runtime-url.js';
 
 function parseCspDirectives(policy: string): Map<string, readonly string[]> {
@@ -89,6 +91,20 @@ test('navigation policy allows artifact iframe navigations without trusting arti
 
   assert.equal(isAllowedAppNavigationUrl(artifactUrl, { isMainFrame: false }), true);
   assert.equal(isAllowedAppNavigationUrl(artifactUrl, { isMainFrame: true }), false);
+  const homeComponentHost = homeComponentRuntimeHost('hcmp_daily');
+  const homeComponentUrl = homeComponentRuntimeUrl({
+    componentId: 'hcmp_daily',
+    previewVersion: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+  });
+  assert.equal(isAllowedAppNavigationUrl(homeComponentUrl, { isMainFrame: false }), true);
+  assert.equal(isAllowedAppNavigationUrl(homeComponentUrl, { isMainFrame: true }), false);
+  assert.equal(
+    isAllowedAppNavigationUrl(
+      `reo-render://${homeComponentHost}/home-components/hcmp_daily/assets/style.css?v=1`,
+      { isMainFrame: false }
+    ),
+    false
+  );
   assert.equal(
     isAllowedAppNavigationUrl(
       `reo-render://${host}/workspaces/ws_1/segments/seg_1/assets/style.css?v=1`,

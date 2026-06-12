@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="base" x1="180" y1="88" x2="844" y2="936" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="47%" stop-color="#f7f8ff" />
+      <stop offset="100%" stop-color="#eceef6" />
+    </linearGradient>
+    <radialGradient id="warmGlow" cx="31%" cy="25%" r="58%">
+      <stop offset="0%" stop-color="#fff1e9" stop-opacity="0.95" />
+      <stop offset="45%" stop-color="#ffd5c4" stop-opacity="0.34" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="blueGlow" cx="73%" cy="72%" r="62%">
+      <stop offset="0%" stop-color="#eef1ff" stop-opacity="0.98" />
+      <stop offset="48%" stop-color="#ccd8ff" stop-opacity="0.32" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="violetGlow" cx="50%" cy="54%" r="52%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.7" />
+      <stop offset="52%" stop-color="#f2edff" stop-opacity="0.42" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="edge" x1="512" y1="74" x2="512" y2="950" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.88" />
+      <stop offset="48%" stop-color="#d9dce7" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#c5c9d4" stop-opacity="0.58" />
+    </linearGradient>
+    <filter id="shadow" x="-18%" y="-18%" width="136%" height="144%">
+      <feDropShadow dx="0" dy="34" stdDeviation="30" flood-color="#3d4054" flood-opacity="0.28" />
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#ffffff" flood-opacity="0.72" />
+    </filter>
+    <clipPath id="iconShape">
+      <rect x="78" y="76" width="868" height="868" rx="198" ry="198" />
+    </clipPath>
+  </defs>
+
+  <rect width="1024" height="1024" fill="none" />
+  <rect
+    x="78"
+    y="76"
+    width="868"
+    height="868"
+    rx="198"
+    ry="198"
+    fill="url(#base)"
+    filter="url(#shadow)"
+  />
+  <g clip-path="url(#iconShape)">
+    <rect x="78" y="76" width="868" height="868" fill="url(#base)" />
+    <circle cx="298" cy="230" r="470" fill="url(#warmGlow)" />
+    <circle cx="742" cy="730" r="520" fill="url(#blueGlow)" />
+    <circle cx="512" cy="512" r="430" fill="url(#violetGlow)" />
+    <path
+      d="M 124 158 C 238 96 396 88 512 88 C 628 88 786 96 900 158"
+      fill="none"
+      stroke="#ffffff"
+      stroke-width="25"
+      stroke-linecap="round"
+      opacity="0.7"
+    />
+    <path
+      d="M 126 874 C 238 930 382 956 512 956 C 642 956 786 930 898 874"
+      fill="none"
+      stroke="#c4c9d7"
+      stroke-width="20"
+      stroke-linecap="round"
+      opacity="0.38"
+    />
+  </g>
+  <rect
+    x="79.5"
+    y="77.5"
+    width="865"
+    height="865"
+    rx="196"
+    ry="196"
+    fill="none"
+    stroke="url(#edge)"
+    stroke-width="3"
+  />
+</svg>

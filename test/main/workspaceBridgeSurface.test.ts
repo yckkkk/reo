@@ -6,9 +6,13 @@ import type { ReoWorkspaceBridge } from '../../src/workspace-contract/reo-worksp
 const workspaceBridgeKeys = [
   'chooseDirectory',
   'listMemorySpaces',
+  'listEntityMoveTargets',
   'readSystemDraftWorkspace',
   'openSystemDraftWorkspace',
   'readRecentExpressions',
+  'readHomeComponents',
+  'readHomeComponentMemoryDetail',
+  'readExpressionPlaybackAudio',
   'initializeWorkspace',
   'openWorkspace',
   'openMemorySpace',
@@ -18,22 +22,26 @@ const workspaceBridgeKeys = [
   'revealSegmentInFinder',
   'revealSegmentSupplementInFinder',
   'revealWidgetInFinder',
+  'revealHomeComponentInFinder',
   'openMemorySpaceAgentsFile',
   'openMemoryDocument',
   'openSegmentDocument',
   'openSegmentSupplementDocument',
   'openWidgetDocument',
+  'openHomeComponentDocument',
   'copyMemorySpaceAbsolutePath',
   'copyMemoryAbsolutePath',
   'copySegmentAbsolutePath',
   'copySegmentSupplementAbsolutePath',
   'copyWidgetAbsolutePath',
+  'copyHomeComponentAbsolutePath',
   'copyMemoryRelativePath',
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
   'copyWidgetRelativePath',
   'copyArtifactAgentPrompt',
   'copyWidgetAgentPrompt',
+  'copyHomeComponentAgentPrompt',
   'readArtifactRuntimeState',
   'writeArtifactRuntimeState',
   'copyNeedsReviewAgentPrompt',
@@ -42,6 +50,7 @@ const workspaceBridgeKeys = [
   'readWorkspaceSnapshot',
   'createMemory',
   'deleteMemory',
+  'moveMemory',
   'restoreDeletedMemory',
   'resetMemoryCover',
   'restoreMemoryCover',
@@ -50,11 +59,17 @@ const workspaceBridgeKeys = [
   'restoreSegmentCover',
   'switchSegmentDefaultCover',
   'deleteSegment',
+  'moveSegment',
   'restoreDeletedSegment',
   'deleteSegmentSupplement',
+  'moveSegmentSupplement',
   'restoreDeletedSegmentSupplement',
   'deleteWidget',
   'restoreDeletedWidget',
+  'updateHomeComponentTitle',
+  'updateHomeComponentTabOrder',
+  'deleteHomeComponent',
+  'restoreDeletedHomeComponent',
   'readMemoryDetail',
   'readFinalizedAudioSegment',
   'readFinalizedAudioSegmentSupplement',
@@ -118,6 +133,7 @@ const workspaceBridgeKeys = [
   'openMarkdownExternalLink',
   'onRecordingTranscriptionEvent',
   'onFileTruthChanged',
+  'onHomeComponentsChanged',
 ] as const;
 
 const workspaceEntityActionBridgeKeys = [
@@ -126,16 +142,19 @@ const workspaceEntityActionBridgeKeys = [
   'revealSegmentInFinder',
   'revealSegmentSupplementInFinder',
   'revealWidgetInFinder',
+  'revealHomeComponentInFinder',
   'openMemorySpaceAgentsFile',
   'openMemoryDocument',
   'openSegmentDocument',
   'openSegmentSupplementDocument',
   'openWidgetDocument',
+  'openHomeComponentDocument',
   'copyMemorySpaceAbsolutePath',
   'copyMemoryAbsolutePath',
   'copySegmentAbsolutePath',
   'copySegmentSupplementAbsolutePath',
   'copyWidgetAbsolutePath',
+  'copyHomeComponentAbsolutePath',
   'copyMemoryRelativePath',
   'copySegmentRelativePath',
   'copySegmentSupplementRelativePath',
@@ -146,6 +165,9 @@ const applicationScopedBridgeContractKeys = [
   'readSystemDraftWorkspace',
   'openSystemDraftWorkspace',
   'readRecentExpressions',
+  'readHomeComponents',
+  'readHomeComponentMemoryDetail',
+  'readExpressionPlaybackAudio',
   'readAppPermissionStatus',
   'requestAppPermission',
   'readVoiceTranscriptionSettings',
@@ -166,6 +188,9 @@ test('workspace bridge contract declares application-scoped methods before prelo
       'readSystemDraftWorkspace',
       'openSystemDraftWorkspace',
       'readRecentExpressions',
+      'readHomeComponents',
+      'readHomeComponentMemoryDetail',
+      'readExpressionPlaybackAudio',
       'readAppPermissionStatus',
       'requestAppPermission',
       'readVoiceTranscriptionSettings',
@@ -199,9 +224,29 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     value: { status: 'canceled' },
   });
   await bridge.listMemorySpaces();
+  await bridge.listEntityMoveTargets({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    sourceType: 'segment',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+  });
   await bridge.readSystemDraftWorkspace();
   await bridge.openSystemDraftWorkspace();
   await bridge.readRecentExpressions({ limit: 12 });
+  await bridge.readHomeComponents();
+  await bridge.readHomeComponentMemoryDetail({
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    requestId: 'request_home_mem_1',
+  });
+  await bridge.readExpressionPlaybackAudio({
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    kind: 'audio',
+    requestId: 'request_expression_audio_1',
+  });
   await bridge.openMemorySpace({ workspaceId: 'ws_1' });
   await bridge.removeMemorySpace({ workspaceId: 'ws_1' });
   await bridge.updateMemorySpaceTitle({ workspaceId: 'ws_1', title: '测试工作区1' });
@@ -217,8 +262,15 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     action: 'create-segment',
     memoryId: 'mem_1',
   });
+  await bridge.copyHomeComponentAgentPrompt({ action: 'create-home-component' });
   await bridge.createMemory({ workspaceHandle: 'wh_1', title: '产品灵感与思考' });
   await bridge.deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
+  await bridge.moveMemory({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    targetWorkspaceId: 'ws_2',
+  });
   await bridge.restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
   await bridge.resetMemoryCover({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
   await bridge.restoreMemoryCover({
@@ -257,6 +309,14 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
   });
+  await bridge.moveSegment({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    targetWorkspaceId: 'ws_2',
+    targetMemoryId: 'mem_2',
+  });
   await bridge.restoreDeletedSegment({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -269,6 +329,16 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     memoryId: 'mem_1',
     segmentId: 'seg_1',
     supplementId: 'sup_1',
+  });
+  await bridge.moveSegmentSupplement({
+    workspaceHandle: 'wh_1',
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    segmentId: 'seg_1',
+    supplementId: 'sup_1',
+    targetWorkspaceId: 'ws_2',
+    targetMemoryId: 'mem_2',
+    targetSegmentId: 'seg_2',
   });
   await bridge.restoreDeletedSegmentSupplement({
     workspaceHandle: 'wh_1',
@@ -523,17 +593,23 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
   assert.deepEqual(calls, [
     'workspace:chooseDirectory',
     'workspace:listMemorySpaces',
+    'workspace:listEntityMoveTargets',
     'workspace:readSystemDraftWorkspace',
     'workspace:openSystemDraftWorkspace',
     'workspace:readRecentExpressions',
+    'workspace:readHomeComponents',
+    'workspace:readHomeComponentMemoryDetail',
+    'workspace:readExpressionPlaybackAudio',
     'workspace:openMemorySpace',
     'workspace:removeMemorySpace',
     'workspace:updateMemorySpaceTitle',
     'workspace:readWorkspaceSnapshot',
     'workspace:copyNeedsReviewAgentPrompt',
     'workspace:copyArtifactAgentPrompt',
+    'workspace:copyHomeComponentAgentPrompt',
     'workspace:createMemory',
     'workspace:deleteMemory',
+    'workspace:moveMemory',
     'workspace:restoreDeletedMemory',
     'workspace:resetMemoryCover',
     'workspace:restoreMemoryCover',
@@ -542,8 +618,10 @@ test('workspace preload bridge exposes explicit methods and no generic ipc metho
     'workspace:restoreSegmentCover',
     'workspace:switchSegmentDefaultCover',
     'workspace:deleteSegment',
+    'workspace:moveSegment',
     'workspace:restoreDeletedSegment',
     'workspace:deleteSegmentSupplement',
+    'workspace:moveSegmentSupplement',
     'workspace:restoreDeletedSegmentSupplement',
     'workspace:readMemoryDetail',
     'workspace:readFinalizedAudioSegment',
@@ -616,6 +694,9 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     workspaceId: 'ws_1',
     widgetId: 'wdg_1',
   };
+  const homeComponentPayload = {
+    componentId: 'hcmp_1',
+  };
   const calls: Array<{ readonly channel: string; readonly payload?: unknown }> = [];
   const bridge = createWorkspaceBridge({
     invoke: async (channel, payload) => {
@@ -629,16 +710,19 @@ test('workspace preload bridge maps entity action and review prompt copy methods
   await bridge.revealSegmentInFinder(segmentPayload);
   await bridge.revealSegmentSupplementInFinder(supplementPayload);
   await bridge.revealWidgetInFinder(widgetPayload);
+  await bridge.revealHomeComponentInFinder(homeComponentPayload);
   await bridge.openMemorySpaceAgentsFile(memorySpacePayload);
   await bridge.openMemoryDocument(memoryPayload);
   await bridge.openSegmentDocument(segmentPayload);
   await bridge.openSegmentSupplementDocument(supplementPayload);
   await bridge.openWidgetDocument(widgetPayload);
+  await bridge.openHomeComponentDocument(homeComponentPayload);
   await bridge.copyMemorySpaceAbsolutePath(memorySpacePayload);
   await bridge.copyMemoryAbsolutePath(memoryPayload);
   await bridge.copySegmentAbsolutePath(segmentPayload);
   await bridge.copySegmentSupplementAbsolutePath(supplementPayload);
   await bridge.copyWidgetAbsolutePath(widgetPayload);
+  await bridge.copyHomeComponentAbsolutePath(homeComponentPayload);
   await bridge.copyMemoryRelativePath(memoryPayload);
   await bridge.copySegmentRelativePath(segmentPayload);
   await bridge.copySegmentSupplementRelativePath(supplementPayload);
@@ -655,6 +739,10 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     ...widgetPayload,
     action: 'update-widget',
   });
+  await bridge.copyHomeComponentAgentPrompt({
+    ...homeComponentPayload,
+    action: 'update-home-component',
+  });
   await bridge.copyNeedsReviewAgentPrompt({
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
@@ -667,16 +755,19 @@ test('workspace preload bridge maps entity action and review prompt copy methods
     { channel: 'workspace:revealSegmentInFinder', payload: segmentPayload },
     { channel: 'workspace:revealSegmentSupplementInFinder', payload: supplementPayload },
     { channel: 'workspace:revealWidgetInFinder', payload: widgetPayload },
+    { channel: 'workspace:revealHomeComponentInFinder', payload: homeComponentPayload },
     { channel: 'workspace:openMemorySpaceAgentsFile', payload: memorySpacePayload },
     { channel: 'workspace:openMemoryDocument', payload: memoryPayload },
     { channel: 'workspace:openSegmentDocument', payload: segmentPayload },
     { channel: 'workspace:openSegmentSupplementDocument', payload: supplementPayload },
     { channel: 'workspace:openWidgetDocument', payload: widgetPayload },
+    { channel: 'workspace:openHomeComponentDocument', payload: homeComponentPayload },
     { channel: 'workspace:copyMemorySpaceAbsolutePath', payload: memorySpacePayload },
     { channel: 'workspace:copyMemoryAbsolutePath', payload: memoryPayload },
     { channel: 'workspace:copySegmentAbsolutePath', payload: segmentPayload },
     { channel: 'workspace:copySegmentSupplementAbsolutePath', payload: supplementPayload },
     { channel: 'workspace:copyWidgetAbsolutePath', payload: widgetPayload },
+    { channel: 'workspace:copyHomeComponentAbsolutePath', payload: homeComponentPayload },
     { channel: 'workspace:copyMemoryRelativePath', payload: memoryPayload },
     { channel: 'workspace:copySegmentRelativePath', payload: segmentPayload },
     { channel: 'workspace:copySegmentSupplementRelativePath', payload: supplementPayload },
@@ -699,6 +790,13 @@ test('workspace preload bridge maps entity action and review prompt copy methods
         workspaceId: 'ws_1',
         widgetId: 'wdg_1',
         action: 'update-widget',
+      },
+    },
+    {
+      channel: 'workspace:copyHomeComponentAgentPrompt',
+      payload: {
+        componentId: 'hcmp_1',
+        action: 'update-home-component',
       },
     },
     {
@@ -833,6 +931,16 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
     workspaceId: 'ws_1',
     restoreToken: 'wdg_1',
   });
+  await bridge.updateHomeComponentTitle({
+    componentId: 'hcmp_1',
+    title: '主页面板',
+  });
+  await bridge.updateHomeComponentTabOrder({
+    componentTabOrder: ['hcmp_1'],
+    lastActiveComponentId: 'hcmp_1',
+  });
+  await bridge.deleteHomeComponent({ componentId: 'hcmp_1' });
+  await bridge.restoreDeletedHomeComponent({ restoreToken: 'hcmp_1' });
   await bridge.beginMicrophoneIntent({
     workspaceHandle: 'wh_1',
     recordingFlowSessionId: 'recording_flow_1',
@@ -950,6 +1058,28 @@ test('workspace preload bridge maps memory methods and microphone methods to exp
       },
     },
     {
+      channel: 'workspace:updateHomeComponentTitle',
+      payload: {
+        componentId: 'hcmp_1',
+        title: '主页面板',
+      },
+    },
+    {
+      channel: 'workspace:updateHomeComponentTabOrder',
+      payload: {
+        componentTabOrder: ['hcmp_1'],
+        lastActiveComponentId: 'hcmp_1',
+      },
+    },
+    {
+      channel: 'workspace:deleteHomeComponent',
+      payload: { componentId: 'hcmp_1' },
+    },
+    {
+      channel: 'workspace:restoreDeletedHomeComponent',
+      payload: { restoreToken: 'hcmp_1' },
+    },
+    {
       channel: 'workspace:beginMicrophoneIntent',
       payload: { workspaceHandle: 'wh_1', recordingFlowSessionId: 'recording_flow_1' },
     },
@@ -1009,8 +1139,12 @@ test('workspace preload bridge maps recording transcription methods and strips i
 
   const events: unknown[] = [];
   const fileTruthEvents: unknown[] = [];
+  const homeComponentEvents: unknown[] = [];
   const unsubscribe = bridge.onRecordingTranscriptionEvent((event) => events.push(event));
   const unsubscribeFileTruth = bridge.onFileTruthChanged((event) => fileTruthEvents.push(event));
+  const unsubscribeHomeComponents = bridge.onHomeComponentsChanged((event) =>
+    homeComponentEvents.push(event)
+  );
   subscriptions[0]?.listener({ kind: 'closed', recordingSessionId: 'recording-1' });
   subscriptions[1]?.listener({
     kind: 'changed',
@@ -1019,8 +1153,14 @@ test('workspace preload bridge maps recording transcription methods and strips i
     workspaceHandle: 'wh_1',
     workspaceId: 'ws_1',
   });
+  subscriptions[2]?.listener({
+    kind: 'changed',
+    reason: 'file-system',
+    sequence: 2,
+  });
   unsubscribe();
   unsubscribeFileTruth();
+  unsubscribeHomeComponents();
 
   assert.deepEqual(calls, [
     {
@@ -1064,7 +1204,11 @@ test('workspace preload bridge maps recording transcription methods and strips i
   ]);
   assert.deepEqual(
     subscriptions.map((subscription) => subscription.channel),
-    ['workspace:recordingTranscriptionEvent', 'workspace:fileTruthChanged']
+    [
+      'workspace:recordingTranscriptionEvent',
+      'workspace:fileTruthChanged',
+      'workspace:homeComponentsChanged',
+    ]
   );
   assert.deepEqual(events, [{ kind: 'closed', recordingSessionId: 'recording-1' }]);
   assert.deepEqual(fileTruthEvents, [
@@ -1074,6 +1218,13 @@ test('workspace preload bridge maps recording transcription methods and strips i
       sequence: 1,
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
+    },
+  ]);
+  assert.deepEqual(homeComponentEvents, [
+    {
+      kind: 'changed',
+      reason: 'file-system',
+      sequence: 2,
     },
   ]);
   assert.equal(removed, true);
@@ -1105,6 +1256,12 @@ test('workspace preload bridge maps application-scoped methods to explicit chann
   await bridge.validateVoiceTranscriptionCredentials(undefined);
   await bridge.openVoiceTranscriptionProviderConsole();
   await bridge.openMarkdownExternalLink({ url: 'https://tiptap.dev/docs' });
+  await bridge.readHomeComponents(undefined);
+  await bridge.readHomeComponentMemoryDetail({
+    workspaceId: 'ws_1',
+    memoryId: 'mem_1',
+    requestId: 'request_home_mem_1',
+  });
 
   assert.deepEqual(calls, [
     { channel: 'workspace:readAppPermissionStatus', payload: undefined },
@@ -1130,6 +1287,15 @@ test('workspace preload bridge maps application-scoped methods to explicit chann
     { channel: 'workspace:validateVoiceTranscriptionCredentials', payload: undefined },
     { channel: 'workspace:openVoiceTranscriptionProviderConsole', payload: undefined },
     { channel: 'workspace:openMarkdownExternalLink', payload: { url: 'https://tiptap.dev/docs' } },
+    { channel: 'workspace:readHomeComponents', payload: undefined },
+    {
+      channel: 'workspace:readHomeComponentMemoryDetail',
+      payload: {
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        requestId: 'request_home_mem_1',
+      },
+    },
   ]);
 });
 

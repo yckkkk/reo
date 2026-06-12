@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-06-10T05:26:06.027Z",
+  "ids": {
+    "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+    "targetMemoryId": "mem_codex_dogfood_17800058",
+    "targetSegmentId": "seg_codex_dogfood_17800103",
+    "movedMemoryId": "mem_cross_space_codex_20260609221232",
+    "movedSegmentId": "seg_cross_space_codex_segment_20260609221232",
+    "suppSourceSegmentId": "seg_cross_space_codex_supp_source_20260609221232",
+    "movedSupplementId": "sup_cross_space_codex_supp_20260609221232",
+    "movedMemoryChildSegmentId": "seg_cross_space_codex_memory_child_20260609221232",
+    "movedMemoryChildSupplementId": "sup_cross_space_codex_memory_child_20260609221232"
+  },
+  "draftResult": {
+    "draftOpen": {
+      "ok": true,
+      "workspaceId": "ws_system_draft"
+    },
+    "draftDetail": {
+      "ok": true,
+      "segmentIds": [
+        "seg_20260607063804_6629018d",
+        "seg_20260607062503_dcd66077",
+        "seg_20260607062221_158aae87",
+        "seg_20260607054639_137ec2e0",
+        "seg_20260607051734_ab5ce31e",
+        "seg_20260607051202_a5338a0f",
+        "seg_20260607051118_8df21c9c",
+        "seg_20260607051031_18ba0054"
+      ],
+      "movedSegmentPresent": false,
+      "suppSourceSegmentPresent": false,
+      "movedSupplementPresent": false
+    }
+  },
+  "testResult": {
+    "testOpen": {
+      "ok": true,
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee"
+    },
+    "targetDetail": {
+      "ok": true,
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentIds": [
+        "seg_cross_space_codex_supp_source_20260609221232",
+        "seg_cross_space_codex_segment_20260609221232",
+        "seg_codex_dogfood_17800103"
+      ]
+    },
+    "movedMemoryDetail": {
+      "ok": true,
+      "memoryId": "mem_cross_space_codex_20260609221232",
+      "segmentIds": ["seg_cross_space_codex_memory_child_20260609221232"]
+    },
+    "targetMovedSegment": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentId": "seg_cross_space_codex_segment_20260609221232",
+      "type": "note",
+      "title": "Codex Cross Space Segment 20260609221232",
+      "supplementCount": 0,
+      "supplementIds": [],
+      "supplements": []
+    },
+    "targetSuppSourceSegment": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentId": "seg_cross_space_codex_supp_source_20260609221232",
+      "type": "note",
+      "title": "Codex Supplement Source 20260609221232",
+      "supplementCount": 0,
+      "supplementIds": [],
+      "supplements": []
+    },
+    "targetExistingSegmentMovedSupplement": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_codex_dogfood_17800058",
+      "segmentId": "seg_codex_dogfood_17800103",
+      "supplementId": "sup_cross_space_codex_supp_20260609221232",
+      "type": "note",
+      "title": "Codex Cross Space Supplement 20260609221232"
+    },
+    "movedMemory": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_cross_space_codex_20260609221232",
+      "title": "Codex Cross Space Memory 20260609221232"
+    },
+    "movedMemoryChildSegment": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_cross_space_codex_20260609221232",
+      "segmentId": "seg_cross_space_codex_memory_child_20260609221232",
+      "type": "note",
+      "title": "Codex Memory Child Segment 20260609221232",
+      "supplementCount": 1,
+      "supplementIds": ["sup_cross_space_codex_memory_child_20260609221232"],
+      "supplements": [
+        {
+          "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+          "memoryId": "mem_cross_space_codex_20260609221232",
+          "segmentId": "seg_cross_space_codex_memory_child_20260609221232",
+          "supplementId": "sup_cross_space_codex_memory_child_20260609221232",
+          "type": "note",
+          "title": "Codex Memory Child Supplement 20260609221232"
+        }
+      ]
+    },
+    "movedMemoryChildSupplement": {
+      "workspaceId": "ws_9c3f83a8-cb51-4c35-923f-0b68be4753ee",
+      "memoryId": "mem_cross_space_codex_20260609221232",
+      "segmentId": "seg_cross_space_codex_memory_child_20260609221232",
+      "supplementId": "sup_cross_space_codex_memory_child_20260609221232",
+      "type": "note",
+      "title": "Codex Memory Child Supplement 20260609221232"
+    }
+  }
+}

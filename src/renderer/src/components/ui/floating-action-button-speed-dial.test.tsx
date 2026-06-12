@@ -58,6 +58,7 @@ describe('FloatingActionButtonSpeedDial', () => {
       'aria-controls',
       'workspace-floating-action-button-speed-dial-menu'
     );
+    expect(trigger.querySelector('svg.lucide-plus')).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: '录音' })).not.toBeInTheDocument();
 
     await user.click(trigger);
@@ -66,6 +67,9 @@ describe('FloatingActionButtonSpeedDial', () => {
       'aria-expanded',
       'true'
     );
+    expect(
+      screen.getByRole('button', { name: '关闭表达入口' }).querySelector('svg.lucide-x')
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '关闭表达入口' })).toHaveClass('!rounded-full');
     expect(screen.getByRole('menu', { name: '表达方式' })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: '录音' })).toHaveClass(

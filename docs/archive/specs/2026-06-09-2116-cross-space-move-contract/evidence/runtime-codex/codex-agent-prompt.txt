@@ -1,0 +1,53 @@
+You are acting as an external Reo workspace agent. This is a real dogfood verification, not a unit test.
+
+Use the current local Codex authentication and real filesystem tools. Do not ask questions.
+
+Allowed roots:
+- Draft memory space: $DRAFT_ROOT
+- Test memory space: $TEST_ROOT
+
+Read the Reo agent guidance at skills/reo-edit/SKILL.md before editing. Work only inside the two allowed roots. Do not read, write, move, or clean any .reo directory. Do not run test suites. Do not use the repo source as your workspace.
+
+Use run id: 20260609221232
+
+Create ordinary Reo file-truth content in Draft, then move it across memory spaces using whole same-level directories:
+
+1. In Draft protected default Memory:
+   $DRAFT_ROOT/memories/mem_system_draft--草稿/segments
+   create note Segment directory:
+   seg_cross_space_codex_segment_20260609221232--Codex Cross Space Segment 20260609221232
+   with segment.md frontmatter id=seg_cross_space_codex_segment_20260609221232, title="Codex Cross Space Segment 20260609221232", kind=note.
+
+2. Also in Draft protected default Memory, create note Segment directory:
+   seg_cross_space_codex_supp_source_20260609221232--Codex Supplement Source 20260609221232
+   with segment.md frontmatter id=seg_cross_space_codex_supp_source_20260609221232, title="Codex Supplement Source 20260609221232", kind=note.
+   Under that segment create supplement directory:
+   supplements/sup_cross_space_codex_supp_20260609221232--Codex Cross Space Supplement 20260609221232
+   with supplement.md frontmatter id=sup_cross_space_codex_supp_20260609221232, title="Codex Cross Space Supplement 20260609221232", kind=note.
+
+3. In Draft memories root, create user Memory directory:
+   mem_cross_space_codex_20260609221232--Codex Cross Space Memory 20260609221232
+   with memory.md frontmatter id=mem_cross_space_codex_20260609221232, title="Codex Cross Space Memory 20260609221232".
+   Inside it create one note Segment:
+   segments/seg_cross_space_codex_memory_child_20260609221232--Codex Memory Child Segment 20260609221232
+   with segment.md frontmatter id=seg_cross_space_codex_memory_child_20260609221232, title="Codex Memory Child Segment 20260609221232", kind=note.
+   Under that segment create one note Supplement:
+   supplements/sup_cross_space_codex_memory_child_20260609221232--Codex Memory Child Supplement 20260609221232
+   with supplement.md frontmatter id=sup_cross_space_codex_memory_child_20260609221232, title="Codex Memory Child Supplement 20260609221232", kind=note.
+
+Then perform these same-level cross-space moves:
+
+A. Move the whole Segment directory from step 1 into this Test Memory's segments directory:
+   $TEST_ROOT/memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/segments
+
+B. Move the whole Supplement directory from step 2 into this existing Test Segment's supplements directory:
+   $TEST_ROOT/memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/segments/seg_codex_dogfood_17800103--Codex Dogfood Segment 17800103/supplements
+
+C. Move the whole user Memory directory from step 3 into this Test memories root:
+   $TEST_ROOT/memories
+
+At the end, print a compact verification report listing:
+- exact source paths that no longer exist,
+- exact target paths that exist,
+- the ids found in the moved memory.md, segment.md, and supplement.md files,
+- confirmation that you did not touch .reo.

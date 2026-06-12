@@ -263,4 +263,34 @@ describe('MemoryRail', () => {
 
     expect(onSwitchMemoryDefaultCover).toHaveBeenCalledWith(defaultMemory);
   });
+
+  it('hides Memory move for protected rail memories', async () => {
+    const user = userEvent.setup();
+    const onMoveMemory = vi.fn();
+    render(
+      <MemoryRail
+        memories={[
+          memory({
+            capabilities: { canDelete: false, canRename: false },
+            memoryId: 'mem_system_draft',
+            systemRole: 'draft-default-memory',
+            title: '草稿',
+          }),
+        ]}
+        onDeleteMemory={vi.fn()}
+        onMoveMemory={onMoveMemory}
+        onRenameMemory={vi.fn()}
+        onResetMemoryCover={vi.fn()}
+        onSwitchMemoryDefaultCover={vi.fn()}
+        onSelectMemory={vi.fn()}
+        workspaceHandle="workspace-handle-secret"
+        workspaceId="ws_system_draft"
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: '草稿 更多操作' }));
+
+    expect(screen.queryByRole('menuitem', { name: '移动记忆...' })).not.toBeInTheDocument();
+    expect(onMoveMemory).not.toHaveBeenCalled();
+  });
 });

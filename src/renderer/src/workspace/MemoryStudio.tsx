@@ -111,6 +111,7 @@ import {
 import {
   copyArtifactAgentPrompt,
   readArtifactRuntimeState,
+  readExpressionPlaybackAudio,
   saveSegmentSupplementTranscript,
   saveTranscript,
   updateSegmentContentTabOrder,
@@ -159,6 +160,19 @@ type MemoryStudioProps = {
   readonly memory: WorkspaceMemorySummary;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
+  readonly onMoveSegment?:
+    | ((target: {
+        readonly memoryId: string;
+        readonly segment: WorkspaceMemoryDetail['segments'][number];
+      }) => void)
+    | undefined;
+  readonly onMoveSegmentSupplement?:
+    | ((target: {
+        readonly memoryId: string;
+        readonly segment: WorkspaceMemoryDetail['segments'][number];
+        readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
+      }) => void)
+    | undefined;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
   readonly onSegmentTranscriptSaved: (saved: SavedSegmentTranscriptContent) => void;
   readonly onSegmentSupplementTranscriptSaved: (
@@ -1834,6 +1848,7 @@ function SegmentSupplementTab({
   onRequestSpeechSynthesis,
   onRequestTranscriptionBackfill,
   onDelete,
+  onMove,
   onRename,
   onSelect,
   dragging,
@@ -1868,6 +1883,7 @@ function SegmentSupplementTab({
   readonly onRequestArtifactUpdate?: (() => void) | undefined;
   readonly onRequestSpeechSynthesis?: ((speaker: VoiceSpeechSynthesisSpeaker) => void) | undefined;
   readonly onRequestTranscriptionBackfill?: (() => void) | undefined;
+  readonly onMove?: (() => void) | undefined;
   readonly onRename: () => void;
   readonly onSelect: () => void;
   readonly speechSynthesisDisabledReason?: string | null | undefined;
@@ -1936,6 +1952,14 @@ function SegmentSupplementTab({
         onRequestArtifactUpdate={onRequestArtifactUpdate}
         onRequestSpeechSynthesis={onRequestSpeechSynthesis}
         onRequestTranscriptionBackfill={onRequestTranscriptionBackfill}
+        onMove={
+          onMove
+            ? () => {
+                onMenuOpenChange(false);
+                onMove();
+              }
+            : undefined
+        }
         onRename={() => {
           onMenuOpenChange(false);
           onRename();
@@ -2480,6 +2504,7 @@ function ArtifactPreviewPanel({
     () => ({
       copyArtifactAgentPrompt,
       readArtifactRuntimeState,
+      readExpressionPlaybackAudio,
       updateSegmentSupplementTitle,
       updateSegmentTitle,
       writeArtifactRuntimeState,
@@ -3464,6 +3489,8 @@ export function MemoryStudio({
   memory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
+  onMoveSegment,
+  onMoveSegmentSupplement,
   onClearSegmentContent,
   onSegmentTranscriptSaved,
   onSegmentSupplementTranscriptSaved,
@@ -4730,6 +4757,14 @@ export function MemoryStudio({
                             closeActionMenuOwner();
                             onDeleteSegment({ memoryId: memory.memoryId, segment });
                           }}
+                          onMove={
+                            onMoveSegment
+                              ? () => {
+                                  closeActionMenuOwner();
+                                  onMoveSegment({ memoryId: memory.memoryId, segment });
+                                }
+                              : undefined
+                          }
                           onOpenChange={(open) => setSegmentActionMenuOpen(segment.segmentId, open)}
                           onRequestArtifactUpdate={requestSegmentArtifactUpdate}
                           onRequestSpeechSynthesis={requestSegmentSpeechSynthesis}
@@ -4886,6 +4921,17 @@ export function MemoryStudio({
                                     contentKind="artifact"
                                     menuLabel={`${contentTab.title} 更多操作`}
                                     onOpenChange={setPrimaryContentActionMenuOpen}
+                                    onMoveSegment={
+                                      onMoveSegment
+                                        ? () => {
+                                            closeActionMenuOwner();
+                                            onMoveSegment({
+                                              memoryId: memory.memoryId,
+                                              segment: selectedSegment,
+                                            });
+                                          }
+                                        : undefined
+                                    }
                                     onRequestArtifactRefresh={() => {
                                       closeActionMenuOwner();
                                       requestArtifactPreviewRefresh(
@@ -4958,6 +5004,17 @@ export function MemoryStudio({
                                       }
                                     }}
                                     onOpenChange={setPrimaryContentActionMenuOpen}
+                                    onMoveSegment={
+                                      onMoveSegment
+                                        ? () => {
+                                            closeActionMenuOwner();
+                                            onMoveSegment({
+                                              memoryId: memory.memoryId,
+                                              segment: selectedSegment,
+                                            });
+                                          }
+                                        : undefined
+                                    }
                                     onRequestSpeechSynthesis={
                                       isNoteMemorySegment(selectedSegment) &&
                                       speechSynthesis?.requestSegment
@@ -5230,6 +5287,16 @@ export function MemoryStudio({
                             segment: selectedSegment,
                             supplement,
                           })
+                        }
+                        onMove={
+                          onMoveSegmentSupplement
+                            ? () =>
+                                onMoveSegmentSupplement({
+                                  memoryId: memory.memoryId,
+                                  segment: selectedSegment,
+                                  supplement,
+                                })
+                            : undefined
                         }
                         onRename={() =>
                           onRenameSegmentSupplement({

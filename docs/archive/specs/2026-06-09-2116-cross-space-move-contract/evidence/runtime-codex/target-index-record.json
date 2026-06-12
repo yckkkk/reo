@@ -1,0 +1,40 @@
+{
+  "runId": "20260609221232",
+  "memoryCount": 6,
+  "movedMemorySummary": {
+    "memoryId": "mem_cross_space_codex_20260609221232",
+    "title": "Codex Cross Space Memory 20260609221232",
+    "createdAt": "2026-06-10T05:14:28.750Z",
+    "updatedAt": "2026-06-10T05:20:00.528Z",
+    "segmentCount": 1,
+    "audioSegmentCount": 0,
+    "noteSegmentCount": 1,
+    "artifactSegmentCount": 0,
+    "audioDurationMs": 0,
+    "audioByteLength": 0,
+    "hasAudioTranscript": false,
+    "hasAnyNote": true,
+    "supplementCount": 1,
+    "cover": {
+      "source": "default"
+    }
+  },
+  "targetMemorySummary": {
+    "memoryId": "mem_codex_dogfood_17800058",
+    "title": "Codex Dogfood Memory 17800058",
+    "createdAt": "2026-05-27T06:13:40.473Z",
+    "updatedAt": "2026-06-10T05:26:09.283Z",
+    "segmentCount": 3,
+    "audioSegmentCount": 0,
+    "noteSegmentCount": 3,
+    "artifactSegmentCount": 0,
+    "audioDurationMs": 0,
+    "audioByteLength": 0,
+    "hasAudioTranscript": false,
+    "hasAnyNote": true,
+    "supplementCount": 2,
+    "cover": {
+      "source": "default"
+    }
+  }
+}

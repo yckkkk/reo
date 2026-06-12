@@ -47,6 +47,7 @@ function renderMenu(
   props: {
     cover?: Parameters<typeof MemoryActionsMenu>[0]['cover'];
     onDelete?: () => void;
+    onMove?: () => void;
     onRename?: () => void;
     onResetCover?: () => void;
     onSwitchDefaultCover?: () => void;
@@ -58,6 +59,7 @@ function renderMenu(
       cover={props.cover}
       memoryTitle="My Memory"
       onDelete={props.onDelete ?? vi.fn()}
+      onMove={props.onMove}
       onRename={props.onRename ?? vi.fn()}
       onResetCover={props.onResetCover ?? vi.fn()}
       onSwitchDefaultCover={props.onSwitchDefaultCover ?? vi.fn()}
@@ -164,6 +166,16 @@ describe('MemoryActionsMenu', () => {
     await user.click(screen.getByRole('button', { name: 'My Memory 更多操作' }));
     await user.click(screen.getByRole('menuitem', { name: '删除' }));
     expect(onDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('invokes move from the More menu', async () => {
+    const onMove = vi.fn();
+    renderMenu({ onMove });
+
+    const { user } = await openEntityActionMenu('My Memory 更多操作');
+    await user.click(screen.getByRole('menuitem', { name: '移动记忆...' }));
+
+    expect(onMove).toHaveBeenCalledOnce();
   });
 
   it('hides rename and delete for protected memories while keeping file actions', async () => {

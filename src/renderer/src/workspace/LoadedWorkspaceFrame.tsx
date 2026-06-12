@@ -33,6 +33,7 @@ import type {
 import { WORKSPACE_MEMORY_RAIL_ID, WorkspaceFrame } from './WorkspaceFrame';
 import { WorkspaceStage } from './WorkspaceStage';
 import type {
+  WorkspaceMemoryDetail,
   WorkspaceMemorySummary,
   WorkspaceSession,
   WorkspaceWidgetProjection,
@@ -56,6 +57,20 @@ type LoadedWorkspaceFrameProps = {
   readonly onDeleteMemory: (memory: WorkspaceMemorySummary) => void;
   readonly onDeleteSegment: (target: SegmentDeleteTarget) => void;
   readonly onDeleteSegmentSupplement: (target: SegmentSupplementDeleteTarget) => void;
+  readonly onMoveMemory?: ((memory: WorkspaceMemorySummary) => void) | undefined;
+  readonly onMoveSegment?:
+    | ((target: {
+        readonly memoryId: string;
+        readonly segment: WorkspaceMemoryDetail['segments'][number];
+      }) => void)
+    | undefined;
+  readonly onMoveSegmentSupplement?:
+    | ((target: {
+        readonly memoryId: string;
+        readonly segment: WorkspaceMemoryDetail['segments'][number];
+        readonly supplement: WorkspaceMemoryDetail['segments'][number]['supplements'][number];
+      }) => void)
+    | undefined;
   readonly onClearSegmentContent: (target: SegmentContentClearTarget) => void;
   readonly onSegmentTranscriptSaved: (saved: {
     readonly expectedSession: WorkspaceSession;
@@ -89,6 +104,7 @@ type LoadedWorkspaceFrameProps = {
   readonly onRequestWidgetUpdate?: ((widget: WorkspaceWidgetProjection) => void) | undefined;
   readonly onWidgetRuntimeMutation?: ((value: unknown) => boolean) | undefined;
   readonly onStartSegmentSupplementRecording: (target: SegmentSupplementRecordingTarget) => void;
+  readonly onStartArtifact?: () => void;
   readonly onStartNote?: () => void;
   readonly onStartSegmentSupplementNote?: (target: SegmentSupplementNoteTarget) => void;
   readonly segmentFocusIntent?: MemoryStudioSegmentFocusIntent | null;
@@ -157,6 +173,9 @@ export function LoadedWorkspaceFrame({
   onDeleteMemory,
   onDeleteSegment,
   onDeleteSegmentSupplement,
+  onMoveMemory,
+  onMoveSegment,
+  onMoveSegmentSupplement,
   onClearSegmentContent,
   onSegmentTranscriptSaved,
   onSegmentSupplementTranscriptSaved,
@@ -179,6 +198,7 @@ export function LoadedWorkspaceFrame({
   onSelectObject,
   onRequestWidgetUpdate = () => undefined,
   onWidgetRuntimeMutation,
+  onStartArtifact,
   onStartNote,
   onStartSegmentSupplementNote,
   onStartSegmentSupplementRecording,
@@ -206,6 +226,9 @@ export function LoadedWorkspaceFrame({
   const deleteMemory = useStableEventCallback(onDeleteMemory);
   const deleteSegment = useStableEventCallback(onDeleteSegment);
   const deleteSegmentSupplement = useStableEventCallback(onDeleteSegmentSupplement);
+  const moveMemory = useStableOptionalEventCallback(onMoveMemory);
+  const moveSegment = useStableOptionalEventCallback(onMoveSegment);
+  const moveSegmentSupplement = useStableOptionalEventCallback(onMoveSegmentSupplement);
   const clearSegmentContent = useStableEventCallback(onClearSegmentContent);
   const segmentTranscriptSaved = useStableEventCallback(onSegmentTranscriptSaved);
   const segmentSupplementTranscriptSaved = useStableEventCallback(
@@ -232,12 +255,17 @@ export function LoadedWorkspaceFrame({
     (target: ArtifactRuntimeObjectSelectionTarget) => onSelectObject(target) !== false
   );
   const startNote = useStableOptionalEventCallback(onStartNote);
+  const startArtifactOverride = useStableOptionalEventCallback(onStartArtifact);
   const startSegmentSupplementNote = useStableOptionalEventCallback(onStartSegmentSupplementNote);
   const startSegmentSupplementRecording = useStableEventCallback(onStartSegmentSupplementRecording);
   const startRecording = useStableEventCallback(onStartRecording);
   const requestWidgetUpdate = useStableEventCallback(onRequestWidgetUpdate);
   const hasInlineMarkdownDirtyChange = onInlineMarkdownDirtyChange !== undefined;
+  const hasMoveMemory = onMoveMemory !== undefined;
+  const hasMoveSegment = onMoveSegment !== undefined;
+  const hasMoveSegmentSupplement = onMoveSegmentSupplement !== undefined;
   const hasSegmentFocusConsumed = onSegmentFocusConsumed !== undefined;
+  const hasStartArtifactOverride = onStartArtifact !== undefined;
   const hasStartNote = onStartNote !== undefined;
   const hasStartSegmentSupplementNote = onStartSegmentSupplementNote !== undefined;
   const currentShownReviewToastSessionKey =
@@ -453,6 +481,7 @@ export function LoadedWorkspaceFrame({
           activeMemoryId={currentMemory?.memoryId ?? null}
           memories={snapshot.memories}
           onDeleteMemory={deleteMemory}
+          {...(hasMoveMemory ? { onMoveMemory: moveMemory } : {})}
           onRenameMemory={renameMemory}
           onResetMemoryCover={resetMemoryCover}
           onSwitchMemoryDefaultCover={switchMemoryDefaultCover}
@@ -466,6 +495,8 @@ export function LoadedWorkspaceFrame({
       currentMemory?.memoryId,
       currentMemory,
       deleteMemory,
+      hasMoveMemory,
+      moveMemory,
       renameMemory,
       resetMemoryCover,
       requestWidgetUpdate,
@@ -484,12 +515,25 @@ export function LoadedWorkspaceFrame({
     () =>
       expressionDockVisible ? (
         <ExpressionDock
-          {...(currentMemory ? { onStartArtifact: startArtifact } : {})}
+          {...(hasStartArtifactOverride
+            ? { onStartArtifact: startArtifactOverride }
+            : currentMemory
+              ? { onStartArtifact: startArtifact }
+              : {})}
           {...(hasStartNote ? { onStartNote: startNote } : {})}
           onStartRecording={startRecording}
         />
       ) : null,
-    [currentMemory, expressionDockVisible, hasStartNote, startArtifact, startNote, startRecording]
+    [
+      currentMemory,
+      expressionDockVisible,
+      hasStartArtifactOverride,
+      hasStartNote,
+      startArtifact,
+      startArtifactOverride,
+      startNote,
+      startRecording,
+    ]
   );
   const workspaceStage = useMemo(
     () =>
@@ -500,6 +544,8 @@ export function LoadedWorkspaceFrame({
           memory={currentMemory}
           onDeleteSegment={deleteSegment}
           onDeleteSegmentSupplement={deleteSegmentSupplement}
+          {...(hasMoveSegment ? { onMoveSegment: moveSegment } : {})}
+          {...(hasMoveSegmentSupplement ? { onMoveSegmentSupplement: moveSegmentSupplement } : {})}
           onClearSegmentContent={clearSegmentContent}
           onSegmentTranscriptSaved={segmentTranscriptSaved}
           onSegmentSupplementTranscriptSaved={segmentSupplementTranscriptSaved}
@@ -535,6 +581,10 @@ export function LoadedWorkspaceFrame({
       currentMemory,
       deleteSegment,
       deleteSegmentSupplement,
+      hasMoveSegment,
+      hasMoveSegmentSupplement,
+      moveSegment,
+      moveSegmentSupplement,
       hasInlineMarkdownDirtyChange,
       hasSegmentFocusConsumed,
       hasStartSegmentSupplementNote,

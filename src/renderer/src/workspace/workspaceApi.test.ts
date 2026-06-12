@@ -17,10 +17,13 @@ import {
   copyWidgetAbsolutePath,
   copyWidgetAgentPrompt,
   copyWidgetRelativePath,
+  copyHomeComponentAbsolutePath,
+  copyHomeComponentAgentPrompt,
   createMemory,
   createNoteSegmentDraft,
   createSegmentSupplementNoteDraft,
   deleteWidget,
+  deleteHomeComponent,
   deleteMemory,
   deleteSegmentSupplement,
   deleteSegment,
@@ -33,9 +36,14 @@ import {
   finalizeSegmentSupplementNoteDraft,
   finalizeSegmentSupplementRecordingDraft,
   initializeWorkspace,
+  listEntityMoveTargets,
   listMemorySpaces,
+  moveMemory,
+  moveSegment,
+  moveSegmentSupplement,
   openMarkdownExternalLink,
   openWidgetDocument,
+  openHomeComponentDocument,
   openMemoryDocument,
   openMemorySpaceAgentsFile,
   openVoiceTranscriptionProviderConsole,
@@ -44,10 +52,13 @@ import {
   openWorkspace,
   openMemorySpace,
   readAppPermissionStatus,
+  readHomeComponentMemoryDetail,
+  readHomeComponents,
   readFinalizedAudioSegment,
   readFinalizedAudioSegmentAudio,
   readFinalizedAudioSegmentSupplement,
   readFinalizedAudioSegmentSupplementAudio,
+  readExpressionPlaybackAudio,
   readArtifactRuntimeState,
   readMemoryDetail,
   readSegmentContent,
@@ -66,7 +77,9 @@ import {
   revealSegmentInFinder,
   revealSegmentSupplementInFinder,
   revealWidgetInFinder,
+  revealHomeComponentInFinder,
   restoreDeletedWidget,
+  restoreDeletedHomeComponent,
   restoreDeletedMemory,
   restoreDeletedSegmentSupplement,
   restoreDeletedSegment,
@@ -74,6 +87,8 @@ import {
   setVoiceSpeechSynthesisSpeaker,
   updateWidgetTabOrder,
   updateWidgetTitle,
+  updateHomeComponentTabOrder,
+  updateHomeComponentTitle,
   updateMemorySpaceTitle,
   updateMemoryTitle,
   updateSegmentContentTabOrder,
@@ -90,6 +105,7 @@ describe('workspace renderer API wrapper', () => {
   const reoWorkspace = {
     chooseDirectory: vi.fn(),
     listMemorySpaces: vi.fn(),
+    listEntityMoveTargets: vi.fn(),
     initializeWorkspace: vi.fn(),
     openWorkspace: vi.fn(),
     openMemorySpace: vi.fn(),
@@ -99,11 +115,13 @@ describe('workspace renderer API wrapper', () => {
     revealSegmentInFinder: vi.fn(),
     revealSegmentSupplementInFinder: vi.fn(),
     revealWidgetInFinder: vi.fn(),
+    revealHomeComponentInFinder: vi.fn(),
     openMemorySpaceAgentsFile: vi.fn(),
     openMemoryDocument: vi.fn(),
     openSegmentDocument: vi.fn(),
     openSegmentSupplementDocument: vi.fn(),
     openWidgetDocument: vi.fn(),
+    openHomeComponentDocument: vi.fn(),
     openVoiceTranscriptionProviderConsole: vi.fn(),
     openMarkdownExternalLink: vi.fn(),
     copyMemorySpaceAbsolutePath: vi.fn(),
@@ -111,12 +129,14 @@ describe('workspace renderer API wrapper', () => {
     copySegmentAbsolutePath: vi.fn(),
     copySegmentSupplementAbsolutePath: vi.fn(),
     copyWidgetAbsolutePath: vi.fn(),
+    copyHomeComponentAbsolutePath: vi.fn(),
     copyMemoryRelativePath: vi.fn(),
     copySegmentRelativePath: vi.fn(),
     copySegmentSupplementRelativePath: vi.fn(),
     copyWidgetRelativePath: vi.fn(),
     copyArtifactAgentPrompt: vi.fn(),
     copyWidgetAgentPrompt: vi.fn(),
+    copyHomeComponentAgentPrompt: vi.fn(),
     readArtifactRuntimeState: vi.fn(),
     writeArtifactRuntimeState: vi.fn(),
     closeWorkspace: vi.fn(),
@@ -124,19 +144,27 @@ describe('workspace renderer API wrapper', () => {
     createMemory: vi.fn(),
     updateWidgetTitle: vi.fn(),
     updateWidgetTabOrder: vi.fn(),
+    updateHomeComponentTitle: vi.fn(),
+    updateHomeComponentTabOrder: vi.fn(),
     deleteWidget: vi.fn(),
     restoreDeletedWidget: vi.fn(),
+    deleteHomeComponent: vi.fn(),
+    restoreDeletedHomeComponent: vi.fn(),
     deleteMemory: vi.fn(),
+    moveMemory: vi.fn(),
     restoreDeletedMemory: vi.fn(),
     deleteSegment: vi.fn(),
+    moveSegment: vi.fn(),
     restoreDeletedSegment: vi.fn(),
     deleteSegmentSupplement: vi.fn(),
+    moveSegmentSupplement: vi.fn(),
     restoreDeletedSegmentSupplement: vi.fn(),
     readMemoryDetail: vi.fn(),
     readFinalizedAudioSegment: vi.fn(),
     readFinalizedAudioSegmentSupplement: vi.fn(),
     readFinalizedAudioSegmentAudio: vi.fn(),
     readFinalizedAudioSegmentSupplementAudio: vi.fn(),
+    readExpressionPlaybackAudio: vi.fn(),
     createNoteSegmentDraft: vi.fn(),
     createSegmentSupplementNoteDraft: vi.fn(),
     writeNoteSegmentDraftBody: vi.fn(),
@@ -174,6 +202,8 @@ describe('workspace renderer API wrapper', () => {
     requestAppPermission: vi.fn(),
     beginMicrophoneIntent: vi.fn(),
     clearMicrophoneIntent: vi.fn(),
+    readHomeComponentMemoryDetail: vi.fn(),
+    readHomeComponents: vi.fn(),
   };
 
   const workspaceWidget = {
@@ -189,6 +219,20 @@ describe('workspace renderer API wrapper', () => {
     entryByteLength: 12,
     entryHash: 'a'.repeat(64),
     previewVersion: 'b'.repeat(64),
+  };
+
+  const workspaceHomeComponent = {
+    componentId: 'hcmp_1',
+    type: 'home-component' as const,
+    format: 'html' as const,
+    mount: 'home' as const,
+    title: '主页面板',
+    createdAt: '2026-06-10T12:00:00.000Z',
+    updatedAt: '2026-06-10T12:00:00.000Z',
+    icon: { source: 'default' as const },
+    entryByteLength: 12,
+    entryHash: 'c'.repeat(64),
+    previewVersion: 'd'.repeat(64),
   };
 
   beforeEach(() => {
@@ -217,12 +261,14 @@ describe('workspace renderer API wrapper', () => {
       reoWorkspace.copySegmentAbsolutePath,
       reoWorkspace.copySegmentSupplementAbsolutePath,
       reoWorkspace.copyWidgetAbsolutePath,
+      reoWorkspace.copyHomeComponentAbsolutePath,
       reoWorkspace.copyMemoryRelativePath,
       reoWorkspace.copySegmentRelativePath,
       reoWorkspace.copySegmentSupplementRelativePath,
       reoWorkspace.copyWidgetRelativePath,
       reoWorkspace.copyArtifactAgentPrompt,
       reoWorkspace.copyWidgetAgentPrompt,
+      reoWorkspace.copyHomeComponentAgentPrompt,
     ]) {
       action.mockResolvedValue(okResponse);
     }
@@ -248,6 +294,9 @@ describe('workspace renderer API wrapper', () => {
       workspaceId: 'ws_1',
       widgetId: 'wdg_1',
     };
+    const homeComponentPayload = {
+      componentId: 'hcmp_1',
+    };
 
     await revealMemorySpaceInFinder(memorySpacePayload);
     await openMemorySpaceAgentsFile(memorySpacePayload);
@@ -267,6 +316,9 @@ describe('workspace renderer API wrapper', () => {
     await revealWidgetInFinder(widgetPayload);
     await openWidgetDocument(widgetPayload);
     await copyWidgetAbsolutePath(widgetPayload);
+    await revealHomeComponentInFinder(homeComponentPayload);
+    await openHomeComponentDocument(homeComponentPayload);
+    await copyHomeComponentAbsolutePath(homeComponentPayload);
     await copyWidgetRelativePath(widgetPayload);
     await copyArtifactAgentPrompt({
       ...segmentPayload,
@@ -275,6 +327,13 @@ describe('workspace renderer API wrapper', () => {
     await copyWidgetAgentPrompt({
       ...widgetPayload,
       action: 'update-widget',
+    });
+    await copyHomeComponentAgentPrompt({
+      ...homeComponentPayload,
+      action: 'update-home-component',
+    });
+    await copyHomeComponentAgentPrompt({
+      action: 'create-home-component',
     });
     await openVoiceTranscriptionProviderConsole();
     await openMarkdownExternalLink({ url: 'https://tiptap.dev/docs' });
@@ -297,6 +356,9 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.revealWidgetInFinder).toHaveBeenCalledWith(widgetPayload);
     expect(reoWorkspace.openWidgetDocument).toHaveBeenCalledWith(widgetPayload);
     expect(reoWorkspace.copyWidgetAbsolutePath).toHaveBeenCalledWith(widgetPayload);
+    expect(reoWorkspace.revealHomeComponentInFinder).toHaveBeenCalledWith(homeComponentPayload);
+    expect(reoWorkspace.openHomeComponentDocument).toHaveBeenCalledWith(homeComponentPayload);
+    expect(reoWorkspace.copyHomeComponentAbsolutePath).toHaveBeenCalledWith(homeComponentPayload);
     expect(reoWorkspace.copyWidgetRelativePath).toHaveBeenCalledWith(widgetPayload);
     expect(reoWorkspace.copyArtifactAgentPrompt).toHaveBeenCalledWith({
       ...segmentPayload,
@@ -305,6 +367,13 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.copyWidgetAgentPrompt).toHaveBeenCalledWith({
       ...widgetPayload,
       action: 'update-widget',
+    });
+    expect(reoWorkspace.copyHomeComponentAgentPrompt).toHaveBeenCalledWith({
+      ...homeComponentPayload,
+      action: 'update-home-component',
+    });
+    expect(reoWorkspace.copyHomeComponentAgentPrompt).toHaveBeenCalledWith({
+      action: 'create-home-component',
     });
     expect(reoWorkspace.openVoiceTranscriptionProviderConsole).toHaveBeenCalledWith();
     expect(reoWorkspace.openMarkdownExternalLink).toHaveBeenCalledWith({
@@ -358,6 +427,49 @@ describe('workspace renderer API wrapper', () => {
     expect(reoWorkspace.readAppPermissionStatus).toHaveBeenCalledWith(undefined);
   });
 
+  it('forwards home component reads to the explicit preload surface', async () => {
+    const response = {
+      ok: true,
+      value: {
+        components: [],
+        shellState: {
+          componentTabOrder: [],
+          lastActiveComponentId: 'recent-expressions',
+        },
+      },
+    };
+    reoWorkspace.readHomeComponents.mockResolvedValue(response);
+
+    await expect(readHomeComponents()).resolves.toEqual(response);
+
+    expect(reoWorkspace.readHomeComponents).toHaveBeenCalledWith(undefined);
+  });
+
+  it('forwards home component memory detail reads to the explicit preload surface', async () => {
+    const payload = {
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      requestId: 'request_home_mem_1',
+    };
+    const response = {
+      ok: true,
+      value: {
+        requestId: payload.requestId,
+        workspaceId: payload.workspaceId,
+        memoryId: payload.memoryId,
+        title: 'Memory',
+        createdAt: '2026-06-10T09:00:00.000Z',
+        updatedAt: '2026-06-10T09:01:00.000Z',
+        segments: [],
+      },
+    };
+    reoWorkspace.readHomeComponentMemoryDetail.mockResolvedValue(response);
+
+    await expect(readHomeComponentMemoryDetail(payload)).resolves.toEqual(response);
+
+    expect(reoWorkspace.readHomeComponentMemoryDetail).toHaveBeenCalledWith(payload);
+  });
+
   it('forwards app permission requests to the explicit preload surface', async () => {
     const response = {
       ok: true,
@@ -398,6 +510,21 @@ describe('workspace renderer API wrapper', () => {
             lastOpenedAt: '2026-05-08T07:48:00.000Z',
           },
         ],
+      },
+    });
+    reoWorkspace.listEntityMoveTargets.mockResolvedValue({
+      ok: true,
+      value: {
+        source: {
+          type: 'segment',
+          workspaceId: 'ws_1',
+          memoryId: 'mem_1',
+          segmentId: 'seg_1',
+          title: '录音',
+          breadcrumb: ['记忆', '产品灵感与思考'],
+        },
+        targetLevel: 'memory',
+        spaces: [],
       },
     });
     reoWorkspace.openWorkspace.mockResolvedValue({ ok: true, value: { workspaceId: 'ws_1' } });
@@ -453,9 +580,45 @@ describe('workspace renderer API wrapper', () => {
       ok: true,
       value: { widget: workspaceWidget, widgets: [workspaceWidget] },
     });
+    reoWorkspace.updateHomeComponentTitle.mockResolvedValue({
+      ok: true,
+      value: {
+        component: workspaceHomeComponent,
+        components: [workspaceHomeComponent],
+      },
+    });
+    reoWorkspace.updateHomeComponentTabOrder.mockResolvedValue({
+      ok: true,
+      value: {
+        components: [workspaceHomeComponent],
+        shellState: {
+          componentTabOrder: ['hcmp_1'],
+          lastActiveComponentId: 'hcmp_1',
+        },
+      },
+    });
+    reoWorkspace.deleteHomeComponent.mockResolvedValue({
+      ok: true,
+      value: { restoreToken: 'hcmp_1', components: [] },
+    });
+    reoWorkspace.restoreDeletedHomeComponent.mockResolvedValue({
+      ok: true,
+      value: {
+        component: workspaceHomeComponent,
+        components: [workspaceHomeComponent],
+      },
+    });
     reoWorkspace.deleteMemory.mockResolvedValue({
       ok: true,
       value: { memoryId: 'mem_1', restoreToken: 'mem_1', memories: [] },
+    });
+    reoWorkspace.moveMemory.mockResolvedValue({
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_1',
+        targetWorkspaceId: 'ws_2',
+        moved: true,
+      },
     });
     reoWorkspace.restoreDeletedMemory.mockResolvedValue({
       ok: true,
@@ -498,6 +661,14 @@ describe('workspace renderer API wrapper', () => {
         },
         segmentId: 'seg_1',
         restoreToken: 'seg_1',
+      },
+    });
+    reoWorkspace.moveSegment.mockResolvedValue({
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_1',
+        targetWorkspaceId: 'ws_2',
+        moved: true,
       },
     });
     reoWorkspace.restoreDeletedSegment.mockResolvedValue({
@@ -605,6 +776,18 @@ describe('workspace renderer API wrapper', () => {
         audio: new Uint8Array([2]),
         audioByteLength: 1,
         audioHash: 'a'.repeat(64),
+      },
+    });
+    reoWorkspace.readExpressionPlaybackAudio.mockResolvedValue({
+      ok: true,
+      value: {
+        requestId: 'request_expression_audio_1',
+        workspaceId: 'ws_1',
+        memoryId: 'mem_1',
+        segmentId: 'seg_1',
+        kind: 'audio',
+        audio: new Uint8Array([1, 2, 3]),
+        mimeType: 'audio/webm',
       },
     });
     reoWorkspace.createRecordingDraft.mockResolvedValue({
@@ -840,6 +1023,14 @@ describe('workspace renderer API wrapper', () => {
         restoreToken: 'sup_1',
       },
     });
+    reoWorkspace.moveSegmentSupplement.mockResolvedValue({
+      ok: true,
+      value: {
+        sourceWorkspaceId: 'ws_1',
+        targetWorkspaceId: 'ws_2',
+        moved: true,
+      },
+    });
     reoWorkspace.restoreDeletedSegmentSupplement.mockResolvedValue({
       ok: true,
       value: {
@@ -1043,6 +1234,13 @@ describe('workspace renderer API wrapper', () => {
       description: '',
     });
     await listMemorySpaces();
+    await listEntityMoveTargets({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
     await openWorkspace({ selectionToken: 'selection-token-2' });
     await openMemorySpace({ workspaceId: 'ws_1' });
     await removeMemorySpace({ workspaceId: 'ws_1' });
@@ -1071,13 +1269,37 @@ describe('workspace renderer API wrapper', () => {
       workspaceId: 'ws_1',
       restoreToken: 'wdg_1',
     });
+    await updateHomeComponentTitle({
+      componentId: 'hcmp_1',
+      title: '主页面板',
+    });
+    await updateHomeComponentTabOrder({
+      componentTabOrder: ['hcmp_1'],
+      lastActiveComponentId: 'hcmp_1',
+    });
+    await deleteHomeComponent({ componentId: 'hcmp_1' });
+    await restoreDeletedHomeComponent({ restoreToken: 'hcmp_1' });
     await deleteMemory({ workspaceHandle: 'wh_1', memoryId: 'mem_1' });
+    await moveMemory({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
+    });
     await restoreDeletedMemory({ workspaceHandle: 'wh_1', restoreToken: 'mem_1' });
     await deleteSegment({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
+    });
+    await moveSegment({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
     });
     await restoreDeletedSegment({
       workspaceHandle: 'wh_1',
@@ -1124,6 +1346,13 @@ describe('workspace renderer API wrapper', () => {
       requestId: 'request_sup_audio_1',
       audioByteLength: 1,
       audioHash: 'a'.repeat(64),
+    });
+    await readExpressionPlaybackAudio({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'request_expression_audio_1',
     });
     await createRecordingDraft({ workspaceHandle: 'wh_1' });
     await createSegmentSupplementRecordingDraft({
@@ -1200,6 +1429,16 @@ describe('workspace renderer API wrapper', () => {
       segmentId: 'seg_1',
       supplementId: 'sup_1',
     });
+    await moveSegmentSupplement({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
+    });
     await restoreDeletedSegmentSupplement({
       workspaceHandle: 'wh_1',
       workspaceId: 'ws_1',
@@ -1265,6 +1504,13 @@ describe('workspace renderer API wrapper', () => {
       description: '',
     });
     expect(reoWorkspace.listMemorySpaces).toHaveBeenCalledTimes(1);
+    expect(reoWorkspace.listEntityMoveTargets).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      sourceType: 'segment',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+    });
     expect(reoWorkspace.openMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.removeMemorySpace).toHaveBeenCalledWith({ workspaceId: 'ws_1' });
     expect(reoWorkspace.updateMemorySpaceTitle).toHaveBeenCalledWith({
@@ -1299,9 +1545,27 @@ describe('workspace renderer API wrapper', () => {
       workspaceId: 'ws_1',
       restoreToken: 'wdg_1',
     });
+    expect(reoWorkspace.updateHomeComponentTitle).toHaveBeenCalledWith({
+      componentId: 'hcmp_1',
+      title: '主页面板',
+    });
+    expect(reoWorkspace.updateHomeComponentTabOrder).toHaveBeenCalledWith({
+      componentTabOrder: ['hcmp_1'],
+      lastActiveComponentId: 'hcmp_1',
+    });
+    expect(reoWorkspace.deleteHomeComponent).toHaveBeenCalledWith({ componentId: 'hcmp_1' });
+    expect(reoWorkspace.restoreDeletedHomeComponent).toHaveBeenCalledWith({
+      restoreToken: 'hcmp_1',
+    });
     expect(reoWorkspace.deleteMemory).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
       memoryId: 'mem_1',
+    });
+    expect(reoWorkspace.moveMemory).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      targetWorkspaceId: 'ws_2',
     });
     expect(reoWorkspace.restoreDeletedMemory).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
@@ -1312,6 +1576,14 @@ describe('workspace renderer API wrapper', () => {
       workspaceId: 'ws_1',
       memoryId: 'mem_1',
       segmentId: 'seg_1',
+    });
+    expect(reoWorkspace.moveSegment).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
     });
     expect(reoWorkspace.restoreDeletedSegment).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
@@ -1358,6 +1630,13 @@ describe('workspace renderer API wrapper', () => {
       requestId: 'request_sup_audio_1',
       audioByteLength: 1,
       audioHash: 'a'.repeat(64),
+    });
+    expect(reoWorkspace.readExpressionPlaybackAudio).toHaveBeenCalledWith({
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      kind: 'audio',
+      requestId: 'request_expression_audio_1',
     });
     expect(reoWorkspace.createSegmentSupplementRecordingDraft).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',
@@ -1421,6 +1700,16 @@ describe('workspace renderer API wrapper', () => {
       memoryId: 'mem_1',
       segmentId: 'seg_1',
       supplementId: 'sup_1',
+    });
+    expect(reoWorkspace.moveSegmentSupplement).toHaveBeenCalledWith({
+      workspaceHandle: 'wh_1',
+      workspaceId: 'ws_1',
+      memoryId: 'mem_1',
+      segmentId: 'seg_1',
+      supplementId: 'sup_1',
+      targetWorkspaceId: 'ws_2',
+      targetMemoryId: 'mem_2',
+      targetSegmentId: 'seg_2',
     });
     expect(reoWorkspace.restoreDeletedSegmentSupplement).toHaveBeenCalledWith({
       workspaceHandle: 'wh_1',

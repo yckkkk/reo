@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 
-type RgbTuple = readonly [number, number, number];
+export type RgbTuple = readonly [number, number, number];
 type HslTuple = readonly [number, number, number];
 
 export type CoverToneRegion = {
@@ -138,7 +138,7 @@ function contrastRatio(left: RgbTuple, right: RgbTuple): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-function deriveForeground(background: RgbTuple): CoverToneRegion {
+export function deriveCoverToneRegionFromBackground(background: RgbTuple): CoverToneRegion {
   const [hue, saturation] = rgbToHsl(background);
   const luminance = relativeLuminance(background);
   const lightText = hslToRgb(hue, clamp(saturation * 0.5, 0.06, 0.32), 0.94);
@@ -170,8 +170,8 @@ export function deriveCoverToneFromSampledRegionsForTest({
   readonly title: RgbTuple;
 }): CoverTone {
   return {
-    title: deriveForeground(title),
-    bottom: deriveForeground(bottom),
+    title: deriveCoverToneRegionFromBackground(title),
+    bottom: deriveCoverToneRegionFromBackground(bottom),
   };
 }
 
@@ -283,10 +283,10 @@ async function deriveCoverToneFromImage(source: string): Promise<CoverTone> {
 
   context.drawImage(image, sx, sy, sw, sh, 0, 0, size, size);
   return {
-    title: deriveForeground(
+    title: deriveCoverToneRegionFromBackground(
       sampleRegion(context, size, { x: 0.08, y: 0.08, width: 0.76, height: 0.34 })
     ),
-    bottom: deriveForeground(
+    bottom: deriveCoverToneRegionFromBackground(
       sampleRegion(context, size, { x: 0.08, y: 0.68, width: 0.84, height: 0.24 })
     ),
   };

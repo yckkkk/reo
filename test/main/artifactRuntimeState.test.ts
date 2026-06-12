@@ -20,6 +20,22 @@ async function workspaceRoot(): Promise<string> {
   return mkdtemp(path.join(os.tmpdir(), 'reo-artifact-runtime-'));
 }
 
+async function writeHomeComponent(rootPath: string): Promise<string> {
+  const componentId = 'hcmp_runtime';
+  const componentDirectory = path.join(rootPath, 'home-components', `${componentId}--Runtime`);
+  await mkdir(componentDirectory, { recursive: true });
+  await writeFile(
+    path.join(componentDirectory, 'component.md'),
+    '---\nid: hcmp_runtime\ntitle: Runtime\nkind: home-component\nformat: html\nmount: home\n---\n# Runtime\n'
+  );
+  await writeFile(path.join(componentDirectory, 'entry.html'), '<!doctype html><p>Runtime</p>');
+  await writeFile(
+    path.join(componentDirectory, 'state.json'),
+    '{"schemaVersion":1,"stores":{"home":{"selected":"today"}}}\n'
+  );
+  return componentDirectory;
+}
+
 async function writeArtifactSegment(rootPath: string): Promise<string> {
   const memoryId = 'mem_runtime';
   const segmentId = 'seg_runtime';
@@ -201,6 +217,44 @@ test('artifact runtime state reads state.json and rejects stale baseline writes'
     schemaVersion: 1,
     stores: { todos: { items: ['external'] } },
   });
+});
+
+test('artifact runtime state supports app-level home component targets', async () => {
+  const rootPath = await workspaceRoot();
+  const componentDirectory = await writeHomeComponent(rootPath);
+  const target = {
+    targetType: 'home-component' as const,
+    componentId: 'hcmp_runtime',
+  };
+
+  const firstRead = await readArtifactRuntimeState({ rootPath, target });
+  assert.equal(firstRead.ok, true);
+  if (!firstRead.ok) {
+    return;
+  }
+  assert.deepEqual(firstRead.value.state, {
+    schemaVersion: 1,
+    stores: { home: { selected: 'today' } },
+  });
+
+  const saved = await writeArtifactRuntimeState({
+    rootPath,
+    target,
+    baselineVersion: firstRead.value.version,
+    state: { schemaVersion: 1, stores: { home: { selected: 'tomorrow' } } },
+  });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) {
+    return;
+  }
+  assert.equal(saved.value.status, 'saved');
+  assert.deepEqual(
+    JSON.parse(await readFile(path.join(componentDirectory, 'state.json'), 'utf8')),
+    {
+      schemaVersion: 1,
+      stores: { home: { selected: 'tomorrow' } },
+    }
+  );
 });
 
 test('artifact runtime state rejects writes that exceed the readable state size limit', async () => {

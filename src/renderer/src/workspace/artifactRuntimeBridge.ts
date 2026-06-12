@@ -1,7 +1,10 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type {
+  WorkspaceHomeComponent,
   WorkspaceMemoryDetail,
+  WorkspaceMemorySpace,
   WorkspaceMemorySummary,
+  WorkspaceRecentExpressionItem,
   WorkspaceSession,
 } from './workspaceApi';
 
@@ -23,37 +26,53 @@ export type ArtifactRuntimeBridgeTarget =
       readonly targetType: 'widget';
       readonly workspaceId: string;
       readonly widgetId: string;
+    }
+  | {
+      readonly targetType: 'home-component';
+      readonly componentId: string;
     };
 
 type RuntimeApi = Partial<
   Pick<
     Window['reoWorkspace'],
     | 'copyArtifactAgentPrompt'
+    | 'copyHomeComponentAgentPrompt'
     | 'copyWidgetAgentPrompt'
     | 'readArtifactRuntimeState'
+    | 'readExpressionPlaybackAudio'
     | 'updateSegmentSupplementTitle'
     | 'updateSegmentTitle'
+    | 'updateHomeComponentTitle'
     | 'updateWidgetTitle'
     | 'writeArtifactRuntimeState'
   >
 >;
 
 export type ReadMemoryDetailForRuntime = (input: {
+  readonly workspaceId?: string | undefined;
   readonly memoryId: string;
 }) => Promise<WorkspaceMemoryDetail>;
 
+export type ArtifactRuntimeMemorySelectionTarget = {
+  readonly workspaceId?: string | undefined;
+  readonly memoryId: string;
+};
+
 export type ArtifactRuntimeObjectSelectionTarget =
   | {
+      readonly workspaceId?: string | undefined;
       readonly memoryId: string;
       readonly segmentId?: undefined;
       readonly supplementId?: undefined;
     }
   | {
+      readonly workspaceId?: string | undefined;
       readonly memoryId: string;
       readonly segmentId: string;
       readonly supplementId?: undefined;
     }
   | {
+      readonly workspaceId?: string | undefined;
       readonly memoryId: string;
       readonly segmentId: string;
       readonly supplementId: string;
@@ -63,15 +82,24 @@ export type ArtifactRuntimeBridgeOptions = {
   readonly api: RuntimeApi;
   readonly enabled?: boolean;
   readonly iframeRef: RefObject<HTMLIFrameElement | null>;
+  readonly homeComponent?: WorkspaceHomeComponent | null | undefined;
+  readonly homeMemorySpaces?: readonly WorkspaceMemorySpace[] | undefined;
+  readonly homeRecentExpressions?: readonly WorkspaceRecentExpressionItem[] | undefined;
   readonly memory: WorkspaceMemoryDetail | WorkspaceMemorySummary | null;
   readonly onProductMutation: (value: unknown) => void;
-  readonly readMemoryDetail: ReadMemoryDetailForRuntime;
+  readonly readMemoryDetail?: ReadMemoryDetailForRuntime | undefined;
   readonly onRequestFullscreen: () => void;
+  readonly onSelectHomeMemory?:
+    | ((target: ArtifactRuntimeMemorySelectionTarget) => boolean | Promise<boolean>)
+    | undefined;
+  readonly onSelectHomeObject?:
+    | ((target: ArtifactRuntimeObjectSelectionTarget) => boolean | Promise<boolean>)
+    | undefined;
   readonly onSelectMemory?: ((memoryId: string) => boolean) | undefined;
   readonly onSelectObject?: ((target: ArtifactRuntimeObjectSelectionTarget) => boolean) | undefined;
   readonly src: string;
   readonly target: ArtifactRuntimeBridgeTarget;
-  readonly workspaceSession: WorkspaceSession;
+  readonly workspaceSession?: WorkspaceSession | undefined;
 };
 
 type LatestBridgeOptions = Omit<ArtifactRuntimeBridgeOptions, 'enabled' | 'iframeRef' | 'src'>;
@@ -160,6 +188,7 @@ function optionalString(payload: unknown, key: string): string | undefined {
 }
 
 function objectSelectionTarget(payload: unknown): ArtifactRuntimeObjectSelectionTarget {
+  const workspaceId = optionalString(payload, 'workspaceId');
   const memoryId = requiredString(payload, 'memoryId');
   const segmentId = optionalString(payload, 'segmentId');
   const supplementId = optionalString(payload, 'supplementId');
@@ -171,14 +200,25 @@ function objectSelectionTarget(payload: unknown): ArtifactRuntimeObjectSelection
         'segmentId is required when supplementId is provided'
       );
     }
-    return { memoryId };
+    return { ...(workspaceId ? { workspaceId } : {}), memoryId };
   }
 
   if (supplementId === undefined) {
-    return { memoryId, segmentId };
+    return { ...(workspaceId ? { workspaceId } : {}), memoryId, segmentId };
   }
 
-  return { memoryId, segmentId, supplementId };
+  return { ...(workspaceId ? { workspaceId } : {}), memoryId, segmentId, supplementId };
+}
+
+function requiredPlaybackKind(payload: unknown): 'audio' | 'note-speech' {
+  const kind = requiredString(payload, 'kind');
+  if (kind !== 'audio' && kind !== 'note-speech') {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_INVALID_REQUEST',
+      'kind must be audio or note-speech'
+    );
+  }
+  return kind;
 }
 
 function requireRecord(payload: unknown, key: string): Record<string, unknown> {
@@ -192,6 +232,23 @@ function requireRecord(payload: unknown, key: string): Record<string, unknown> {
   return value;
 }
 
+function playbackAudioResult(value: unknown) {
+  if (
+    !isRecord(value) ||
+    !(value['audio'] instanceof Uint8Array) ||
+    typeof value['mimeType'] !== 'string'
+  ) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_BRIDGE_FAILED',
+      'Reo runtime media response was invalid'
+    );
+  }
+  return {
+    audio: value['audio'],
+    mimeType: value['mimeType'],
+  };
+}
+
 function runtimeTargetPayload({
   requestId,
   target,
@@ -199,8 +256,23 @@ function runtimeTargetPayload({
 }: {
   readonly requestId: string;
   readonly target: ArtifactRuntimeBridgeTarget;
-  readonly workspaceHandle: string;
+  readonly workspaceHandle?: string | undefined;
 }) {
+  if (target.targetType === 'home-component') {
+    return {
+      targetType: target.targetType,
+      componentId: target.componentId,
+      requestId,
+    };
+  }
+
+  if (!workspaceHandle) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_CONTEXT_UNAVAILABLE',
+      'Workspace context is unavailable'
+    );
+  }
+
   if (target.targetType === 'widget') {
     return {
       workspaceHandle,
@@ -223,12 +295,17 @@ function runtimeTargetPayload({
 }
 
 function currentObject({
+  homeComponent,
   memory,
   target,
 }: {
+  readonly homeComponent?: WorkspaceHomeComponent | null | undefined;
   readonly memory: WorkspaceMemoryDetail | WorkspaceMemorySummary | null;
   readonly target: ArtifactRuntimeBridgeTarget;
 }) {
+  if (target.targetType === 'home-component') {
+    return homeComponent ?? null;
+  }
   if (target.targetType === 'widget' || !memory || !('segments' in memory)) {
     return null;
   }
@@ -245,14 +322,39 @@ function currentObject({
 }
 
 function currentContext({
+  homeComponent,
+  homeMemorySpaces,
+  homeRecentExpressions,
   memory,
   target,
   workspaceSession,
 }: {
+  readonly homeComponent?: WorkspaceHomeComponent | null | undefined;
+  readonly homeMemorySpaces?: readonly WorkspaceMemorySpace[] | undefined;
+  readonly homeRecentExpressions?: readonly WorkspaceRecentExpressionItem[] | undefined;
   readonly memory: WorkspaceMemoryDetail | WorkspaceMemorySummary | null;
   readonly target: ArtifactRuntimeBridgeTarget;
-  readonly workspaceSession: WorkspaceSession;
+  readonly workspaceSession?: WorkspaceSession | undefined;
 }) {
+  if (target.targetType === 'home-component') {
+    return {
+      workspace: workspaceSession?.snapshot ?? null,
+      memorySpaces: homeMemorySpaces ?? [],
+      recentExpressions: homeRecentExpressions ?? [],
+      memory: null,
+      target,
+      currentMemory: null,
+      currentObject: homeComponent ?? null,
+    };
+  }
+
+  if (!workspaceSession) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_CONTEXT_UNAVAILABLE',
+      'Workspace context is unavailable'
+    );
+  }
+
   if (target.targetType === 'widget') {
     return {
       workspace: workspaceSession.snapshot,
@@ -286,6 +388,16 @@ function missingApi(method: string): never {
     'ERR_REO_RUNTIME_API_UNAVAILABLE',
     `${method} is unavailable`
   );
+}
+
+function requireWorkspaceSession(workspaceSession: WorkspaceSession | undefined): WorkspaceSession {
+  if (!workspaceSession) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_CONTEXT_UNAVAILABLE',
+      'Workspace context is unavailable'
+    );
+  }
+  return workspaceSession;
 }
 
 async function assertObjectSelectionTargetNavigable({
@@ -335,6 +447,42 @@ async function assertObjectSelectionTargetNavigable({
   }
 }
 
+async function assertHomeObjectSelectionTargetNavigable({
+  readMemoryDetail,
+  selectionTarget,
+}: {
+  readonly readMemoryDetail: ReadMemoryDetailForRuntime;
+  readonly selectionTarget: ArtifactRuntimeObjectSelectionTarget;
+}) {
+  const detail = await readMemoryDetail({
+    workspaceId: selectionTarget.workspaceId,
+    memoryId: selectionTarget.memoryId,
+  });
+  if (selectionTarget.segmentId === undefined) {
+    return;
+  }
+  const segment = detail.segments.find(
+    (candidate) => candidate.segmentId === selectionTarget.segmentId
+  );
+  if (!segment) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
+      'Runtime selection target was not found'
+    );
+  }
+  if (
+    selectionTarget.supplementId !== undefined &&
+    !segment.supplements.some(
+      (candidate) => candidate.supplementId === selectionTarget.supplementId
+    )
+  ) {
+    throw new ArtifactRuntimeBridgeError(
+      'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
+      'Runtime selection target was not found'
+    );
+  }
+}
+
 function bridgeErrorFromUnknown(error: unknown) {
   if (error instanceof ArtifactRuntimeBridgeError) {
     return { code: error.code, message: error.message };
@@ -368,9 +516,14 @@ async function handleRuntimeRequest(
   request: RuntimeRequest,
   {
     api,
+    homeComponent,
+    homeMemorySpaces,
+    homeRecentExpressions,
     memory,
     onProductMutation,
     onRequestFullscreen,
+    onSelectHomeMemory,
+    onSelectHomeObject,
     onSelectObject,
     onSelectMemory,
     readMemoryDetail,
@@ -381,7 +534,7 @@ async function handleRuntimeRequest(
   const baseTarget = runtimeTargetPayload({
     requestId: request.requestId,
     target,
-    workspaceHandle: workspaceSession.workspaceHandle,
+    workspaceHandle: workspaceSession?.workspaceHandle,
   });
 
   if (request.method === 'state.read') {
@@ -405,10 +558,26 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'workspace.read') {
-    return currentContext({ memory, target, workspaceSession });
+    return currentContext({
+      homeComponent,
+      homeMemorySpaces,
+      homeRecentExpressions,
+      memory,
+      target,
+      workspaceSession,
+    });
   }
 
   if (request.method === 'content.readMemoryDetail') {
+    if (target.targetType === 'home-component') {
+      const requestedMemoryId = requiredString(request.payload, 'memoryId');
+      return (
+        readMemoryDetail?.({
+          workspaceId: optionalString(request.payload, 'workspaceId'),
+          memoryId: requestedMemoryId,
+        }) ?? missingApi(request.method)
+      );
+    }
     if (target.targetType === 'widget') {
       const requestedMemoryId = requiredString(request.payload, 'memoryId');
       return readMemoryDetail?.({ memoryId: requestedMemoryId }) ?? missingApi(request.method);
@@ -427,12 +596,16 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'content.readCurrentObject') {
+    const session =
+      target.targetType === 'widget' ? requireWorkspaceSession(workspaceSession) : undefined;
     const object =
-      target.targetType === 'widget'
-        ? (workspaceSession.snapshot.widgets?.find(
-            (candidate) => candidate.widgetId === target.widgetId
-          ) ?? null)
-        : currentObject({ memory, target });
+      target.targetType === 'home-component'
+        ? (homeComponent ?? null)
+        : target.targetType === 'widget'
+          ? (session?.snapshot.widgets?.find(
+              (candidate) => candidate.widgetId === target.widgetId
+            ) ?? null)
+          : currentObject({ homeComponent, memory, target });
     if (!object) {
       throw new ArtifactRuntimeBridgeError(
         'ERR_REO_RUNTIME_OBJECT_NOT_FOUND',
@@ -442,12 +615,52 @@ async function handleRuntimeRequest(
     return object;
   }
 
+  if (request.method === 'media.readPlaybackAudio') {
+    const memoryId = requiredString(request.payload, 'memoryId');
+    const segmentId = requiredString(request.payload, 'segmentId');
+    const supplementId = optionalString(request.payload, 'supplementId');
+    const kind = requiredPlaybackKind(request.payload);
+    const workspaceId =
+      target.targetType === 'home-component'
+        ? (optionalString(request.payload, 'workspaceId') ?? workspaceSession?.workspaceId)
+        : requireWorkspaceSession(workspaceSession).workspaceId;
+    if (!workspaceId) {
+      throw new ArtifactRuntimeBridgeError(
+        'ERR_REO_RUNTIME_CONTEXT_UNAVAILABLE',
+        'Workspace context is unavailable'
+      );
+    }
+    const value = await unwrapResult(
+      await (api.readExpressionPlaybackAudio?.({
+        requestId: request.requestId,
+        workspaceId,
+        memoryId,
+        segmentId,
+        ...(supplementId ? { supplementId } : {}),
+        kind,
+      } as Parameters<Window['reoWorkspace']['readExpressionPlaybackAudio']>[0]) ??
+        missingApi(request.method))
+    );
+    return playbackAudioResult(value);
+  }
+
   if (request.method === 'mutations.updateTitle') {
     const title = requiredString(request.payload, 'title');
+    if (target.targetType === 'home-component') {
+      return unwrapMutationResult(
+        await (api.updateHomeComponentTitle?.({
+          componentId: target.componentId,
+          title,
+        } as Parameters<Window['reoWorkspace']['updateHomeComponentTitle']>[0]) ??
+          missingApi(request.method)),
+        onProductMutation
+      );
+    }
+    const session = requireWorkspaceSession(workspaceSession);
     if (target.targetType === 'widget') {
       return unwrapMutationResult(
         await (api.updateWidgetTitle?.({
-          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceHandle: session.workspaceHandle,
           workspaceId: target.workspaceId,
           widgetId: target.widgetId,
           title,
@@ -459,7 +672,7 @@ async function handleRuntimeRequest(
     if (target.targetType === 'supplement') {
       return unwrapMutationResult(
         await (api.updateSegmentSupplementTitle?.({
-          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceHandle: session.workspaceHandle,
           workspaceId: target.workspaceId,
           memoryId: target.memoryId,
           segmentId: target.segmentId,
@@ -472,7 +685,7 @@ async function handleRuntimeRequest(
     }
     return unwrapMutationResult(
       await (api.updateSegmentTitle?.({
-        workspaceHandle: workspaceSession.workspaceHandle,
+        workspaceHandle: session.workspaceHandle,
         workspaceId: target.workspaceId,
         memoryId: target.memoryId,
         segmentId: target.segmentId,
@@ -489,6 +702,16 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'ui.selectMemory') {
+    if (target.targetType === 'home-component') {
+      if (!onSelectHomeMemory) {
+        missingApi(request.method);
+      }
+      const workspaceId = optionalString(request.payload, 'workspaceId');
+      const memoryId = requiredString(request.payload, 'memoryId');
+      return {
+        selected: await onSelectHomeMemory({ ...(workspaceId ? { workspaceId } : {}), memoryId }),
+      };
+    }
     if (target.targetType !== 'widget') {
       throw new ArtifactRuntimeBridgeError(
         'ERR_REO_RUNTIME_UNSUPPORTED_METHOD',
@@ -496,7 +719,8 @@ async function handleRuntimeRequest(
       );
     }
     const memoryId = requiredString(request.payload, 'memoryId');
-    const memoryExists = workspaceSession.snapshot.memories.some(
+    const session = requireWorkspaceSession(workspaceSession);
+    const memoryExists = session.snapshot.memories.some(
       (candidate) => candidate.memoryId === memoryId
     );
     if (!memoryExists) {
@@ -512,6 +736,20 @@ async function handleRuntimeRequest(
   }
 
   if (request.method === 'ui.selectObject') {
+    if (target.targetType === 'home-component') {
+      if (!onSelectHomeObject) {
+        missingApi(request.method);
+      }
+      const selectionTarget = objectSelectionTarget(request.payload);
+      if (!readMemoryDetail) {
+        missingApi(request.method);
+      }
+      await assertHomeObjectSelectionTargetNavigable({
+        readMemoryDetail,
+        selectionTarget,
+      });
+      return { selected: await onSelectHomeObject(selectionTarget) };
+    }
     if (target.targetType !== 'widget') {
       throw new ArtifactRuntimeBridgeError(
         'ERR_REO_RUNTIME_UNSUPPORTED_METHOD',
@@ -522,19 +760,33 @@ async function handleRuntimeRequest(
       missingApi(request.method);
     }
     const selectionTarget = objectSelectionTarget(request.payload);
+    const session = requireWorkspaceSession(workspaceSession);
+    if (!readMemoryDetail) {
+      missingApi(request.method);
+    }
     await assertObjectSelectionTargetNavigable({
       readMemoryDetail,
       selectionTarget,
-      workspaceSession,
+      workspaceSession: session,
     });
     return { selected: onSelectObject(selectionTarget) };
   }
 
   if (request.method === 'agent.copyPrompt') {
+    if (target.targetType === 'home-component') {
+      return unwrapResult(
+        await (api.copyHomeComponentAgentPrompt?.({
+          action: 'update-home-component',
+          componentId: target.componentId,
+        } as Parameters<Window['reoWorkspace']['copyHomeComponentAgentPrompt']>[0]) ??
+          missingApi(request.method))
+      );
+    }
+    const session = requireWorkspaceSession(workspaceSession);
     if (target.targetType === 'widget') {
       return unwrapResult(
         await (api.copyWidgetAgentPrompt?.({
-          workspaceHandle: workspaceSession.workspaceHandle,
+          workspaceHandle: session.workspaceHandle,
           workspaceId: target.workspaceId,
           action: 'update-widget',
           widgetId: target.widgetId,
@@ -551,7 +803,7 @@ async function handleRuntimeRequest(
           : 'update-segment';
     return unwrapResult(
       await (api.copyArtifactAgentPrompt?.({
-        workspaceHandle: workspaceSession.workspaceHandle,
+        workspaceHandle: session.workspaceHandle,
         workspaceId: target.workspaceId,
         action,
         memoryId: target.memoryId,
@@ -700,9 +952,14 @@ export function createArtifactRuntimeMessageHandler(
 export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions): void {
   const latestOptionsRef = useRef<LatestBridgeOptions>({
     api: options.api,
+    homeComponent: options.homeComponent,
+    homeMemorySpaces: options.homeMemorySpaces,
+    homeRecentExpressions: options.homeRecentExpressions,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
     onSelectObject: options.onSelectObject,
+    onSelectHomeMemory: options.onSelectHomeMemory,
+    onSelectHomeObject: options.onSelectHomeObject,
     onSelectMemory: options.onSelectMemory,
     readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,
@@ -712,9 +969,14 @@ export function useArtifactRuntimeBridge(options: ArtifactRuntimeBridgeOptions):
 
   latestOptionsRef.current = {
     api: options.api,
+    homeComponent: options.homeComponent,
+    homeMemorySpaces: options.homeMemorySpaces,
+    homeRecentExpressions: options.homeRecentExpressions,
     memory: options.memory,
     onProductMutation: options.onProductMutation,
     onSelectObject: options.onSelectObject,
+    onSelectHomeMemory: options.onSelectHomeMemory,
+    onSelectHomeObject: options.onSelectHomeObject,
     onSelectMemory: options.onSelectMemory,
     readMemoryDetail: options.readMemoryDetail,
     onRequestFullscreen: options.onRequestFullscreen,

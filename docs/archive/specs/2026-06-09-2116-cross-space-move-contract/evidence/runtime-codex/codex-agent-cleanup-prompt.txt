@@ -1,0 +1,18 @@
+You are acting as an external Reo workspace agent using real local Codex auth.
+
+Allowed roots:
+- Draft memory space: $DRAFT_ROOT
+- Test memory space: $TEST_ROOT
+
+Do not ask questions. Do not inspect, edit, move, or clean any .reo directory. Do not run test suites.
+
+Run id: 20260609221232
+
+Move this remaining Draft Segment as a whole same-level directory:
+source:
+$DRAFT_ROOT/memories/mem_system_draft--草稿/segments/seg_cross_space_codex_supp_source_20260609221232--Codex Supplement Source 20260609221232
+
+target parent:
+$TEST_ROOT/memories/mem_codex_dogfood_17800058--Codex Dogfood Memory 17800058/segments
+
+After moving, print a compact report confirming the source no longer exists, the target exists, and segment.md still has id: seg_cross_space_codex_supp_source_20260609221232. Also state that you did not touch .reo.

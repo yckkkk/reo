@@ -5,8 +5,11 @@ Validation answers whether this bundle can run in Reo.
 ## Required checks
 
 - `entry.html`, `runtime.json` and `state.json` exist.
+- `segment.md` exists for work Segments; `supplement.md` exists for work Supplements.
+- `widget.md` exists for `widgets/<widget-directory>/`; `component.md` exists for `home-components/<component-directory>/`.
 - `runtime.json` and `state.json` parse as JSON.
 - `entry.html` is a complete HTML document with useful visible content.
+- If `runtime.json.theme.tokens` is `reo-semantic-v1`, `entry.html` includes the full Reo semantic token block rather than a shortened hand-written subset.
 - Local files are under `assets/` and referenced by relative URLs.
 - No `file://`, absolute local path, symlink, `.reo/` dependency or editor temp file is required.
 - If `entry.html` uses `window.reo`, it also loads `reo-render://vendor/reo-render/bridge.js`.

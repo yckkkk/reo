@@ -6,6 +6,12 @@ Reo 是一个 agent-native 的本地记忆空间。人类、Codex 和其他 agen
 
 这个入口的目标是降低判断成本，不是限制能力。Agent 可以编辑任何文件；一般任务应优先读写用户语义文件，复杂一致性由 Reo 在打开、刷新、保存时收敛。
 
+## Reo 任务优先级
+
+- 创建或更新作品、Widget、主页组件的短提示是直接执行任务：本文件和根目录 `skills/reo-*` 已经给出范围、落点、合同和验证方式。
+- 这类任务不要先进入通用 brainstorming、product-design、test-driven-development、practical-ui、visual companion、浏览器截图或仓库级源码搜索；除非当前用户提示明确要求，否则不要让这些流程阻塞文件创建。
+- 如果 Reo prompt 已提供 app-level `home components root`，主页组件必须写入该绝对目录；运行 scaffold、validate 和 inspect 时从包含 `home-components/` 的 app data root 执行，或使用提供的绝对目标路径。不要把 app-level 组件补丁套到当前记忆空间根目录。
+
 ## 普通任务默认路径
 
 - 普通任务默认在 `memories/` 下改用户语义文件和目录。
@@ -16,7 +22,9 @@ Reo 是一个 agent-native 的本地记忆空间。人类、Codex 和其他 agen
 - 封面生成、替换、默认模板切换、恢复默认或验证任务先读 `skills/reo-cover-image/SKILL.md`；需要审美判断时再读 `skills/reo-cover-aesthetic/SKILL.md`。
 - 创建或更新作品片段、作品补充时先读 `skills/reo-works/SKILL.md` 与 `skills/reo-works/references/`；作品运行时 bundle、模板、状态和验证由 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/` 承担。
 - 创建或更新右侧栏 Widget 时使用 `widgets/` 下的 Widget 目录；先读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`。
+- 创建或更新主页组件时，若提示提供 app-level `home components root`，以该绝对目录为真源；否则才使用当前根目录的 `home-components/` 组件目录；先读 `skills/reo-generative-runtime/SKILL.md`、`skills/reo-generative-runtime/references/` 和 `skills/reo-generative-runtime/scripts/`。
 - 创建或更新作品时，用户未指定风格默认按 `skills/reo-works-design/SKILL.md` 和 `skills/reo-works-design/references/` 的 Reo 视觉变量和参考模块；用户明确指定风格时仍用该 skill 对齐布局、交互和 runtime 边界。slider/缩放/切换驱动图表的可交互作品参考该 skill 的 `references/explorables.md` 与 `examples/` 反应式范例。
+- 短提示创建作品、Widget 或主页组件时，选择最合理默认落点，写入 Markdown 合同和 runtime bundle，运行 `validate-runtime.mjs` 与 `inspect-runtime.mjs`；通过后停止，不继续打磨、截图、跑浏览器或搜索仓库源码，除非用户在当前提示里明确要求。
 - 不要为了普通内容任务推理 hash、sidecar、manifest、index 或 lock；先完成用户可见的文件改动。
 - 验证直接文件效果后停止；Reo 会在打开、刷新或保存时收敛可确定的技术镜像。
 
@@ -33,6 +41,7 @@ Reo 是一个 agent-native 的本地记忆空间。人类、Codex 和其他 agen
 - Segment：Memory 内的正文片段，可以是 note、audio 或作品。
 - SegmentSupplement：挂在某个 Segment 下的补充内容。
 - Widget：`widgets/` 下挂载到右侧 rail 的独立小工具，不属于某个 Memory、Segment 或 Supplement。
+- HomeComponent：`home-components/` 下挂载到首页组件 rail 的独立组件，不属于某个 Memory、Segment 或 Supplement。
 - `.reo/`：Reo 的技术完整性层，保存 Reo 入口、索引、manifest、草稿、回收站、lock 和恢复信息。
 - `skills/`：给 agent 使用的工作流技能，不是用户语义内容本身；Reo 只托管下方列出的官方同名 skill，用户自带 skills 使用其它名称时不会被 Reo 修改。
 
@@ -46,6 +55,7 @@ Reo 是一个 agent-native 的本地记忆空间。人类、Codex 和其他 agen
 - `content.tiptap.json` 是同一正文的富结构载体，由 Reo 与编辑器维护。
 - 作品对象使用 `kind: artifact`、`format: html`；运行时 bundle 是同目录 `entry.html`、`runtime.json`、`state.json` 和 `assets/`。
 - 右侧栏 Widget 使用 `widgets/<widget-directory>/widget.md`，frontmatter 必须包含 `id`、`title`、`kind: widget`、`format: html`、`mount: workspace-rail`；运行时 bundle 是同目录 `entry.html`、`runtime.json`、`state.json` 和 `assets/`。
+- 主页组件使用 `home-components/<component-directory>/component.md`，frontmatter 必须包含 `id`、`title`、`kind: home-component`、`format: html`、`mount: home`；运行时 bundle 是同目录 `entry.html`、`runtime.json`、`state.json` 和 `assets/`。
 - 普通 `.json`、`.html` 或未被对象合同识别的文件不会自动成为 Reo 对象。
 - 目录 basename 是用户可见名称的一部分；对象身份由稳定 id 承载。
 

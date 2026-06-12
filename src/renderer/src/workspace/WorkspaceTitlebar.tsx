@@ -53,6 +53,7 @@ type WorkspaceTitlebarProps = {
   readonly onCreateWidget: () => void;
   readonly onDeleteMemory: (memory: WorkspaceTitlebarMemory) => void;
   readonly onDeleteWidget: (widget: WorkspaceTitlebarWidget) => void;
+  readonly onMoveMemory?: ((memory: WorkspaceTitlebarMemory) => void) | undefined;
   readonly onRenameMemory: (memory: WorkspaceTitlebarMemory) => void;
   readonly onRenameWidget: (widget: WorkspaceTitlebarWidget) => void;
   readonly onRequestWidgetRefresh: (widget: WorkspaceTitlebarWidget) => void;
@@ -79,6 +80,7 @@ export function WorkspaceTitlebar({
   onCreateWidget,
   onDeleteMemory,
   onDeleteWidget,
+  onMoveMemory,
   onRenameMemory,
   onRenameWidget,
   onRequestWidgetRefresh,
@@ -97,6 +99,7 @@ export function WorkspaceTitlebar({
 }: WorkspaceTitlebarProps) {
   const ToggleIcon = memoryRailOpen ? PanelRightClose : PanelRightOpen;
   const toggleLabel = memoryRailOpen ? '折叠记忆列表' : '展开记忆列表';
+  const currentMemoryCanMove = currentMemory?.capabilities?.canDelete !== false;
 
   return (
     <div
@@ -146,6 +149,11 @@ export function WorkspaceTitlebar({
                     cover={currentMemory.cover}
                     memoryTitle={currentMemory.title}
                     onDelete={() => onDeleteMemory(currentMemory)}
+                    onMove={
+                      onMoveMemory && currentMemoryCanMove
+                        ? () => onMoveMemory(currentMemory)
+                        : undefined
+                    }
                     onRename={() => onRenameMemory(currentMemory)}
                     onResetCover={() => onResetMemoryCover(currentMemory)}
                     onSwitchDefaultCover={() => onSwitchMemoryDefaultCover(currentMemory)}

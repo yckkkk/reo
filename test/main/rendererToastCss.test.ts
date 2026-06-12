@@ -27,6 +27,64 @@ function cssRuleBodiesContaining(selector: string): string[] {
   ).map((match) => match.groups?.['body'] ?? '');
 }
 
+test('renderer statically imports Sonner layout CSS for production CSP', () => {
+  assert.match(rendererCss, /@import\s+['"]sonner\/dist\/styles\.css['"];/);
+});
+
+test('renderer statically defines SpeedDial mechanics CSS for production CSP', () => {
+  const rootRule = cssRuleBody("[data-slot='floating-action-button-speed-dial-root']");
+  const listRule = cssRuleBody(
+    "[data-slot='floating-action-button-speed-dial-root'] .p-speeddial-list"
+  );
+  const itemRule = cssRuleBody(
+    "[data-slot='floating-action-button-speed-dial-root'] .p-speeddial-item"
+  );
+  const openedItemRule = cssRuleBody(
+    "[data-slot='floating-action-button-speed-dial-root'].p-speeddial-opened .p-speeddial-item"
+  );
+
+  assert.match(rootRule, /position:\s*absolute/);
+  assert.match(rootRule, /display:\s*flex/);
+  assert.match(listRule, /display:\s*flex/);
+  assert.match(listRule, /pointer-events:\s*none/);
+  assert.match(itemRule, /position:\s*absolute/);
+  assert.match(itemRule, /transform:\s*scale\(0\)/);
+  assert.match(openedItemRule, /transform:\s*scale\(1\)/);
+});
+
+test('renderer statically defines Vaul drawer mechanics CSS for production CSP', () => {
+  const drawerRule = cssRuleBody('[data-vaul-drawer]');
+  const bottomOpenRule = cssRuleBody(
+    "[data-vaul-drawer][data-vaul-snap-points='false'][data-vaul-drawer-direction='bottom'][data-state='open']"
+  );
+  const overlayRule = cssRuleBody("[data-vaul-overlay][data-vaul-snap-points='false']");
+
+  assert.match(drawerRule, /touch-action:\s*none/);
+  assert.match(drawerRule, /will-change:\s*transform/);
+  assert.match(bottomOpenRule, /animation-name:\s*vaul-slide-from-bottom/);
+  assert.match(overlayRule, /animation-duration:\s*0\.5s/);
+  assert.match(rendererCss, /@keyframes\s+vaul-slide-from-bottom/);
+});
+
+test('renderer statically defines ProseMirror core CSS for production CSP', () => {
+  const proseMirrorRule = cssRuleBody('.ProseMirror');
+  const gapCursorRule = cssRuleBody('.ProseMirror-gapcursor');
+
+  assert.match(proseMirrorRule, /position:\s*relative/);
+  assert.match(proseMirrorRule, /white-space:\s*break-spaces/);
+  assert.match(gapCursorRule, /pointer-events:\s*none/);
+  assert.match(rendererCss, /@keyframes\s+ProseMirror-cursor-blink/);
+});
+
+test('LightweightMarkdownEditorSurface disables Tiptap runtime CSS injection', () => {
+  const source = readFileSync(
+    'src/renderer/src/workspace/LightweightMarkdownEditorSurface.tsx',
+    'utf8'
+  );
+
+  assert.match(source, /injectCSS:\s*false/);
+});
+
 test('toast interactive controls keep Reo colour transitions instead of Sonner opacity', () => {
   const controlsRule = cssRuleBodyContaining('[data-sonner-toast] [data-button]');
 

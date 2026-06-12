@@ -98,11 +98,23 @@
     content: {
       readMemoryDetail: function (options) {
         return call('content.readMemoryDetail', {
+          workspaceId: options && options.workspaceId,
           memoryId: options && options.memoryId,
         });
       },
       readCurrentObject: function () {
         return call('content.readCurrentObject');
+      },
+    },
+    media: {
+      readPlaybackAudio: function (input) {
+        return call('media.readPlaybackAudio', {
+          workspaceId: input && input.workspaceId,
+          memoryId: input && input.memoryId,
+          segmentId: input && input.segmentId,
+          supplementId: input && input.supplementId,
+          kind: input && input.kind,
+        });
       },
     },
     mutations: {
@@ -116,11 +128,13 @@
       },
       selectMemory: function (input) {
         return call('ui.selectMemory', {
+          workspaceId: input && input.workspaceId,
           memoryId: input && input.memoryId,
         });
       },
       selectObject: function (input) {
         return call('ui.selectObject', {
+          workspaceId: input && input.workspaceId,
           memoryId: input && input.memoryId,
           segmentId: input && input.segmentId,
           supplementId: input && input.supplementId,

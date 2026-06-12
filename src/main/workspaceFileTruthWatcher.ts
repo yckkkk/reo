@@ -1,6 +1,9 @@
 import path from 'node:path';
 import chokidar from 'chokidar';
-import type { WorkspaceFileTruthChangedEvent } from '../workspace-contract/workspace-contract.js';
+import type {
+  WorkspaceFileTruthChangedEvent,
+  WorkspaceHomeComponentsChangedEvent,
+} from '../workspace-contract/workspace-contract.js';
 
 type WorkspaceFileWatcher = {
   readonly on: (
@@ -17,15 +20,29 @@ type WatchWorkspaceOptions = {
   readonly workspaceId: string;
 };
 
+type WatchHomeComponentsOptions = {
+  readonly appDataRootPath: string;
+  readonly sendEvent: (event: WorkspaceHomeComponentsChangedEvent) => void;
+};
+
 type WatcherEntry = {
   readonly close: () => Promise<void>;
+};
+
+type HomeComponentsWatcherEntry = WatcherEntry & {
+  readonly appDataRootPath: string;
+  readonly updateSendEvent: (
+    sendEvent: (event: WorkspaceHomeComponentsChangedEvent) => void
+  ) => void;
 };
 
 type TimerId = unknown;
 
 export type WorkspaceFileTruthWatcherRegistry = {
   readonly closeAll: () => Promise<void>;
+  readonly closeHomeComponents: () => Promise<void>;
   readonly closeWorkspace: (workspaceHandle: string) => Promise<void>;
+  readonly watchHomeComponents: (options: WatchHomeComponentsOptions) => void;
   readonly watchWorkspace: (options: WatchWorkspaceOptions) => void;
 };
 
@@ -38,6 +55,7 @@ export type CreateWorkspaceFileTruthWatcherRegistryOptions = {
 };
 
 const DEFAULT_SETTLEMENT_DELAY_MS = 120;
+const HOME_COMPONENTS_WATCHER_KEY = 'app:home-components';
 const IGNORED_REO_TECHNICAL_CHILDREN = new Set([
   'locks',
   'tmp',
@@ -114,6 +132,44 @@ export function isIgnoredWorkspaceFileEventPath(rootPath: string, changedPath: s
   return false;
 }
 
+export function isIgnoredHomeComponentFileEventPath(
+  appDataRootPath: string,
+  changedPath: string
+): boolean {
+  const relativePath = normalizeWatchedRelativePath(appDataRootPath, changedPath);
+  if (relativePath === null) {
+    return true;
+  }
+  if (relativePath === '') {
+    return false;
+  }
+  const parts = relativePath.split('/');
+  const basename = parts.at(-1) ?? '';
+  if (
+    basename === '.DS_Store' ||
+    basename.endsWith('~') ||
+    basename.endsWith('.swp') ||
+    basename.endsWith('.part') ||
+    basename.endsWith('.tmp') ||
+    basename.endsWith('.lock')
+  ) {
+    return true;
+  }
+  if (parts.includes('node_modules') || parts.includes('.git')) {
+    return true;
+  }
+  if (relativePath === 'home-components.json') {
+    return false;
+  }
+  if (parts[0] !== 'home-components') {
+    return true;
+  }
+  if (parts.at(-1) === 'state.json') {
+    return true;
+  }
+  return false;
+}
+
 export function createWorkspaceFileTruthWatcherRegistry({
   clearTimer = (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
   onWatcherError = (diagnostic) => {
@@ -135,6 +191,15 @@ export function createWorkspaceFileTruthWatcherRegistry({
     await entry.close();
   }
 
+  async function closeHomeComponents(): Promise<void> {
+    const entry = entries.get(HOME_COMPONENTS_WATCHER_KEY);
+    if (!entry) {
+      return;
+    }
+    entries.delete(HOME_COMPONENTS_WATCHER_KEY);
+    await entry.close();
+  }
+
   return {
     async closeAll() {
       await Promise.all(
@@ -142,7 +207,92 @@ export function createWorkspaceFileTruthWatcherRegistry({
       );
     },
 
+    closeHomeComponents,
+
     closeWorkspace,
+
+    watchHomeComponents({ appDataRootPath, sendEvent }) {
+      const existingEntry = entries.get(HOME_COMPONENTS_WATCHER_KEY) as
+        | HomeComponentsWatcherEntry
+        | undefined;
+      if (existingEntry?.appDataRootPath === appDataRootPath) {
+        existingEntry.updateSendEvent(sendEvent);
+        return;
+      }
+
+      void closeHomeComponents();
+
+      let disposed = false;
+      let timer: TimerId | null = null;
+      let currentSendEvent = sendEvent;
+      const watcher = watch(appDataRootPath, {
+        awaitWriteFinish: {
+          pollInterval: 25,
+          stabilityThreshold: settlementDelayMs,
+        },
+        followSymlinks: false,
+        ignoreInitial: true,
+        ignored: (changedPath: string) =>
+          isIgnoredHomeComponentFileEventPath(appDataRootPath, changedPath),
+      });
+
+      function clearPendingTimer() {
+        if (timer !== null) {
+          clearTimer(timer);
+          timer = null;
+        }
+      }
+
+      function scheduleChangedEvent() {
+        if (disposed) {
+          return;
+        }
+        clearPendingTimer();
+        timer = setTimer(() => {
+          timer = null;
+          if (disposed) {
+            return;
+          }
+          currentSendEvent({
+            kind: 'changed',
+            reason: 'file-system',
+            sequence: ++nextSequence,
+          });
+        }, settlementDelayMs);
+      }
+
+      watcher.on('all', (_eventName, changedPath) => {
+        if (typeof changedPath !== 'string') {
+          scheduleChangedEvent();
+          return;
+        }
+        if (!isIgnoredHomeComponentFileEventPath(appDataRootPath, changedPath)) {
+          scheduleChangedEvent();
+        }
+      });
+      watcher.on('error', (error) => {
+        const maybeError = error as { readonly code?: unknown; readonly name?: unknown };
+        onWatcherError({
+          code: typeof maybeError.code === 'string' ? maybeError.code : null,
+          name: typeof maybeError.name === 'string' ? maybeError.name : 'Error',
+          workspaceHandle: 'app',
+          workspaceId: 'home-components',
+        });
+      });
+
+      const watcherEntry: HomeComponentsWatcherEntry = {
+        appDataRootPath,
+        close: async () => {
+          disposed = true;
+          clearPendingTimer();
+          await watcher.close();
+        },
+        updateSendEvent(nextSendEvent) {
+          currentSendEvent = nextSendEvent;
+        },
+      };
+      entries.set(HOME_COMPONENTS_WATCHER_KEY, watcherEntry);
+    },
 
     watchWorkspace({ rootPath, sendEvent, workspaceHandle, workspaceId }) {
       void closeWorkspace(workspaceHandle);

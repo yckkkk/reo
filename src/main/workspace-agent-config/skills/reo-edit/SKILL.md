@@ -38,10 +38,15 @@ Do not read Reo repo source, global agent memories, `.reo`, hash fields, manifes
 | Rename Memory | Rename the Memory directory basename and update `memory.md` title/frontmatter. |
 | Rename Segment | Rename the Segment directory basename and update `segment.md` title/frontmatter. |
 | Rename Supplement | Rename the Supplement directory basename and update `supplement.md` title/frontmatter. |
-| Move Segment | Move the whole Segment directory under another Memory `segments/` directory. |
-| Move Supplement | Move the whole Supplement directory under another Segment `supplements/` directory. |
+| Move Memory | Move the whole Memory directory under another Reo memory space `memories/` directory. |
+| Move Segment | Move the whole Segment directory under another Memory `segments/` directory, in the same Reo memory space or another one. |
+| Move Supplement | Move the whole Supplement directory under another Segment `supplements/` directory, in the same Reo memory space or another one. |
 
 Keep stable ids in directory prefixes and Markdown frontmatter when they already exist. For a new Segment, generate an id matching `seg_YYYYMMDDHHMMSS_8hex`; for a new Supplement, generate an id matching `sup_YYYYMMDDHHMMSS_8hex`. Use the same id as the directory prefix and Markdown frontmatter id.
+
+Moves are same-level and whole-directory only. Do not move a Segment into a Supplement, split a Supplement away from its files, or copy only selected attachments, sidecars, audio, runtime files, `state.json`, or child supplements. Reo treats the target directory position as ownership truth when that target memory space is opened or refreshed, and repairs the target `.reo` mirrors and index there. Reo does not clean source `.reo` mirrors; those are technical residue for Reo repair/doctor paths.
+
+The system Draft memory space can be a move source or target for user content. Do not move or delete the protected default Draft Memory itself, but Segments and supplements inside it can move out, and user-created Memories inside Draft can move as whole Memory directories.
 
 ## Minimal Shapes
 

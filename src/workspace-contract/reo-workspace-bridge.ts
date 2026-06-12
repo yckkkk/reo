@@ -6,6 +6,8 @@ import type {
   WorkspaceCloseRequest,
   WorkspaceCloseResponse,
   WorkspaceCopyArtifactAgentPromptRequest,
+  WorkspaceCopyHomeComponentAbsolutePathRequest,
+  WorkspaceCopyHomeComponentAgentPromptRequest,
   WorkspaceCopyWidgetAbsolutePathRequest,
   WorkspaceCopyWidgetAgentPromptRequest,
   WorkspaceCopyWidgetRelativePathRequest,
@@ -19,6 +21,8 @@ import type {
   WorkspaceCopySegmentSupplementRelativePathRequest,
   WorkspaceCreateMemoryRequest,
   WorkspaceCreateMemoryResponse,
+  WorkspaceDeleteHomeComponentRequest,
+  WorkspaceDeleteHomeComponentResponse,
   WorkspaceCreateNoteSegmentDraftRequest,
   WorkspaceCreateNoteSegmentDraftResponse,
   WorkspaceDeleteWidgetRequest,
@@ -46,12 +50,21 @@ import type {
   WorkspaceInitializeResponse,
   WorkspaceEntityActionResponse,
   WorkspaceListMemorySpacesResponse,
+  WorkspaceListEntityMoveTargetsRequest,
+  WorkspaceListEntityMoveTargetsResponse,
   WorkspaceMemorySpaceIdRequest,
   WorkspaceMicrophoneIntentRequest,
   WorkspaceMicrophoneIntentResponse,
+  WorkspaceMoveMemoryRequest,
+  WorkspaceMoveMemoryResponse,
+  WorkspaceMoveSegmentRequest,
+  WorkspaceMoveSegmentResponse,
+  WorkspaceMoveSegmentSupplementRequest,
+  WorkspaceMoveSegmentSupplementResponse,
   WorkspaceOpenMarkdownExternalLinkRequest,
   WorkspaceOpenMarkdownExternalLinkResponse,
   WorkspaceOpenVoiceTranscriptionProviderConsoleResponse,
+  WorkspaceOpenHomeComponentDocumentRequest,
   WorkspaceOpenWidgetDocumentRequest,
   WorkspaceOpenMemoryDocumentRequest,
   WorkspaceOpenMemorySpaceAgentsFileRequest,
@@ -85,6 +98,12 @@ import type {
   WorkspaceReadFinalizedAudioSegmentSupplementResponse,
   WorkspaceReadMemoryDetailRequest,
   WorkspaceReadMemoryDetailResponse,
+  WorkspaceReadExpressionPlaybackAudioRequest,
+  WorkspaceReadExpressionPlaybackAudioResponse,
+  WorkspaceReadHomeComponentsRequest,
+  WorkspaceReadHomeComponentsResponse,
+  WorkspaceReadHomeComponentMemoryDetailRequest,
+  WorkspaceReadHomeComponentMemoryDetailResponse,
   WorkspaceReadRecentExpressionsRequest,
   WorkspaceReadRecentExpressionsResponse,
   WorkspaceReadAppPermissionStatusRequest,
@@ -100,6 +119,8 @@ import type {
   WorkspaceResetMemoryCoverResponse,
   WorkspaceResetSegmentCoverRequest,
   WorkspaceResetSegmentCoverResponse,
+  WorkspaceRestoreDeletedHomeComponentRequest,
+  WorkspaceRestoreDeletedHomeComponentResponse,
   WorkspaceRestoreDeletedWidgetRequest,
   WorkspaceRestoreDeletedWidgetResponse,
   WorkspaceRestoreDeletedMemoryRequest,
@@ -130,7 +151,9 @@ import type {
   WorkspaceRecordingTranscriptionControlResponse,
   WorkspaceRecordingTranscriptionEvent,
   WorkspaceFileTruthChangedEvent,
+  WorkspaceHomeComponentsChangedEvent,
   WorkspaceRecordingTranscriptionStartRequest,
+  WorkspaceRevealHomeComponentInFinderRequest,
   WorkspaceRevealWidgetInFinderRequest,
   WorkspaceRevealMemoryInFinderRequest,
   WorkspaceRevealMemorySpaceInFinderRequest,
@@ -160,6 +183,10 @@ import type {
   WorkspaceSetVoiceSpeechSynthesisSpeakerResponse,
   WorkspaceSetVoiceTranscriptionEnabledRequest,
   WorkspaceSetVoiceTranscriptionEnabledResponse,
+  WorkspaceUpdateHomeComponentTabOrderRequest,
+  WorkspaceUpdateHomeComponentTabOrderResponse,
+  WorkspaceUpdateHomeComponentTitleRequest,
+  WorkspaceUpdateHomeComponentTitleResponse,
   WorkspaceUpdateWidgetTabOrderRequest,
   WorkspaceUpdateWidgetTabOrderResponse,
   WorkspaceUpdateWidgetTitleRequest,
@@ -193,11 +220,23 @@ import type {
 export interface ReoWorkspaceBridge {
   readonly chooseDirectory: () => Promise<WorkspaceChooseDirectoryResponse>;
   readonly listMemorySpaces: () => Promise<WorkspaceListMemorySpacesResponse>;
+  readonly listEntityMoveTargets: (
+    payload: WorkspaceListEntityMoveTargetsRequest
+  ) => Promise<WorkspaceListEntityMoveTargetsResponse>;
   readonly readSystemDraftWorkspace: () => Promise<WorkspaceReadSystemDraftWorkspaceResponse>;
   readonly openSystemDraftWorkspace: () => Promise<WorkspaceOpenSystemDraftWorkspaceResponse>;
   readonly readRecentExpressions: (
     payload: WorkspaceReadRecentExpressionsRequest
   ) => Promise<WorkspaceReadRecentExpressionsResponse>;
+  readonly readHomeComponents: (
+    payload?: WorkspaceReadHomeComponentsRequest
+  ) => Promise<WorkspaceReadHomeComponentsResponse>;
+  readonly readHomeComponentMemoryDetail: (
+    payload: WorkspaceReadHomeComponentMemoryDetailRequest
+  ) => Promise<WorkspaceReadHomeComponentMemoryDetailResponse>;
+  readonly readExpressionPlaybackAudio: (
+    payload: WorkspaceReadExpressionPlaybackAudioRequest
+  ) => Promise<WorkspaceReadExpressionPlaybackAudioResponse>;
   readonly initializeWorkspace: (
     payload: WorkspaceInitializeRequest
   ) => Promise<WorkspaceInitializeResponse>;
@@ -223,6 +262,9 @@ export interface ReoWorkspaceBridge {
   readonly revealWidgetInFinder: (
     payload: WorkspaceRevealWidgetInFinderRequest
   ) => Promise<WorkspaceEntityActionResponse>;
+  readonly revealHomeComponentInFinder: (
+    payload: WorkspaceRevealHomeComponentInFinderRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
   readonly openMemorySpaceAgentsFile: (
     payload: WorkspaceOpenMemorySpaceAgentsFileRequest
   ) => Promise<WorkspaceEntityActionResponse>;
@@ -238,6 +280,9 @@ export interface ReoWorkspaceBridge {
   readonly openWidgetDocument: (
     payload: WorkspaceOpenWidgetDocumentRequest
   ) => Promise<WorkspaceEntityActionResponse>;
+  readonly openHomeComponentDocument: (
+    payload: WorkspaceOpenHomeComponentDocumentRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyMemorySpaceAbsolutePath: (
     payload: WorkspaceCopyMemorySpaceAbsolutePathRequest
   ) => Promise<WorkspaceEntityActionResponse>;
@@ -252,6 +297,9 @@ export interface ReoWorkspaceBridge {
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyWidgetAbsolutePath: (
     payload: WorkspaceCopyWidgetAbsolutePathRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyHomeComponentAbsolutePath: (
+    payload: WorkspaceCopyHomeComponentAbsolutePathRequest
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyMemoryRelativePath: (
     payload: WorkspaceCopyMemoryRelativePathRequest
@@ -270,6 +318,9 @@ export interface ReoWorkspaceBridge {
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly copyWidgetAgentPrompt: (
     payload: WorkspaceCopyWidgetAgentPromptRequest
+  ) => Promise<WorkspaceEntityActionResponse>;
+  readonly copyHomeComponentAgentPrompt: (
+    payload: WorkspaceCopyHomeComponentAgentPromptRequest
   ) => Promise<WorkspaceEntityActionResponse>;
   readonly readArtifactRuntimeState: (
     payload: WorkspaceReadArtifactRuntimeStateRequest
@@ -290,6 +341,9 @@ export interface ReoWorkspaceBridge {
   readonly createMemory: (
     payload: WorkspaceCreateMemoryRequest
   ) => Promise<WorkspaceCreateMemoryResponse>;
+  readonly moveMemory: (
+    payload: WorkspaceMoveMemoryRequest
+  ) => Promise<WorkspaceMoveMemoryResponse>;
   readonly deleteMemory: (
     payload: WorkspaceDeleteMemoryRequest
   ) => Promise<WorkspaceDeleteMemoryResponse>;
@@ -317,12 +371,18 @@ export interface ReoWorkspaceBridge {
   readonly deleteSegment: (
     payload: WorkspaceDeleteSegmentRequest
   ) => Promise<WorkspaceDeleteSegmentResponse>;
+  readonly moveSegment: (
+    payload: WorkspaceMoveSegmentRequest
+  ) => Promise<WorkspaceMoveSegmentResponse>;
   readonly restoreDeletedSegment: (
     payload: WorkspaceRestoreDeletedSegmentRequest
   ) => Promise<WorkspaceRestoreDeletedSegmentResponse>;
   readonly deleteSegmentSupplement: (
     payload: WorkspaceDeleteSegmentSupplementRequest
   ) => Promise<WorkspaceDeleteSegmentSupplementResponse>;
+  readonly moveSegmentSupplement: (
+    payload: WorkspaceMoveSegmentSupplementRequest
+  ) => Promise<WorkspaceMoveSegmentSupplementResponse>;
   readonly restoreDeletedSegmentSupplement: (
     payload: WorkspaceRestoreDeletedSegmentSupplementRequest
   ) => Promise<WorkspaceRestoreDeletedSegmentSupplementResponse>;
@@ -332,6 +392,18 @@ export interface ReoWorkspaceBridge {
   readonly restoreDeletedWidget: (
     payload: WorkspaceRestoreDeletedWidgetRequest
   ) => Promise<WorkspaceRestoreDeletedWidgetResponse>;
+  readonly updateHomeComponentTitle: (
+    payload: WorkspaceUpdateHomeComponentTitleRequest
+  ) => Promise<WorkspaceUpdateHomeComponentTitleResponse>;
+  readonly updateHomeComponentTabOrder: (
+    payload: WorkspaceUpdateHomeComponentTabOrderRequest
+  ) => Promise<WorkspaceUpdateHomeComponentTabOrderResponse>;
+  readonly deleteHomeComponent: (
+    payload: WorkspaceDeleteHomeComponentRequest
+  ) => Promise<WorkspaceDeleteHomeComponentResponse>;
+  readonly restoreDeletedHomeComponent: (
+    payload: WorkspaceRestoreDeletedHomeComponentRequest
+  ) => Promise<WorkspaceRestoreDeletedHomeComponentResponse>;
   readonly readMemoryDetail: (
     payload: WorkspaceReadMemoryDetailRequest
   ) => Promise<WorkspaceReadMemoryDetailResponse>;
@@ -518,5 +590,8 @@ export interface ReoWorkspaceBridge {
   ) => () => void;
   readonly onFileTruthChanged: (
     callback: (event: WorkspaceFileTruthChangedEvent) => void
+  ) => () => void;
+  readonly onHomeComponentsChanged: (
+    callback: (event: WorkspaceHomeComponentsChangedEvent) => void
   ) => () => void;
 }

@@ -489,6 +489,7 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
   return {
     chooseDirectory: () => ok({ status: 'canceled' as const }),
     listMemorySpaces: () => ok({ memorySpaces: [scenario.memorySpace] }),
+    listEntityMoveTargets: () => unsupported(),
     readSystemDraftWorkspace: () => ok({ draft: scenario.draft }),
     openSystemDraftWorkspace: () =>
       ok({
@@ -556,6 +557,7 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     readWorkspaceSnapshot: () => ok(scenario.session.snapshot),
     createMemory: () => unsupported(),
     deleteMemory: () => unsupported(),
+    moveMemory: () => unsupported(),
     restoreDeletedMemory: () => unsupported(),
     deleteWidget: () => unsupported(),
     restoreDeletedWidget: () => unsupported(),
@@ -566,8 +568,10 @@ function createDevWorkspaceScenarioBridge(scenario: MemoryStudioRichScenario): R
     restoreSegmentCover: () => unsupported(),
     switchSegmentDefaultCover: () => unsupported(),
     deleteSegment: () => unsupported(),
+    moveSegment: () => unsupported(),
     restoreDeletedSegment: () => unsupported(),
     deleteSegmentSupplement: () => unsupported(),
+    moveSegmentSupplement: () => unsupported(),
     restoreDeletedSegmentSupplement: () => unsupported(),
     readMemoryDetail: (payload: Parameters<ReoWorkspaceBridge['readMemoryDetail']>[0]) =>
       ok({ requestId: payload.requestId, detail: scenario.detail }),
