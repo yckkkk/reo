@@ -3,7 +3,7 @@
 
 .reo-lightweight-markdown-editor-surface {
   --reo-editor-content-padding-x: 1.25rem;
-  --reo-editor-content-padding-y: 1rem;
+  --reo-editor-content-padding-y: 0.75rem;
   --tt-theme-text: var(--tt-gray-light-900);
   color: var(--foreground);
 
@@ -76,6 +76,29 @@
   color: var(--muted-foreground);
   font-size: var(--text-body);
   line-height: 1.6;
+}
+
+.reo-lightweight-markdown-editor-title {
+  display: block;
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.2;
+  outline: none;
+
+  &::placeholder {
+    color: var(--muted-foreground);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
 }
 
 .tiptap.ProseMirror.reo-lightweight-markdown-editor.simple-editor {

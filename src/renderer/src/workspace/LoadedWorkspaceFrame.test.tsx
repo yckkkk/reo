@@ -896,7 +896,6 @@ function renderLoadedWorkspaceFrame({
   readonly onStartSegmentSupplementNote?: (target: {
     readonly memoryId: string;
     readonly segmentId: string;
-    readonly title: string;
   }) => void;
   readonly onStartRecording?: () => void;
   readonly onStartSegmentSupplementRecording?: (target: {
@@ -4779,7 +4778,6 @@ describe('LoadedWorkspaceFrame', () => {
     expect(onStartSegmentSupplementNote).toHaveBeenCalledWith({
       memoryId: 'mem_birthday',
       segmentId: 'seg_birthday_voice',
-      title: '补充笔记1',
     });
 
     await user.click(within(content).getByRole('button', { name: '添加片段补充内容' }));

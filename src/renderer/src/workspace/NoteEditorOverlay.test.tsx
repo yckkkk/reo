@@ -130,7 +130,7 @@ describe('NoteEditorOverlay', () => {
     const titlebarTitle = screen.getByTestId('note-editor-titlebar-title');
     expect(titlebarTitle).toHaveStyle({ left: '116px', top: '2px' });
     expect(titlebarTitle).toHaveClass('h-32', 'text-body', 'font-regular', 'leading-body');
-    expect(within(titlebarTitle).getByRole('heading', { name: '正文' })).toBeInTheDocument();
+    expect(within(titlebarTitle).getByRole('heading', { name: '笔记' })).toBeInTheDocument();
 
     const titlebarActions = screen.getByTestId('note-editor-titlebar-actions');
     expect(titlebarActions).toHaveStyle({ right: '12px', top: '0px' });
@@ -156,7 +156,6 @@ describe('NoteEditorOverlay', () => {
         kind: 'segment-supplement',
         memoryId: 'mem_1',
         segmentId: 'seg_1',
-        title: '补充笔记1',
       },
     });
 
@@ -167,7 +166,8 @@ describe('NoteEditorOverlay', () => {
     expect(editor).toHaveClass('simple-editor', 'reo-lightweight-markdown-editor', 'ProseMirror');
     await waitFor(() => expect(editor).toHaveFocus());
     expect(screen.getByTestId('note-editor-text-surface')).not.toHaveClass('border', 'border-ring');
-    expect(screen.getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记1');
+    expect(screen.getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记');
+    expect(screen.getByRole('textbox', { name: '笔记标题' })).toHaveValue('未命名补充笔记');
   });
 
   it('exposes the Simple Editor toolbar without draft-only attachment upload', async () => {
@@ -177,7 +177,6 @@ describe('NoteEditorOverlay', () => {
       target: {
         kind: 'segment',
         memoryId: 'memory_1',
-        title: '新笔记',
       },
     });
 
@@ -213,18 +212,30 @@ describe('NoteEditorOverlay', () => {
       target: {
         kind: 'segment',
         memoryId: 'memory_1',
-        title: '新笔记',
       },
     });
 
     await user.type(screen.getByRole('textbox', { name: '笔记正文' }), 'Codex highlight');
+    expect(screen.getByRole('textbox', { name: '笔记标题' })).toHaveValue('Codex highlight');
     await user.click(screen.getByRole('button', { name: '保存笔记' }));
 
+    await waitFor(() => expect(bridge.createNoteSegmentDraft).toHaveBeenCalled());
+    expect(bridge.createNoteSegmentDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Codex highlight',
+      })
+    );
     await waitFor(() => expect(bridge.writeNoteSegmentDraftBody).toHaveBeenCalled());
     expect(bridge.writeNoteSegmentDraftBody).toHaveBeenCalledWith(
       expect.objectContaining({
+        title: 'Codex highlight',
         bodyMarkdown: expect.stringContaining('Codex highlight'),
         bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
+      })
+    );
+    expect(bridge.finalizeNoteSegmentDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Codex highlight',
       })
     );
     expect(onNoteSegmentFinalized).toHaveBeenCalledOnce();

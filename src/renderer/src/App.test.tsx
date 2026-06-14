@@ -1152,7 +1152,7 @@ describe('App', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_note_1',
       type: 'note',
-      title: '笔记1',
+      title: 'Cake plan',
       createdAt: '2026-05-06T13:09:00.000Z',
       updatedAt: supplement ? '2026-05-06T13:11:00.000Z' : '2026-05-06T13:09:00.000Z',
       bodyByteLength: 12,
@@ -1222,7 +1222,7 @@ describe('App', () => {
         memoryId: payload.memoryId,
         segmentId: payload.segmentId,
         type: 'note',
-        title: '笔记1',
+        title: 'Cake plan',
         speechSynthesis: missingNoteSpeechSynthesis(),
         ...getContent(),
       },
@@ -2160,7 +2160,7 @@ describe('App', () => {
       memoryId: 'mem_system_draft',
       segmentId: 'seg_home_recent_note',
       type: 'note' as const,
-      title: '笔记1',
+      title: 'Cake plan',
       createdAt: '2026-06-06T22:15:00.000Z',
       updatedAt: '2026-06-06T22:15:00.000Z',
       bodyByteLength: 18,
@@ -11045,7 +11045,7 @@ describe('App', () => {
           workspaceId: 'ws_1',
           memoryId: 'mem_note_target',
           segmentId: 'seg_note_1',
-          title: '笔记1',
+          title: '空空间笔记',
         })
       )
     );
@@ -11053,13 +11053,14 @@ describe('App', () => {
       expect.objectContaining({
         workspaceHandle: 'workspace-handle-1',
         memoryId: 'mem_note_target',
-        title: '笔记1',
+        title: '空空间笔记',
       })
     );
     expect(reoWorkspace.writeNoteSegmentDraftBody).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceHandle: 'workspace-handle-1',
         segmentId: 'seg_note_1',
+        title: '空空间笔记',
         bodyMarkdown: '空空间笔记',
       })
     );
@@ -14514,7 +14515,7 @@ describe('App', () => {
       memoryId: 'mem_birthday',
       segmentId: 'seg_note_1',
       type: 'note' as const,
-      title: '笔记1',
+      title: 'Cake plan',
       createdAt: '2026-04-12T09:15:00.000Z',
       updatedAt: '2026-04-12T09:15:00.000Z',
       bodyByteLength: 31,
@@ -14569,7 +14570,8 @@ describe('App', () => {
     const dialog = await screen.findByRole('dialog', { name: '笔记' });
     const noteBody = within(dialog).getByLabelText('笔记正文');
     expect(within(dialog).getByTestId('note-editor-surface-stage')).toBeInTheDocument();
-    expect(within(dialog).getByRole('heading', { name: '正文' })).toBeInTheDocument();
+    expect(within(dialog).getByTestId('note-editor-titlebar-title')).toHaveTextContent('笔记');
+    expect(within(dialog).getByRole('textbox', { name: '笔记标题' })).toHaveValue('未命名笔记');
     expect(within(dialog).queryByRole('heading', { name: '笔记1' })).toBeNull();
     expect(noteBody).toHaveClass('reo-lightweight-markdown-editor');
     expect(within(dialog).queryByRole('button', { name: '插入图片' })).toBeNull();
@@ -14587,7 +14589,7 @@ describe('App', () => {
           workspaceId: 'ws_1',
           memoryId: 'mem_birthday',
           segmentId: 'seg_note_1',
-          title: '笔记1',
+          title: 'Cake plan',
         })
       )
     );
@@ -14595,6 +14597,7 @@ describe('App', () => {
       expect.objectContaining({
         workspaceHandle: 'workspace-handle-1',
         segmentId: 'seg_note_1',
+        title: 'Cake plan',
         bodyMarkdown: '## Cake plan\n\n- Buy candles',
         bodyTiptapJson: expect.objectContaining({ type: 'doc' }),
         revision: 0,
@@ -14602,7 +14605,7 @@ describe('App', () => {
     );
     expect(screen.getByRole('region', { name: '表达入口', hidden: true })).toBeInTheDocument();
     await settleClosingDialog('笔记');
-    expect(await screen.findByRole('button', { name: '选择片段 笔记1' })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: '选择片段 Cake plan' })).toHaveAttribute(
       'aria-current',
       'true'
     );
@@ -14912,7 +14915,7 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: '创建' }));
     await screen.findByText('Old note');
     const editor = await openInlineNoteEditor(user);
-    expect(within(editor).queryByText('笔记1')).toBeNull();
+    expect(within(editor).getByText('笔记1')).toBeInTheDocument();
     const body = within(editor).getByLabelText('笔记正文');
     await replaceRichEditorMarkdown(body, 'Updated note\n\n- Keep candles');
     expect(within(editor).queryByText('Raw Markdown')).toBeNull();
@@ -16264,7 +16267,7 @@ describe('App', () => {
       segmentId: 'seg_birthday_voice',
       supplementId: 'sup_birthday_note',
       type: 'note' as const,
-      title: '补充笔记1',
+      title: 'Supplement note',
       createdAt: '2026-04-12T09:15:00.000Z',
       updatedAt: '2026-04-12T09:15:00.000Z',
       bodyByteLength: 26,
@@ -16336,7 +16339,7 @@ describe('App', () => {
         segmentId: payload.segmentId,
         supplementId: payload.supplementId,
         type: 'note',
-        title: '补充笔记1',
+        title: 'Supplement note',
         bodyMarkdown: 'Supplement note',
         bodyTiptapJson: noteTiptapDoc('Supplement note'),
         bodyByteLength: 15,
@@ -16368,17 +16371,18 @@ describe('App', () => {
     await findTitlebarMemoryControl('My seventh birthday');
     await user.click(await screen.findByRole('button', { name: '添加片段补充内容' }));
     await user.click(await screen.findByRole('menuitem', { name: '笔记补充' }));
-    const dialog = await screen.findByRole('dialog', { name: '笔记' });
-    expect(within(dialog).getByRole('heading', { name: '补充笔记1' })).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '补充笔记' });
+    expect(within(dialog).getByTestId('note-editor-titlebar-title')).toHaveTextContent('补充笔记');
+    expect(within(dialog).getByRole('textbox', { name: '笔记标题' })).toHaveValue('未命名补充笔记');
     await replaceRichEditorMarkdown(within(dialog).getByLabelText('笔记正文'), 'Supplement note');
     await user.click(within(dialog).getByRole('button', { name: '保存笔记' }));
-    await settleClosingDialog('笔记');
+    await settleClosingDialog('补充笔记');
 
-    const noteSupplementTab = await screen.findByRole('tab', { name: '补充笔记1' });
+    const noteSupplementTab = await screen.findByRole('tab', { name: 'Supplement note' });
     expect(noteSupplementTab).toHaveAttribute('data-supplement-type', 'note');
     await user.click(noteSupplementTab);
-    expect(await screen.findByText('Supplement note')).toBeInTheDocument();
-    const editor = await openInlineSupplementNoteEditor(user);
+    expect((await screen.findAllByText('Supplement note')).length).toBeGreaterThan(0);
+    const editor = await openInlineSupplementNoteEditor(user, 'Supplement note');
     const body = within(editor).getByLabelText('补充笔记正文');
     await replaceRichEditorMarkdown(body, 'Edited supplement note');
 

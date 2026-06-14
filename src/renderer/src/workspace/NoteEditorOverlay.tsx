@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkspaceTiptapJsonContent } from '../../../workspace-contract/workspace-contract';
+import { WORKSPACE_TITLE_MAX_LENGTH } from '../../../workspace-contract/workspace-title';
 import { Button } from '@/components/ui/button';
 import {
   createNoteSegmentDraft,
@@ -16,9 +17,15 @@ import { ImmersiveWorkspaceSurface } from './ImmersiveWorkspaceSurface';
 import { ImmersiveWorkspaceTitlebar } from './ImmersiveWorkspaceTitlebar';
 import {
   LightweightMarkdownEditorSurface,
+  LightweightMarkdownEditorTitleRow,
   type LightweightMarkdownEditorHandle,
 } from './LightweightMarkdownEditorSurface';
-import { noteEditorDisplayTitle, targetIdentity, type NoteEditorTarget } from './noteEditorModel';
+import {
+  deriveNoteTitleFromMarkdown,
+  noteEditorDisplayTitle,
+  targetIdentity,
+  type NoteEditorTarget,
+} from './noteEditorModel';
 import { WorkspaceDangerConfirmDialog } from './WorkspaceDangerConfirmDialog';
 import { unknownErrorDisplayMessage, workspaceErrorDisplayMessage } from './workspaceErrorMessages';
 
@@ -61,6 +68,8 @@ export function NoteEditorOverlay({
   const [bodyTiptapJson, setBodyTiptapJson] = useState<WorkspaceTiptapJsonContent | null>(null);
   const [draft, setDraft] = useState<NoteDraftState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
   const [initialBodyMarkdown, setInitialBodyMarkdown] = useState('');
   const [initialBodyTiptapJsonKey, setInitialBodyTiptapJsonKey] = useState(
     noteDraftBodyTiptapJsonKey(null)
@@ -70,17 +79,29 @@ export function NoteEditorOverlay({
   const editorHandleRef = useRef<LightweightMarkdownEditorHandle | null>(null);
   const activeTargetIdentity = useMemo(() => targetIdentity(target), [target]);
   const displayTitle = noteEditorDisplayTitle(target);
+  const fallbackTitle = target?.kind === 'segment-supplement' ? '未命名补充笔记' : '未命名笔记';
+  const autoTitle = useMemo(
+    () => deriveNoteTitleFromMarkdown(bodyMarkdown, fallbackTitle),
+    [bodyMarkdown, fallbackTitle]
+  );
+  const resolvedTitle = titleManuallyEdited ? titleDraft.trim() || autoTitle : autoTitle;
   const bodyPlaceholder = target?.kind === 'segment-supplement' ? '写下补充笔记...' : '写下正文...';
   const bodyTiptapJsonKey = useMemo(
     () => noteDraftBodyTiptapJsonKey(bodyTiptapJson),
     [bodyTiptapJson]
   );
+  const titleDirty =
+    titleManuallyEdited && titleDraft.trim().length > 0 && titleDraft.trim() !== fallbackTitle;
   const dirty =
-    bodyMarkdown !== initialBodyMarkdown || bodyTiptapJsonKey !== initialBodyTiptapJsonKey;
+    titleDirty ||
+    bodyMarkdown !== initialBodyMarkdown ||
+    bodyTiptapJsonKey !== initialBodyTiptapJsonKey;
 
   useEffect(() => {
     setBodyMarkdown('');
     setBodyTiptapJson(null);
+    setTitleDraft('');
+    setTitleManuallyEdited(false);
     setInitialBodyMarkdown('');
     setInitialBodyTiptapJsonKey(noteDraftBodyTiptapJsonKey(null));
     setDraft(null);
@@ -126,6 +147,7 @@ export function NoteEditorOverlay({
       setErrorMessage(null);
 
       let activeDraft = draft;
+      const noteTitle = resolvedTitle;
 
       if (!activeDraft) {
         if (target.kind === 'segment') {
@@ -133,7 +155,7 @@ export function NoteEditorOverlay({
             workspaceHandle: workspaceSession.workspaceHandle,
             workspaceId: workspaceSession.workspaceId,
             memoryId: target.memoryId,
-            title: target.title,
+            title: noteTitle,
           });
           if (!createResponse.ok) {
             setErrorMessage(
@@ -154,7 +176,7 @@ export function NoteEditorOverlay({
             workspaceId: workspaceSession.workspaceId,
             memoryId: target.memoryId,
             segmentId: target.segmentId,
-            title: target.title,
+            title: noteTitle,
           });
           if (!createResponse.ok) {
             setErrorMessage(
@@ -176,6 +198,7 @@ export function NoteEditorOverlay({
         const writeResponse = await writeNoteSegmentDraftBody({
           workspaceHandle: workspaceSession.workspaceHandle,
           segmentId: activeDraft.segmentId,
+          title: noteTitle,
           bodyMarkdown,
           ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
           revision: activeDraft.revision,
@@ -195,7 +218,7 @@ export function NoteEditorOverlay({
           workspaceId: workspaceSession.workspaceId,
           memoryId: target.memoryId,
           segmentId: activeDraft.segmentId,
-          title: target.title,
+          title: noteTitle,
         });
         if (!finalizeResponse.ok) {
           setErrorMessage(
@@ -216,6 +239,7 @@ export function NoteEditorOverlay({
         const writeResponse = await writeSegmentSupplementNoteDraftBody({
           workspaceHandle: workspaceSession.workspaceHandle,
           supplementId: activeDraft.supplementId,
+          title: noteTitle,
           bodyMarkdown,
           ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
           revision: activeDraft.revision,
@@ -238,7 +262,7 @@ export function NoteEditorOverlay({
           memoryId: target.memoryId,
           segmentId: target.segmentId,
           supplementId: activeDraft.supplementId,
-          title: target.title,
+          title: noteTitle,
         });
         if (!finalizeResponse.ok) {
           setErrorMessage(
@@ -267,7 +291,7 @@ export function NoteEditorOverlay({
       immersive
       onOpenChange={handleImmersiveWorkspaceSurfaceOpenChange}
       open={open}
-      title="笔记"
+      title={displayTitle}
       {...(onExitAnimationEnd ? { onExitAnimationEnd } : {})}
     >
       <ImmersiveWorkspaceTitlebar
@@ -301,6 +325,26 @@ export function NoteEditorOverlay({
           editorLabel="笔记正文"
           editorHandleRef={editorHandleRef}
           headerLabel="Markdown 笔记"
+          leadingContent={
+            <LightweightMarkdownEditorTitleRow>
+              <label htmlFor="note-editor-title" className="sr-only">
+                笔记标题
+              </label>
+              <input
+                id="note-editor-title"
+                aria-label="笔记标题"
+                className="reo-lightweight-markdown-editor-title"
+                disabled={pending}
+                maxLength={WORKSPACE_TITLE_MAX_LENGTH}
+                onChange={(event) => {
+                  setTitleManuallyEdited(true);
+                  setTitleDraft(event.target.value);
+                }}
+                placeholder={fallbackTitle}
+                value={titleManuallyEdited ? titleDraft : autoTitle}
+              />
+            </LightweightMarkdownEditorTitleRow>
+          }
           onChange={setBodyMarkdown}
           onRichChange={({ markdown, tiptapJson }) => {
             setBodyMarkdown(markdown);
@@ -323,7 +367,7 @@ export function NoteEditorOverlay({
       </section>
       <WorkspaceDangerConfirmDialog
         confirmLabel="放弃"
-        description="未保存的笔记正文会被丢弃。"
+        description="未保存的笔记会被丢弃。"
         disabled={pending}
         modalLayer="immersive"
         onConfirm={() => {

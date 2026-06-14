@@ -8087,6 +8087,7 @@ function handleWriteNoteSegmentDraftBodyCore(
         const result = await writeNoteSegmentDraftBody({
           rootPath: handle.canonicalRoot,
           segmentId: request.segmentId,
+          ...(request.title ? { title: request.title } : {}),
           bodyMarkdown: request.bodyMarkdown,
           ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
@@ -8118,6 +8119,7 @@ function handleWriteSegmentSupplementNoteDraftBodyCore(
         const result = await writeSegmentSupplementNoteDraftBody({
           rootPath: handle.canonicalRoot,
           supplementId: request.supplementId,
+          ...(request.title ? { title: request.title } : {}),
           bodyMarkdown: request.bodyMarkdown,
           ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
@@ -11188,6 +11190,7 @@ export function registerWorkspaceIpc({
         const result = await writeNoteSegmentDraftBody({
           rootPath: handle.canonicalRoot,
           segmentId: request.segmentId,
+          ...(request.title ? { title: request.title } : {}),
           bodyMarkdown: request.bodyMarkdown,
           ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,
@@ -11212,6 +11215,7 @@ export function registerWorkspaceIpc({
         const result = await writeSegmentSupplementNoteDraftBody({
           rootPath: handle.canonicalRoot,
           supplementId: request.supplementId,
+          ...(request.title ? { title: request.title } : {}),
           bodyMarkdown: request.bodyMarkdown,
           ...(request.bodyTiptapJson ? { bodyTiptapJson: request.bodyTiptapJson } : {}),
           revision: request.revision,

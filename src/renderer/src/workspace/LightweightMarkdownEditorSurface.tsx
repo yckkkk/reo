@@ -16,6 +16,7 @@ import {
   type ClipboardEventHandler,
   type DragEventHandler,
   type Ref,
+  type ReactNode,
 } from 'react';
 import { ImageUploadNode } from '@/components/tiptap-node/image-upload-node/image-upload-node-extension';
 import { HorizontalRule } from '@/components/tiptap-node/horizontal-rule-node/horizontal-rule-node-extension';
@@ -90,6 +91,7 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly editorLabel: string;
   readonly editorTargetKey?: string;
   readonly headerLabel: string;
+  readonly leadingContent?: ReactNode;
   readonly notice?: string | null;
   readonly onAttachmentUpload?: AttachmentUploadHandler;
   readonly onChange: (value: string) => void;
@@ -110,6 +112,14 @@ export type LightweightMarkdownEditorSurfaceProps = {
   readonly value: string;
   readonly valueTiptapJson?: JSONContent | undefined;
 };
+
+export function LightweightMarkdownEditorTitleRow({ children }: { readonly children: ReactNode }) {
+  return (
+    <div className="px-20 py-8">
+      <div className="mx-auto w-full max-w-[608px] border-b border-secondary pb-8">{children}</div>
+    </div>
+  );
+}
 
 type LightweightMarkdownEditorSurfaceContentProps = LightweightMarkdownEditorSurfaceProps & {
   readonly resolvedAttachmentContextKey: string;
@@ -194,6 +204,7 @@ function LightweightMarkdownEditorSurfaceContent({
   editorId,
   editorLabel,
   headerLabel,
+  leadingContent,
   notice = null,
   onAttachmentUpload,
   onChange,
@@ -672,6 +683,7 @@ function LightweightMarkdownEditorSurfaceContent({
               {visibleNotice}
             </p>
           ) : null}
+          {leadingContent}
           <Label htmlFor={editorId} className="sr-only">
             {editorLabel}
           </Label>

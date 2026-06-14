@@ -249,6 +249,59 @@ test('note segment draft writes markdown body and finalizes as durable note file
   assert.equal(segmentMarkdown.content, '# Draft note\n\nA note body.\n');
 });
 
+test('note segment draft body write updates the draft title used by finalization', async () => {
+  const rootPath = await workspaceRoot();
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_note',
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+
+  const draft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    title: 'Initial draft title',
+    createSegmentId: () => 'seg_note_title_sync',
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+
+  const write = await writeNoteSegmentDraftBody({
+    rootPath,
+    segmentId: 'seg_note_title_sync',
+    title: 'Title from editor',
+    bodyMarkdown: 'The body decides the note title.\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+
+  const finalized = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_note_title_sync',
+    title: 'Title from editor',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(finalized.ok, true, JSON.stringify(finalized));
+
+  const segmentDirectory = await memorySegmentDirectory(
+    rootPath,
+    'mem_note',
+    'seg_note_title_sync'
+  );
+  assert.equal(path.basename(segmentDirectory), 'seg_note_title_sync--Title from editor');
+  const segmentMarkdown = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(segmentDirectory, 'segment.md'), 'utf8'),
+    objectType: 'segment',
+  });
+  assert.equal(segmentMarkdown.data.title, 'Title from editor');
+  assert.equal(segmentMarkdown.content, 'The body decides the note title.\n');
+});
+
 test('finalized note segment content remains readable after content tab order is persisted', async () => {
   const rootPath = await workspaceRoot();
   const createdMemory = await createMemoryFromFileTruth({
@@ -383,6 +436,89 @@ test('note supplement draft finalizes under an existing segment with note body b
     supplementId: 'sup_note',
   });
   assert.equal(path.basename(supplementDirectory), 'sup_note--Final supplement');
+});
+
+test('note supplement draft body write updates the draft title used by finalization', async () => {
+  const rootPath = await workspaceRoot();
+  const createdMemory = await createMemoryFromFileTruth({
+    rootPath,
+    memoryId: 'mem_note',
+    title: 'Note memory',
+    now: () => '2026-05-19T12:41:00.000Z',
+  });
+  assert.equal(createdMemory.ok, true);
+  const parentDraft = await createNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    title: 'Parent note',
+    createSegmentId: () => 'seg_parent_title_sync',
+    now: () => '2026-05-19T12:42:00.000Z',
+  });
+  assert.equal(parentDraft.ok, true);
+  const parent = await finalizeNoteSegmentDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_parent_title_sync',
+    title: 'Parent note',
+    now: () => '2026-05-19T12:43:00.000Z',
+  });
+  assert.equal(parent.ok, true);
+
+  const draft = await createSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_parent_title_sync',
+    title: 'Initial supplement title',
+    createSupplementId: () => 'sup_note_title_sync',
+    now: () => '2026-05-19T12:44:00.000Z',
+  });
+  assert.equal(draft.ok, true);
+
+  const write = await writeSegmentSupplementNoteDraftBody({
+    rootPath,
+    supplementId: 'sup_note_title_sync',
+    title: 'Supplement title from editor',
+    bodyMarkdown: 'Supplement body decides the title.\n',
+    revision: 0,
+  });
+  assert.equal(write.ok, true);
+
+  const finalized = await finalizeSegmentSupplementNoteDraft({
+    rootPath,
+    workspaceId: 'ws_note',
+    memoryId: 'mem_note',
+    segmentId: 'seg_parent_title_sync',
+    supplementId: 'sup_note_title_sync',
+    title: 'Supplement title from editor',
+    now: () => '2026-05-19T12:45:00.000Z',
+  });
+  assert.equal(finalized.ok, true, JSON.stringify(finalized));
+
+  const parentDirectory = await memorySegmentDirectory(
+    rootPath,
+    'mem_note',
+    'seg_parent_title_sync'
+  );
+  const supplementDirectory = await resolveSegmentSupplementDirectoryInSegmentDirectory({
+    rootPath,
+    memoryId: 'mem_note',
+    segmentDirectory: parentDirectory,
+    segmentId: 'seg_parent_title_sync',
+    supplementId: 'sup_note_title_sync',
+  });
+  assert.equal(
+    path.basename(supplementDirectory),
+    'sup_note_title_sync--Supplement title from editor'
+  );
+  const supplementMarkdown = parseWorkspaceMarkdownObject({
+    markdown: await readFile(path.join(supplementDirectory, 'supplement.md'), 'utf8'),
+    objectType: 'supplement',
+  });
+  assert.equal(supplementMarkdown.data.title, 'Supplement title from editor');
+  assert.equal(supplementMarkdown.content, 'Supplement body decides the title.\n');
 });
 
 test('note supplement draft rejects unsafe parent segment markdown without reading through it', async () => {

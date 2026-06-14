@@ -60,6 +60,7 @@ import {
 import { EditorExpandShell } from './EditorExpandShell';
 import {
   LightweightMarkdownEditorSurface,
+  LightweightMarkdownEditorTitleRow,
   type LightweightMarkdownEditorHandle,
 } from './LightweightMarkdownEditorSurface';
 import {
@@ -154,6 +155,7 @@ import {
   artifactSegmentRuntimeUrl,
   artifactSupplementRuntimeUrl,
 } from '../../../workspace-contract/artifact-runtime-url';
+import { WORKSPACE_TITLE_MAX_LENGTH } from '../../../workspace-contract/workspace-title';
 
 type MemoryStudioProps = {
   readonly audioResourceCaches: MemoryStudioAudioResourceCaches;
@@ -273,7 +275,6 @@ export type SegmentSupplementRecordingTarget = {
 export type SegmentSupplementNoteTarget = {
   readonly memoryId: string;
   readonly segmentId: string;
-  readonly title: string;
 };
 
 export type SegmentSupplementArtifactTarget = {
@@ -2640,6 +2641,7 @@ function SegmentSupplementAudioPlayer({
   supplement,
   audioResourceCache,
   onDirtyChange,
+  onTitleSave,
   onTranscriptSaved,
   panelId,
   transcriptionBackfill,
@@ -2649,6 +2651,7 @@ function SegmentSupplementAudioPlayer({
   readonly supplement: AudioMemorySegmentSupplement;
   readonly audioResourceCache: Map<string, SegmentSupplementAudioResource>;
   readonly onDirtyChange: (dirty: boolean) => void;
+  readonly onTitleSave: (title: string) => Promise<boolean>;
   readonly onTranscriptSaved: (saved: SavedSegmentSupplementTranscriptContent) => void;
   readonly panelId: string;
   readonly transcriptionBackfill?: TranscriptionBackfillController;
@@ -2828,12 +2831,14 @@ function SegmentSupplementAudioPlayer({
           baselineTiptapContentHash={audioSupplementTranscript.baselineTiptapContentHash}
           failureCopy="无法保存补充录音转录。"
           headerLabel="Markdown 补充录音转录"
+          editorTitle={supplement.title}
           initialMarkdown={audioSupplementTranscript.text}
           initialTiptapJson={audioSupplementTranscript.tiptapJson}
           onDiskVersionAccepted={() => undefined}
           onDirtyChange={onDirtyChange}
           onSave={saveInlineSegmentSupplementTranscriptMarkdown}
           onSavedContent={onTranscriptSaved}
+          onTitleSave={onTitleSave}
           panelId={`${panelId}-transcript-editor`}
           placeholder="整理或修正补充录音转录..."
           renderAsPanel={false}
@@ -2906,6 +2911,7 @@ type InlineMarkdownContentEditorProps<TSaved> = {
   readonly baselineTiptapContentHash?: string | null;
   readonly failureCopy: string;
   readonly headerLabel: string;
+  readonly editorTitle: string;
   readonly initialMarkdown: string;
   readonly initialTiptapJson?: WorkspaceNoteSegmentContent['bodyTiptapJson'] | null;
   readonly onDiskVersionAccepted: (content: {
@@ -2922,6 +2928,7 @@ type InlineMarkdownContentEditorProps<TSaved> = {
     baselineTiptapContentHash: string | null
   ) => Promise<FinalizedNoteContentSaveResult<TSaved>>;
   readonly onSavedContent: (saved: TSaved) => void;
+  readonly onTitleSave?: (title: string) => Promise<boolean>;
   readonly panelId: string;
   readonly renderAsPanel?: boolean;
   readonly placeholder: string;
@@ -2958,12 +2965,14 @@ function InlineMarkdownContentEditor<TSaved>({
   baselineTiptapContentHash = null,
   failureCopy,
   headerLabel,
+  editorTitle,
   initialMarkdown,
   initialTiptapJson = null,
   onDiskVersionAccepted,
   onDirtyChange,
   onSave,
   onSavedContent,
+  onTitleSave,
   panelId,
   renderAsPanel = true,
   placeholder,
@@ -2992,6 +3001,8 @@ function InlineMarkdownContentEditor<TSaved>({
   const dirty = inlineMarkdownEditorIsDirty(editorState);
   const [expanded, setExpanded] = useState(false);
   const [returnConfirmOpen, setReturnConfirmOpen] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(editorTitle);
+  const [titleSaving, setTitleSaving] = useState(false);
   const imageAttachment = useMarkdownImageAttachment({
     disabled: editorState.pending,
     editorHandleRef,
@@ -3025,6 +3036,10 @@ function InlineMarkdownContentEditor<TSaved>({
     ]
   );
   const disabled = imageAttachment.pending;
+
+  useEffect(() => {
+    setTitleDraft(editorTitle);
+  }, [editorTitle]);
 
   useEffect(() => {
     if (loadedTargetKeyRef.current !== targetKey) {
@@ -3217,7 +3232,106 @@ function InlineMarkdownContentEditor<TSaved>({
     }
   }
 
+  async function commitTitle(rawTitle: string) {
+    const nextTitle = rawTitle.trim();
+    if (!onTitleSave || titleSaving) {
+      return;
+    }
+    if (!nextTitle || nextTitle === editorTitle) {
+      setTitleDraft(editorTitle);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      const saved = await onTitleSave(nextTitle);
+      setTitleDraft(saved ? nextTitle : editorTitle);
+    } finally {
+      setTitleSaving(false);
+    }
+  }
+
+  function cancelTitleEdit() {
+    setTitleDraft(editorTitle);
+  }
+
+  function handleTitleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      event.currentTarget.blur();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.currentTarget.value = editorTitle;
+      cancelTitleEdit();
+      event.currentTarget.blur();
+    }
+  }
+
   const expandedDialogLayer: WorkspaceModalLayer = expanded ? 'immersive' : 'default';
+  const editorSurface = (
+    <LightweightMarkdownEditorSurface
+      attachmentContext={attachmentContext}
+      bordered={!expanded}
+      disabled={disabled}
+      editorHandleRef={editorHandleRef}
+      headerLabel={headerLabel}
+      leadingContent={
+        <LightweightMarkdownEditorTitleRow>
+          {onTitleSave ? (
+            <>
+              <label htmlFor={`${editorId}-title`} className="sr-only">
+                标题
+              </label>
+              <input
+                id={`${editorId}-title`}
+                aria-label="标题"
+                className="reo-lightweight-markdown-editor-title truncate"
+                disabled={disabled || titleSaving}
+                maxLength={WORKSPACE_TITLE_MAX_LENGTH}
+                onBlur={(event) => void commitTitle(event.currentTarget.value)}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                value={titleDraft}
+              />
+            </>
+          ) : (
+            <div className="reo-lightweight-markdown-editor-title truncate">{editorTitle}</div>
+          )}
+        </LightweightMarkdownEditorTitleRow>
+      }
+      notice={
+        editorState.errorMessage ??
+        (editorState.diskChangeNoticeVisible ? '磁盘内容已变化。保存时将进行冲突检查。' : null)
+      }
+      onChange={(nextMarkdown) =>
+        dispatchEditorState({ type: 'markdown-changed', markdown: nextMarkdown })
+      }
+      onRichChange={({ markdown, tiptapJson, tiptapJsonKey }) =>
+        dispatchEditorState({
+          type: 'markdown-changed',
+          markdown,
+          tiptapJson,
+          tiptapJsonKey,
+        })
+      }
+      onDragOver={imageAttachment.handleDragOver}
+      onDrop={imageAttachment.handleDrop}
+      onAttachmentUpload={imageAttachment.uploadFile}
+      onPaste={imageAttachment.handlePaste}
+      placeholder={placeholder}
+      readableWidth
+      showHeaderLabel={false}
+      surfaceRef={surfaceRef}
+      surfaceTestId={surfaceTestId}
+      editorId={editorId}
+      editorLabel={editorLabel}
+      editorTargetKey={targetKey}
+      toolbarDisabled={disabled}
+      value={editorState.markdown}
+      valueTiptapJson={editorState.tiptapJson ?? undefined}
+    />
+  );
 
   return (
     <>
@@ -3231,43 +3345,7 @@ function InlineMarkdownContentEditor<TSaved>({
         renderAsPanel={renderAsPanel}
         title={title}
       >
-        <LightweightMarkdownEditorSurface
-          attachmentContext={attachmentContext}
-          bordered={!expanded}
-          disabled={disabled}
-          editorHandleRef={editorHandleRef}
-          headerLabel={headerLabel}
-          notice={
-            editorState.errorMessage ??
-            (editorState.diskChangeNoticeVisible ? '磁盘内容已变化。保存时将进行冲突检查。' : null)
-          }
-          onChange={(nextMarkdown) =>
-            dispatchEditorState({ type: 'markdown-changed', markdown: nextMarkdown })
-          }
-          onRichChange={({ markdown, tiptapJson, tiptapJsonKey }) =>
-            dispatchEditorState({
-              type: 'markdown-changed',
-              markdown,
-              tiptapJson,
-              tiptapJsonKey,
-            })
-          }
-          onDragOver={imageAttachment.handleDragOver}
-          onDrop={imageAttachment.handleDrop}
-          onAttachmentUpload={imageAttachment.uploadFile}
-          onPaste={imageAttachment.handlePaste}
-          placeholder={placeholder}
-          readableWidth
-          showHeaderLabel={false}
-          surfaceRef={surfaceRef}
-          surfaceTestId={surfaceTestId}
-          editorId={editorId}
-          editorLabel={editorLabel}
-          editorTargetKey={targetKey}
-          toolbarDisabled={disabled}
-          value={editorState.markdown}
-          valueTiptapJson={editorState.tiptapJson ?? undefined}
-        />
+        {editorSurface}
       </EditorExpandShell>
       <AlertDialog
         open={returnConfirmOpen}
@@ -3392,6 +3470,7 @@ function SegmentSupplementNotePanel({
   onDirtyChange = () => undefined,
   onSaveEdit,
   onSavedContent = () => undefined,
+  onTitleSave,
   panelId,
   supplement,
   supplementContent,
@@ -3415,6 +3494,7 @@ function SegmentSupplementNotePanel({
     baselineTiptapContentHash: string | null
   ) => Promise<FinalizedNoteContentSaveResult<SavedNoteSegmentSupplementContent>>;
   readonly onSavedContent?: (saved: SavedNoteSegmentSupplementContent) => void;
+  readonly onTitleSave: (title: string) => Promise<boolean>;
   readonly panelId: string;
   readonly supplement: NoteMemorySegmentSupplement;
   readonly supplementContent?: WorkspaceNoteSegmentSupplementContent | undefined;
@@ -3444,12 +3524,14 @@ function SegmentSupplementNotePanel({
           baselineTiptapContentHash={supplementContent.baselineTiptapContentHash}
           failureCopy="无法保存补充笔记正文。"
           headerLabel="Markdown 补充笔记"
+          editorTitle={supplement.title}
           initialMarkdown={supplementContent.bodyMarkdown}
           initialTiptapJson={supplementContent.bodyTiptapJson}
           onDiskVersionAccepted={onDiskVersionAccepted ?? (() => undefined)}
           onDirtyChange={onDirtyChange}
           onSave={onSaveEdit}
           onSavedContent={onSavedContent}
+          onTitleSave={onTitleSave}
           panelId={panelId}
           placeholder="写下补充笔记..."
           surfaceTestId="memory-studio-inline-supplement-note-editor"
@@ -3597,6 +3679,90 @@ export function MemoryStudio({
       queryKey: workspaceSnapshotQueryKey(workspaceSession),
     });
   };
+  function seedSegmentProjectionResult(value: {
+    readonly memory: WorkspaceMemorySummary;
+    readonly segment: MemorySegment;
+  }) {
+    queryClient.setQueryData<WorkspaceSnapshot>(
+      workspaceSnapshotQueryKey(workspaceSession),
+      (currentSnapshot) =>
+        currentSnapshot
+          ? {
+              ...currentSnapshot,
+              memories: currentSnapshot.memories.map((candidate) =>
+                candidate.memoryId === value.memory.memoryId ? value.memory : candidate
+              ),
+            }
+          : currentSnapshot
+    );
+    queryClient.setQueryData<{
+      readonly requestId: string;
+      readonly detail: WorkspaceMemoryDetail;
+    }>(
+      memoryDetailQueryKey({
+        workspaceId: workspaceSession.workspaceId,
+        memoryId: memory.memoryId,
+      }),
+      (currentDetail) =>
+        currentDetail
+          ? {
+              ...currentDetail,
+              detail: {
+                ...currentDetail.detail,
+                ...value.memory,
+                workspaceId: currentDetail.detail.workspaceId,
+                segments: currentDetail.detail.segments.map((segment) =>
+                  segment.segmentId === value.segment.segmentId ? value.segment : segment
+                ),
+              },
+            }
+          : currentDetail
+    );
+  }
+
+  async function saveSegmentTitle(segment: MemorySegment, title: string): Promise<boolean> {
+    const response = await updateSegmentTitle({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: workspaceSession.workspaceId,
+      memoryId: segment.memoryId,
+      segmentId: segment.segmentId,
+      title,
+    });
+    if (!response.ok) {
+      showReoToast({
+        type: 'error',
+        title: '无法保存标题',
+        description: workspaceErrorDisplayMessage(response.error, '无法保存标题。'),
+      });
+      return false;
+    }
+    seedSegmentProjectionResult(response.value);
+    return true;
+  }
+
+  async function saveSegmentSupplementTitle(
+    supplement: MemorySegmentSupplement,
+    title: string
+  ): Promise<boolean> {
+    const response = await updateSegmentSupplementTitle({
+      workspaceHandle: workspaceSession.workspaceHandle,
+      workspaceId: workspaceSession.workspaceId,
+      memoryId: supplement.memoryId,
+      segmentId: supplement.segmentId,
+      supplementId: supplement.supplementId,
+      title,
+    });
+    if (!response.ok) {
+      showReoToast({
+        type: 'error',
+        title: '无法保存标题',
+        description: workspaceErrorDisplayMessage(response.error, '无法保存标题。'),
+      });
+      return false;
+    }
+    seedSegmentProjectionResult(response.value);
+    return true;
+  }
   const allSegments = detail?.segments ?? [];
   const visibleSegments = allSegments;
   const selectedSegmentResolution = useMemo(() => {
@@ -3825,7 +3991,6 @@ export function MemoryStudio({
     onStartSegmentSupplementNote?.({
       memoryId: memory.memoryId,
       segmentId: selectedSegment.segmentId,
-      title: `补充笔记${selectedSegment.supplementCount + 1}`,
     });
   }
 
@@ -4425,47 +4590,6 @@ export function MemoryStudio({
     });
   }
 
-  function seedContentTabOrderResult(value: {
-    readonly memory: WorkspaceMemorySummary;
-    readonly segment: MemorySegment;
-  }) {
-    queryClient.setQueryData<WorkspaceSnapshot>(
-      workspaceSnapshotQueryKey(workspaceSession),
-      (currentSnapshot) =>
-        currentSnapshot
-          ? {
-              ...currentSnapshot,
-              memories: currentSnapshot.memories.map((candidate) =>
-                candidate.memoryId === value.memory.memoryId ? value.memory : candidate
-              ),
-            }
-          : currentSnapshot
-    );
-    queryClient.setQueryData<{
-      readonly requestId: string;
-      readonly detail: WorkspaceMemoryDetail;
-    }>(
-      memoryDetailQueryKey({
-        workspaceId: workspaceSession.workspaceId,
-        memoryId: memory.memoryId,
-      }),
-      (currentDetail) =>
-        currentDetail
-          ? {
-              ...currentDetail,
-              detail: {
-                ...currentDetail.detail,
-                ...value.memory,
-                workspaceId: currentDetail.detail.workspaceId,
-                segments: currentDetail.detail.segments.map((segment) =>
-                  segment.segmentId === value.segment.segmentId ? value.segment : segment
-                ),
-              },
-            }
-          : currentDetail
-    );
-  }
-
   function commitContentTabOrder(segmentId: string) {
     const pendingOrder = contentTabOrderBySegmentIdRef.current[segmentId];
     if (!selectedSegment || selectedSegment.segmentId !== segmentId || !pendingOrder) {
@@ -4495,7 +4619,7 @@ export function MemoryStudio({
           });
           return;
         }
-        seedContentTabOrderResult(response.value);
+        seedSegmentProjectionResult(response.value);
       })
       .catch((error: unknown) => {
         showReoToast({
@@ -5377,6 +5501,7 @@ export function MemoryStudio({
                     baselineTiptapContentHash={segmentContent.transcript.baselineTiptapContentHash}
                     failureCopy="无法保存转录。"
                     headerLabel="Markdown 转录"
+                    editorTitle={selectedSegment.title}
                     initialMarkdown={segmentContent.transcript.text}
                     initialTiptapJson={segmentContent.transcript.tiptapJson}
                     onDiskVersionAccepted={() => undefined}
@@ -5396,6 +5521,7 @@ export function MemoryStudio({
                       })
                     }
                     onSavedContent={onSegmentTranscriptSaved}
+                    onTitleSave={(title) => saveSegmentTitle(selectedSegment, title)}
                     panelId={transcriptContentTab.panelId}
                     placeholder="整理或修正转录文本..."
                     surfaceTestId="memory-studio-inline-transcript-editor"
@@ -5486,6 +5612,7 @@ export function MemoryStudio({
                     baselineTiptapContentHash={noteSegmentContent.baselineTiptapContentHash}
                     failureCopy="无法保存笔记正文。"
                     headerLabel="Markdown 正文"
+                    editorTitle={selectedSegment.title}
                     initialMarkdown={noteSegmentContent.bodyMarkdown}
                     initialTiptapJson={noteSegmentContent.bodyTiptapJson}
                     onDiskVersionAccepted={(content) =>
@@ -5520,6 +5647,7 @@ export function MemoryStudio({
                       })
                     }
                     onSavedContent={handleSavedNoteSegmentContent}
+                    onTitleSave={(title) => saveSegmentTitle(selectedSegment, title)}
                     panelId={transcriptContentTab.panelId}
                     placeholder="写下正文..."
                     surfaceTestId="memory-studio-inline-note-editor"
@@ -5562,6 +5690,9 @@ export function MemoryStudio({
                       supplement={activeSegmentSupplement}
                       audioResourceCache={supplementAudioResourceCache}
                       onDirtyChange={setInlineMarkdownDirty}
+                      onTitleSave={(title) =>
+                        saveSegmentSupplementTitle(activeSegmentSupplement, title)
+                      }
                       onTranscriptSaved={onSegmentSupplementTranscriptSaved}
                       panelId={activeContentTabModel.panelId}
                       {...(transcriptionBackfill ? { transcriptionBackfill } : {})}
@@ -5616,6 +5747,9 @@ export function MemoryStudio({
                       });
                     }}
                     onSavedContent={handleSavedNoteSegmentSupplementContent}
+                    onTitleSave={(title) =>
+                      saveSegmentSupplementTitle(activeSegmentSupplement, title)
+                    }
                     panelId={activeContentTabModel.panelId}
                     supplement={activeSegmentSupplement}
                     supplementContent={activeNoteSupplementContent}

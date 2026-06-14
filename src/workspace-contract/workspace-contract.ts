@@ -1191,6 +1191,7 @@ export const workspaceCreateSegmentSupplementNoteDraftRequestSchema = workspaceH
 export const workspaceWriteNoteSegmentDraftBodyRequestSchema = workspaceHandleSchema
   .extend({
     segmentId: segmentIdSchema,
+    title: workspaceRecordingTitleSchema.optional(),
     bodyMarkdown: noteBodyMarkdownSchema,
     bodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
     revision: z.number().int().nonnegative(),
@@ -1200,6 +1201,7 @@ export const workspaceWriteNoteSegmentDraftBodyRequestSchema = workspaceHandleSc
 export const workspaceWriteSegmentSupplementNoteDraftBodyRequestSchema = workspaceHandleSchema
   .extend({
     supplementId: supplementIdSchema,
+    title: workspaceRecordingTitleSchema.optional(),
     bodyMarkdown: noteBodyMarkdownSchema,
     bodyTiptapJson: workspaceTiptapJsonContentSchema.optional(),
     revision: z.number().int().nonnegative(),

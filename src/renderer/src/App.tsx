@@ -4328,7 +4328,7 @@ export function App() {
       } else if (memoryCreateIntent?.afterCreate === 'note-memory') {
         setMemoryCreateIntent(null);
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
-        openNoteEditorForMemory(response.value.memoryId, 1);
+        openNoteEditorForMemory(response.value.memoryId);
       } else if (memoryCreateIntent?.afterCreate === 'artifact-memory') {
         setMemoryCreateIntent(null);
         setWorkspaceView(WORKSPACE_STAGE_VIEW);
@@ -6364,14 +6364,13 @@ export function App() {
     openMemoryCreateDialog({ afterCreate: 'record-memory' });
   }
 
-  function openNoteEditorForMemory(memoryId: string, noteIndex: number) {
+  function openNoteEditorForMemory(memoryId: string) {
     setNoteEditorFlow({
       status: 'active',
       open: true,
       target: {
         kind: 'segment',
         memoryId,
-        title: `笔记${noteIndex}`,
       },
     });
   }
@@ -6386,7 +6385,7 @@ export function App() {
       return;
     }
 
-    openNoteEditorForMemory(currentMemoryId, (currentMemory?.noteSegmentCount ?? 0) + 1);
+    openNoteEditorForMemory(currentMemoryId);
   }
 
   async function copyArtifactSegmentPromptForMemory(session: WorkspaceSession, memoryId: string) {
@@ -6432,13 +6431,7 @@ export function App() {
       return;
     }
 
-    const defaultMemory = draftSession.snapshot.memories.find(
-      (memory) => memory.memoryId === draftSession.defaultMemoryId
-    );
-    openNoteEditorForMemory(
-      draftSession.defaultMemoryId,
-      (defaultMemory?.noteSegmentCount ?? 0) + 1
-    );
+    openNoteEditorForMemory(draftSession.defaultMemoryId);
   }
 
   async function requestStartDraftRecordingFromHome() {
@@ -6542,7 +6535,6 @@ export function App() {
   function requestStartSegmentSupplementNote(target: {
     readonly memoryId: string;
     readonly segmentId: string;
-    readonly title: string;
   }) {
     if (blockWorkspaceFlowInterruption()) {
       return;
@@ -6556,7 +6548,6 @@ export function App() {
         kind: 'segment-supplement',
         memoryId: target.memoryId,
         segmentId: target.segmentId,
-        title: target.title,
       },
     });
   }

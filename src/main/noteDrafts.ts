@@ -773,7 +773,7 @@ async function writeDraftNoteBodyFiles<
   readonly metadata: Metadata;
   readonly metadataPath: string;
   readonly objectType: 'segment' | 'supplement';
-}): Promise<void> {
+}): Promise<RenderedNoteMarkdown> {
   const assertUsable = workspaceWriteAssert(assertWorkspaceUsable);
   const rendered = renderPersistedNoteMarkdown({
     objectType,
@@ -803,6 +803,7 @@ async function writeDraftNoteBodyFiles<
       objectDirectory: draftDirectory,
       tiptapJson,
     });
+    return rendered;
   } catch (error) {
     if (writeStarted) {
       await restoreDraftNoteBodyFileSnapshot({ assertUsable, paths, snapshot });
@@ -823,8 +824,8 @@ async function writeNoteDraftFiles({
   readonly bodyTiptapJson?: JSONContent | undefined;
   readonly draftDirectory: string;
   readonly metadata: NoteDraftMetadata;
-}): Promise<void> {
-  await writeDraftNoteBodyFiles({
+}): Promise<RenderedNoteMarkdown> {
+  return writeDraftNoteBodyFiles({
     assertWorkspaceUsable,
     bodyMarkdown,
     ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
@@ -848,8 +849,8 @@ async function writeNoteSupplementDraftFiles({
   readonly bodyTiptapJson?: JSONContent | undefined;
   readonly draftDirectory: string;
   readonly metadata: NoteSupplementDraftMetadata;
-}): Promise<void> {
-  await writeDraftNoteBodyFiles({
+}): Promise<RenderedNoteMarkdown> {
+  return writeDraftNoteBodyFiles({
     assertWorkspaceUsable,
     bodyMarkdown,
     ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
@@ -933,6 +934,7 @@ export async function createNoteSegmentDraft({
 export async function writeNoteSegmentDraftBody({
   rootPath,
   segmentId,
+  title,
   bodyMarkdown,
   bodyTiptapJson,
   revision,
@@ -940,6 +942,7 @@ export async function writeNoteSegmentDraftBody({
 }: {
   readonly rootPath: string;
   readonly segmentId: string;
+  readonly title?: string | undefined;
   readonly bodyMarkdown: string;
   readonly bodyTiptapJson?: JSONContent | undefined;
   readonly revision: number;
@@ -960,25 +963,21 @@ export async function writeNoteSegmentDraftBody({
     }
     assertWorkspaceUsableForWrite(assertWorkspaceUsable);
     const nextRevision = revision + 1;
-    const rendered = renderPersistedNoteMarkdown({
-      objectType: 'segment',
-      title: metadata.title,
-      bodyMarkdown,
-    });
+    const nextTitle = title?.trim() || metadata.title;
     const nextMetadata: NoteDraftMetadata = {
       ...metadata,
+      title: nextTitle,
       updatedAt: new Date().toISOString(),
       revision: nextRevision,
-      bodyByteLength: rendered.bodyByteLength,
     };
-    await writeNoteDraftFiles({
+    const rendered = await writeNoteDraftFiles({
       assertWorkspaceUsable,
       bodyMarkdown,
       ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
       draftDirectory,
       metadata: nextMetadata,
     });
-    return { ok: true, bodyByteLength: nextMetadata.bodyByteLength, revision: nextRevision };
+    return { ok: true, bodyByteLength: rendered.bodyByteLength, revision: nextRevision };
   } catch (error) {
     const envelope = caughtWorkspaceError(error);
     return (
@@ -1073,6 +1072,7 @@ export async function createSegmentSupplementNoteDraft({
 export async function writeSegmentSupplementNoteDraftBody({
   rootPath,
   supplementId,
+  title,
   bodyMarkdown,
   bodyTiptapJson,
   revision,
@@ -1080,6 +1080,7 @@ export async function writeSegmentSupplementNoteDraftBody({
 }: {
   readonly rootPath: string;
   readonly supplementId: string;
+  readonly title?: string | undefined;
   readonly bodyMarkdown: string;
   readonly bodyTiptapJson?: JSONContent | undefined;
   readonly revision: number;
@@ -1103,25 +1104,21 @@ export async function writeSegmentSupplementNoteDraftBody({
     }
     assertWorkspaceUsableForWrite(assertWorkspaceUsable);
     const nextRevision = revision + 1;
-    const rendered = renderPersistedNoteMarkdown({
-      objectType: 'supplement',
-      title: metadata.title,
-      bodyMarkdown,
-    });
+    const nextTitle = title?.trim() || metadata.title;
     const nextMetadata: NoteSupplementDraftMetadata = {
       ...metadata,
+      title: nextTitle,
       updatedAt: new Date().toISOString(),
       revision: nextRevision,
-      bodyByteLength: rendered.bodyByteLength,
     };
-    await writeNoteSupplementDraftFiles({
+    const rendered = await writeNoteSupplementDraftFiles({
       assertWorkspaceUsable,
       bodyMarkdown,
       ...(bodyTiptapJson ? { bodyTiptapJson } : {}),
       draftDirectory,
       metadata: nextMetadata,
     });
-    return { ok: true, bodyByteLength: nextMetadata.bodyByteLength, revision: nextRevision };
+    return { ok: true, bodyByteLength: rendered.bodyByteLength, revision: nextRevision };
   } catch (error) {
     const envelope = caughtWorkspaceError(error);
     return (
