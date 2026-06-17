@@ -1,12 +1,14 @@
 # Reo
 
-Reo 是一个未发布的 Electron 应用，当前正在从干净基础重新建立。
+Reo 是一个 agent-native 的个人内容生成环境：本地文件是真源，记录和判断留给人，组织、改写、生成作品交给 agent——让 agent 为用户的材料工作，而不是让用户去适应应用的功能。
+
+**当前状态**：核心机制已完成、端到端可运行——agent 在用户材料上生成 HTML 作品、artifact 隔离预览协议、文件驱动、双向 prompt bridge 等都已跑通。auth、关系型 database、打包分发等刻意暂未接入：核心持久化基于本地文件（files-as-source-of-truth），这些是留到产品化阶段再做的工程，而非缺失的能力。尚未对外发布。
 
 ## 当前事实
 
 - 当前已安装：React、React DOM、Electron、Vite、electron-vite、TypeScript、ESLint、Prettier、Tailwind CSS、Vitest、Testing Library、Zod、React Hook Form、TanStack Query、Radix AlertDialog/Dialog/DropdownMenu/Label/Slot/Tooltip/Separator/Switch、Tiptap React/StarterKit/Markdown/Image/Highlight/TextAlign/List/Typography/Subscript/Superscript、Blossom Carousel Core、PrimeReact、Vaul、Sonner、date-fns、lucide-react、electron-log、@ffmpeg-installer/ffmpeg、shadcn/ui source 所需工具包、Agentation dev-only toolbar。
 - 当前已建立：Reo 设计系统源文件、Tailwind CSS v4 styling foundation、renderer 测试基础、Agentation dev-only renderer feedback toolbar、记忆空间 preload/IPC 边界、记忆空间文件事务基础、main-owned memory space registry、main-owned 本地诊断日志、main-owned 语音设置、豆包流式语音识别、finalized audio 文件转录队列、artifact 作品文件识别与隔离预览协议、agent prompt-copy bridge、React Hook Form 记忆空间表单、TanStack Query memory space list/snapshot cache、shadcn/ui Button/Input/Label/Dialog/Drawer/DropdownMenu/Textarea/Tooltip/Separator/Field/Breadcrumb/AlertDialog/Switch source、Tiptap-backed lightweight Markdown editor、Floating Action Button Speed Dial、Sonner root toast host、Reo recording waveform。
-- 当前未建立：auth、database、updater、packaging、Sentry、远程 telemetry、Zustand store、wavesurfer integration。
+- 刻意暂未接入（留到产品化阶段，非能力缺失）：auth、关系型 database、updater、packaging、Sentry、远程 telemetry、Zustand store、wavesurfer integration。
 - 当前构建权威是 `electron-vite`。
 
 ## 技术路线
